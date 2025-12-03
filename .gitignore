@@ -1,0 +1,27 @@
+# Build artifacts
+build/
+*.pdf
+*.zip
+
+# Typst cache
+.typst-cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.log
+extract_hierarchy.typ
