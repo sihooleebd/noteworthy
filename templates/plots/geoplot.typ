@@ -1,5 +1,6 @@
 #import "@preview/cetz:0.4.2"
 #import "@preview/cetz-plot:0.1.3": plot
+#import "../../config.typ": render-sample-count
 
 /// Draws a point on a 2D or 3D plot with optional label.
 ///
@@ -37,7 +38,7 @@
 #let add-polar(func, domain: (0, 2 * calc.pi), style: (:)) = {
   plot.add(
     domain: domain,
-    samples: 200,
+    samples: render-sample-count,
 
     t => (func(t) * calc.cos(t), func(t) * calc.sin(t)),
     style: style,

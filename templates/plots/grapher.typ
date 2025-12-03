@@ -81,8 +81,8 @@
     plot.add-contour(
       x-domain: x-dom,
       y-domain: y-domain,
-      x-samples: 200,
-      y-samples: 200,
+      x-samples: samples,
+      y-samples: samples,
       z: 0,
       fill: false,
       style: final-style,
