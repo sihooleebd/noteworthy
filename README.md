@@ -281,7 +281,7 @@ Built with:
 
 ## Contact
 
-Created by [Sihoo Lee](https://github.com/sihooleebd) & Hojun Lee
+Created by [Sihoo Lee](https://github.com/sihooleebd) & [Hojun Lee](https://github.com/R0K0R)
 
 ---
 
