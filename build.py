@@ -13,13 +13,11 @@ OUTPUT_FILE = Path("output.pdf")
 RENDERER_FILE = "renderer.typ"
 
 def check_dependencies():
-    """Check if required tools are installed."""
     if shutil.which("typst") is None:
         print("Error: 'typst' executable not found in PATH.")
         sys.exit(1)
 
 def extract_hierarchy():
-    """Extract document hierarchy from config.typ using typst query."""
     print("Extracting document hierarchy...")
     
     temp_file = Path("extract_hierarchy.typ")
@@ -42,7 +40,6 @@ def extract_hierarchy():
             temp_file.unlink()
 
 def compile_target(target, output_path):
-    """Compile a specific target to PDF."""
     print(f"Compiling target: {target} -> {output_path}")
     
     cmd = [
@@ -60,7 +57,6 @@ def compile_target(target, output_path):
         sys.exit(1)
 
 def merge_pdfs_with_command(pdf_files, output_path):
-    """Merge multiple PDFs using command-line tools."""
     # Filter out non-existent files
     existing_files = [str(pdf) for pdf in pdf_files if pdf.exists()]
     
@@ -101,7 +97,6 @@ def merge_pdfs_with_command(pdf_files, output_path):
     print("  - Linux: apt-get install poppler-utils or ghostscript")
 
 def zip_build_directory(build_dir, output_file="build_pdfs.zip"):
-    """Zip the build directory for archival."""
     print(f"Zipping build directory to {output_file}...")
     with zipfile.ZipFile(output_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for root, dirs, files in os.walk(build_dir):
@@ -152,7 +147,6 @@ def main():
     # 4. Chapters
     for i, chapter in enumerate(hierarchy):
         first_page = chapter["pages"][0]
-        # Assuming ID format "XX.YY", chapter ID is first 2 chars
         chapter_id = first_page["id"][:2] 
         
         # Chapter Cover
