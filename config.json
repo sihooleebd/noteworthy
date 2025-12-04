@@ -1,0 +1,80 @@
+{
+    "title": "Noteworthy Framework",
+    "subtitle": "Examples & Documentation",
+    "authors": [
+        "Sihoo Lee",
+        "Lee Hojun"
+    ],
+    "affiliation": "Noteworthy",
+    "logo": null,
+    "show-solution": true,
+    "solutions-text": "Solutions",
+    "problems-text": "Problems",
+    "chapter-name": "Chapter",
+    "subchap-name": "Section",
+    "font": "IBM Plex Serif",
+    "title-font": "Noto Sans Adlam",
+    "display-cover": true,
+    "display-outline": true,
+    "display-chap-cover": true,
+    "box-margin": "5pt",
+    "box-inset": "15pt",
+    "render-sample-count": 1000,
+    "display-mode": "rose-pine",
+    "hierarchy": [
+        {
+            "title": "Core Components",
+            "summary": "This chapter demonstrates the fundamental building blocks of the Noteworthy framework, including text blocks, layouts, and basic document structure.",
+            "pages": [
+                {
+                    "id": "01.01",
+                    "title": "Content Blocks"
+                },
+                {
+                    "id": "01.02",
+                    "title": "Layout Elements"
+                }
+            ]
+        },
+        {
+            "title": "Plotting & Geometry",
+            "summary": "Explore the powerful plotting capabilities of Noteworthy, from basic 2D graphs to complex geometric constructions and vector diagrams.",
+            "pages": [
+                {
+                    "id": "02.01",
+                    "title": "Basic Plots"
+                },
+                {
+                    "id": "02.02",
+                    "title": "Geometry (Geoplot)"
+                },
+                {
+                    "id": "02.03",
+                    "title": "Vectors (Vectorplot)"
+                },
+                {
+                    "id": "02.04",
+                    "title": "3D Space (Spaceplot)"
+                }
+            ]
+        },
+        {
+            "title": "Data & Visualization",
+            "summary": "Learn how to visualize data and mathematical concepts using the Grapher, Combiplot, and Tableplot modules.",
+            "pages": [
+                {
+                    "id": "03.01",
+                    "title": "Function Graphs"
+                },
+                {
+                    "id": "03.02",
+                    "title": "Combinatorics"
+                },
+                {
+                    "id": "03.03",
+                    "title": "Tables"
+                }
+            ]
+        }
+    ]
+}

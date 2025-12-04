@@ -1,4 +1,4 @@
-#import "../config.typ": *
+#import "setup.typ": *
 #import "./default-schemes.typ": *
 
 #import "./layouts/blocks.typ"

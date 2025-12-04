@@ -1,6 +1,6 @@
 #import "@preview/cetz:0.4.2"
 #import "@preview/cetz-plot:0.1.3": plot
-#import "../../config.typ": render-sample-count
+#import "../setup.typ": render-sample-count
 
 /// Draws a point on a 2D or 3D plot with optional label.
 ///

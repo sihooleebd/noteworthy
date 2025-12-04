@@ -1,4 +1,4 @@
-#import "../config.typ": * //edit this file to configure
+#import "setup.typ": * //edit this file to configure
 #import "./templater.typ": *
 
 #let target = sys.inputs.at("target", default: none)
@@ -34,7 +34,7 @@
 #for chapter in hierarchy {
   let first-page = chapter.pages.at(0)
   let chapter-id = first-page.id.slice(0, 2)
-  
+
   if target == none or target == "chapter-" + chapter-id {
     if display-chap-cover {
       chapter-cover(
@@ -44,7 +44,7 @@
       )
     }
   }
-  
+
   for page in chapter.pages {
     if target == none or target == page.id {
       // Inject chapter metadata if missing (for single page compilation)

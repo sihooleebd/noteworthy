@@ -1,6 +1,6 @@
 #import "@preview/cetz:0.4.2"
 #import "@preview/cetz-plot:0.1.3": plot
-#import "../../config.typ": render-sample-count
+#import "../setup.typ": render-sample-count
 
 /// Plots a mathematical function in various coordinate systems.
 /// Supports standard functions, parametric equations, polar curves, and implicit equations.

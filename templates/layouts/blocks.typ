@@ -1,4 +1,4 @@
-#import "../../config.typ": *
+#import "../setup.typ": *
 #let theorem-block(label, body, fill-color: white, stroke-color: black) = {
   v(box-margin)
   block(

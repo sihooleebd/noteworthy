@@ -41,7 +41,7 @@ def extract_hierarchy():
     print("Extracting document hierarchy...")
     
     temp_file = Path("extract_hierarchy.typ")
-    temp_file.write_text('#import "config.typ": hierarchy\n#metadata(hierarchy) <hierarchy>')
+    temp_file.write_text('#import "templates/setup.typ": hierarchy\n#metadata(hierarchy) <hierarchy>')
     
     try:
         result = subprocess.run(
