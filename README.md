@@ -94,8 +94,6 @@ This repository includes comprehensive examples of all framework features:
 noteworthy/
 ├── config.typ              # Framework configuration
 ├── build.py                # Build system
-├── renderer.typ            # Document processor
-├── main.typ                # Full document entry
 ├── content/                # Example content
 │   ├── chapter 01/         # Core Components
 │   │   ├── 01.01.typ       # Content Blocks (definition, theorem, proof, etc.)
