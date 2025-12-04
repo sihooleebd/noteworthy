@@ -103,30 +103,26 @@
 
     plot.plot(
       size: actual-size,
-      axis-style: "school-book",
-      x-tick-step: tick,
-      y-tick-step: tick,
+      axis-style: none,
+      x-tick-step: none,
+      y-tick-step: none,
       x-grid: false,
       y-grid: false,
-      x-label: text(fill: theme.plot.stroke, $x$),
-      y-label: text(fill: theme.plot.stroke, $y$),
       x-min: -effective-radius,
       x-max: effective-radius,
       y-min: -effective-radius,
       y-max: effective-radius,
       {
-        // Draw grid inside plot coordinate system
+        // Draw polar grid inside plot coordinate system
         plot.annotate({
           on-layer(
             -1,
             {
+              // Draw concentric circles
               let num-circles = calc.floor(radius / tick)
               for i in range(1, num-circles + 1) {
                 let r = i * tick
                 circle((0, 0), radius: r, stroke: (paint: grid-color, thickness: 0.75pt), fill: none)
-                // Add radius tick label
-                let label = if calc.rem(r, 1) == 0 { str(int(r)) } else { str(calc.round(r, digits: 2)) }
-                content((r, -0.2), text(fill: theme.plot.stroke, size: 7.5pt, label), anchor: "north")
               }
               // Draw radial lines
               for deg in range(0, 180, step: 30) {
@@ -136,6 +132,21 @@
                   stroke: (paint: grid-color, thickness: 0.75pt),
                 )
               }
+              // Draw polar axis (bold line from origin to right with arrow)
+              line(
+                (0, 0),
+                (effective-radius, 0),
+                stroke: (paint: theme.plot.stroke, thickness: 1pt),
+                mark: (end: ">", fill: theme.plot.stroke),
+              )
+
+              // Add radius tick labels along polar axis
+              for i in range(1, num-circles + 1) {
+                let r = i * tick
+                let label = if calc.rem(r, 1) == 0 { str(int(r)) } else { str(calc.round(r, digits: 2)) }
+                content((r, -0.3), text(fill: theme.plot.stroke, size: 7.5pt, label), anchor: "north")
+              }
+
               if draw-content != none {
                 draw-content
               }

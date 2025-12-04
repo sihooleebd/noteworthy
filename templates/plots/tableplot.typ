@@ -121,13 +121,8 @@
 ) = {
   let num-cols = if data.len() > 0 { data.at(0).len() } else { 0 }
 
-  let headers = if show-indices {
-    range(num-cols).map(i => str(i))
-  } else {
-    ()
-  }
-
-  if headers.len() > 0 {
+  if show-indices {
+    let headers = range(num-cols).map(i => str(i))
     table-plot(
       theme: theme,
       headers: headers,
@@ -135,11 +130,22 @@
       align-cols: (center,) * num-cols,
     )
   } else {
-    table-plot(
-      theme: theme,
-      headers: ("",) * num-cols,
-      data: data,
-      align-cols: (center,) * num-cols,
+    // No headers - render data directly as a simple table
+    let actual-stroke = theme.blocks.theorem.stroke.transparentize(50%)
+    let actual-row-fill = (theme.page-fill, theme.blocks.definition.fill.transparentize(50%))
+
+    table(
+      columns: (auto,) * num-cols,
+      align: center,
+      fill: (col, row) => actual-row-fill.at(calc.rem(row, actual-row-fill.len())),
+      stroke: 1pt + actual-stroke,
+      inset: 10pt,
+      ..data
+        .flatten()
+        .map(cell => text(
+          fill: theme.text-main,
+          size: 10pt,
+        )[#cell]),
     )
   }
 }

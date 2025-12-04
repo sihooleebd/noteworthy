@@ -67,6 +67,7 @@ def compile_target(target, output_path, page_offset=None, page_map=None, quiet=T
         RENDERER_FILE, 
         str(output_path),
         "--root", ".",
+        "--root", ".",
         "--input", f"target={target}"
     ]
     

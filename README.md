@@ -1,5 +1,22 @@
 # Noteworthy
 
+```
+         ,--. 
+       ,--.'| 
+   ,--,:  : | 
+,`--.'`|  ' : 
+|   :  :  | | 
+:   |   \ | : 
+|   : '  '; | 
+'   ' ;.    ; 
+|   | | \   | 
+'   : |  ; .' 
+|   | '`--'   
+'   : |       
+;   |.'       
+'---'         
+```
+
 **A powerful Typst framework for creating beautiful, themed educational documents.**
 
 [![Typst](https://img.shields.io/badge/Typst-0.12%2B-239DAD?logo=typst)](https://typst.app/)
@@ -34,9 +51,15 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
 ### Prerequisites
 
 - **Typst** (v0.12.0+): [Install Typst](https://github.com/typst/typst#installation)
-- **PDF Merge Tool** (optional, for multi-chapter documents):
-  - macOS: `brew install poppler` (provides `pdfunite`)
+- **Python 3** with **tqdm**: `pip3 install tqdm` (for progress bars during build)
+- **Poppler** (provides `pdfinfo` for page counting):
+  - macOS: `brew install poppler`
   - Linux: `apt-get install poppler-utils`
+- **PDF Tool** (for merging and metadata):
+  - **Option 1** (recommended): `brew install pdftk-java` (macOS) or `apt-get install pdftk` (Linux)
+  - **Option 2** (fallback): Ghostscript is usually pre-installed on macOS/Linux
+  
+> **Note**: `pdftk-java` is required for adding PDF metadata (title, author) and clickable bookmarks/outline that appear in the PDF viewer sidebar for easy navigation.
 
 ### Installation
 
@@ -73,8 +96,6 @@ This repository includes comprehensive examples of all framework features:
 noteworthy/
 ├── config.typ              # Framework configuration
 ├── build.py                # Build system
-├── renderer.typ            # Document processor
-├── main.typ                # Full document entry
 ├── content/                # Example content
 │   ├── chapter 01/         # Core Components
 │   │   ├── 01.01.typ       # Content Blocks (definition, theorem, proof, etc.)
