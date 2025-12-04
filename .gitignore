@@ -1,6 +1,6 @@
 # Build artifacts
 build/
-*.pdf
+output.pdf
 *.zip
 
 # Typst cache
