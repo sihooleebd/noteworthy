@@ -33,7 +33,7 @@
 #let box-margin = 5pt
 #let box-inset = 15pt
 #let render-sample-count = 1000
-#let display-mode = "catppuccin-latte" //lower / upper case is ignored
+#let display-mode = "rose-pine" //lower / upper case is ignored
 #import "./templates/default-schemes.typ": * //loads default schemes
 #let colorschemes = (
   dark: scheme-dark,
