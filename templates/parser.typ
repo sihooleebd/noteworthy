@@ -48,7 +48,7 @@
     if target == none or target == page.id {
       // Inject chapter metadata if missing (for single page compilation)
       if target != none and target != "chapter-" + chapter-id {
-        [#metadata(("Chapter " + chapter-id, chapter.title)) <chapter-cover>]
+        [#metadata(("Chapter " + chapter-id, chapter.title)) #label("chapter-" + chapter-id)]
       }
       show: project.with(
         number: subchap-name + " " + page.id,

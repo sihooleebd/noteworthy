@@ -17,15 +17,8 @@ LOGO = [
     ";   |.'       ", "'---'         ",
 ]
 
-CONFETTI = [
-    "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡀⠀⠀⠀⠀⠀⠀⠀", "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡈⠀⡠⠀⠀⣤⡄⠀⠀",
-    "⠀⠀⠀⠀⠒⢀⣴⠟⠛⠓⠀⠀⠓⠀⠀⠀⢠⠉⠡⠀⠀", "⠀⠀⠀⣴⡆⠘⠧⠶⠶⢦⠀⠀⠰⠇⠀⠀⣀⠀⠀⣀⠀",
-    "⠀⠀⠀⠀⠀⡠⠤⢀⣀⣼⠀⠀⣀⣀⡀⣦⠉⠳⠆⠋⠀", "⠀⠀⠀⢀⠄⡁⠀⣠⠿⠃⢤⡀⢽⠈⠉⠁⣀⣀⠀⠀⠀",
-    "⠀⠀⠀⣾⠜⢐⠀⠁⠀⠀⠙⠻⣎⠀⠀⠀⠙⠉⠀⡀⢄", "⠀⠀⠜⠋⣎⠀⠀⠠⠀⢀⣠⣤⣼⣦⣤⣤⣀⠀⠀⠐⠈",
-    "⠀⣌⠎⠘⢿⣦⡀⠀⠈⠙⠥⢀⣀⠄⠀⠈⠉⠃⠀⣴⡀", "⢠⢿⣦⡀⠈⠻⣿⣦⣔⢀⠠⠂⠀⠀⠠⣾⠗⠀⠀⠈⠀",
-    "⣏⠀⠙⣿⣦⡂⠄⠋⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀", "⠈⠓⠂⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
-]
-
+HAPPY_FACE = ["    __  ", " _  \\ \\ ", "(_)  | |", "     | |", " _   | |", "(_)  | |", "    /_/ "]
+HMM_FACE = ["     _ ", " _  | |", "(_) | |", "    | |", " _  | |", "(_) | |", "    |_|"]
 SAD_FACE = ["       __", "  _   / /", " (_) | | ", "     | | ", "  _  | | ", " (_) | | ", "      \\_\\"]
 
 # UTILITY FUNCTIONS
@@ -186,6 +179,13 @@ def check_terminal_size(scr):
 
 # SCREEN DISPLAYS
 
+def copy_to_clipboard(text):
+    try:
+        subprocess.run(["pbcopy"], input=text.encode('utf-8'), check=True)
+        return True
+    except:
+        return False
+
 def show_error_screen(scr, error):
     import traceback
     log = traceback.format_exc()
@@ -193,12 +193,16 @@ def show_error_screen(scr, error):
         log = str(error)
     
     view_log = False
+    copied = False
     while True:
         scr.clear()
         h, w = scr.getmaxyx()
         
         if view_log:
-            safe_addstr(scr, 0, 2, "ERROR LOG (press 'v' to go back)", curses.color_pair(6) | curses.A_BOLD)
+            header = "ERROR LOG (press 'v' to go back, 'c' to copy)"
+            if copied:
+                header = "ERROR LOG (copied to clipboard!)"
+            safe_addstr(scr, 0, 2, header, curses.color_pair(6) | curses.A_BOLD)
             for i, line in enumerate(log.split('\n')[:h-3]):
                 safe_addstr(scr, i + 2, 2, line, curses.color_pair(4))
         else:
@@ -216,24 +220,56 @@ def show_error_screen(scr, error):
         key = scr.getch()
         if key == ord('v'):
             view_log = not view_log
+            copied = False
+        elif key == ord('c') and view_log:
+            copied = copy_to_clipboard(log)
         elif not view_log:
             break
 
-def show_success_screen(scr, page_count):
-    scr.clear()
-    h, w = scr.getmaxyx()
-    y = max(0, (h - len(CONFETTI) - 8) // 2)
-    
-    for i, line in enumerate(CONFETTI):
-        safe_addstr(scr, y + i, (w - 17) // 2, line, curses.color_pair(2))
-    
-    my = y + len(CONFETTI) + 2
-    safe_addstr(scr, my, (w - 16) // 2, "BUILD SUCCEEDED!", curses.color_pair(2) | curses.A_BOLD)
-    msg = f"Created: {OUTPUT_FILE} ({page_count} pages)"
-    safe_addstr(scr, my + 2, (w - len(msg)) // 2, msg, curses.color_pair(4))
-    safe_addstr(scr, my + 4, (w - 24) // 2, "Press any key to exit...", curses.color_pair(4) | curses.A_DIM)
-    scr.refresh()
-    scr.getch()
+def show_success_screen(scr, page_count, has_warnings=False, typst_logs=None):
+    view_log = False
+    copied = False
+    while True:
+        scr.clear()
+        h, w = scr.getmaxyx()
+        
+        if view_log and typst_logs:
+            header = "TYPST LOG (press 'v' to go back, 'c' to copy)"
+            if copied:
+                header = "TYPST LOG (copied to clipboard!)"
+            safe_addstr(scr, 0, 2, header, curses.color_pair(3) | curses.A_BOLD)
+            for i, line in enumerate(typst_logs[:h-3]):
+                c = 6 if 'error:' in line.lower() else 3 if 'warning:' in line.lower() else 4
+                safe_addstr(scr, i + 2, 2, line[:w-4], curses.color_pair(c))
+        else:
+            face = HMM_FACE if has_warnings else HAPPY_FACE
+            color = curses.color_pair(3) if has_warnings else curses.color_pair(2)
+            
+            y = max(0, (h - len(face) - 8) // 2)
+            for i, line in enumerate(face):
+                safe_addstr(scr, y + i, (w - len(face[0])) // 2, line, color | curses.A_BOLD)
+            
+            my = y + len(face) + 2
+            title = "BUILD SUCCEEDED (with warnings)" if has_warnings else "BUILD SUCCEEDED!"
+            safe_addstr(scr, my, (w - len(title)) // 2, title, color | curses.A_BOLD)
+            msg = f"Created: {OUTPUT_FILE} ({page_count} pages)"
+            safe_addstr(scr, my + 2, (w - len(msg)) // 2, msg, curses.color_pair(4))
+            
+            if has_warnings:
+                hint = "Press 'v' to view log  |  Press any other key to exit"
+            else:
+                hint = "Press any key to exit..."
+            safe_addstr(scr, my + 4, (w - len(hint)) // 2, hint, curses.color_pair(4) | curses.A_DIM)
+        
+        scr.refresh()
+        key = scr.getch()
+        if key == ord('v') and has_warnings:
+            view_log = not view_log
+            copied = False
+        elif key == ord('c') and view_log and typst_logs:
+            copied = copy_to_clipboard('\n'.join(typst_logs))
+        elif not view_log:
+            break
 
 # BUILD MENU (Selection TUI)
 
@@ -325,27 +361,32 @@ class BuildMenu:
             draw_box(self.scr, obh + 1, rx, ch, rw, "Select Chapters")
             items(obh + 1, rx, rw, ch)
         elif layout == "horz":
+            total_h = lh + 2 + obh
+            start_y = max(0, (self.h - total_h - 2) // 2)
             lbw, rbw = min(40, (self.w - 6) // 2), min(50, (self.w - 6) // 2)
             lx = (self.w - lbw - rbw - 2) // 2
             rx = lx + lbw + 2
             lgx = lx + (lbw - 14) // 2
             for i, line in enumerate(LOGO[:self.h-2]):
-                safe_addstr(self.scr, i, lgx, line, curses.color_pair(1) | curses.A_BOLD)
-            safe_addstr(self.scr, lh, lx + (lbw - 10) // 2, "NOTEWORTHY", curses.color_pair(1) | curses.A_BOLD)
-            draw_box(self.scr, lh + 2, lx, obh, lbw, "Options")
-            opts(lh + 2, lx, lbw)
+                safe_addstr(self.scr, start_y + i, lgx, line, curses.color_pair(1) | curses.A_BOLD)
+            safe_addstr(self.scr, start_y + lh, lx + (lbw - 10) // 2, "NOTEWORTHY", curses.color_pair(1) | curses.A_BOLD)
+            draw_box(self.scr, start_y + lh + 2, lx, obh, lbw, "Options")
+            opts(start_y + lh + 2, lx, lbw)
             ch = min(lh + 2 + obh, self.h - 2)
-            draw_box(self.scr, 0, rx, ch, rbw, "Select Chapters")
-            items(0, rx, rbw, ch)
+            draw_box(self.scr, start_y, rx, ch, rbw, "Select Chapters")
+            items(start_y, rx, rbw, ch)
         else:
+            ch_rows = min(len(self.items) + 2, 10)
+            total_h = lh + 2 + obh + 1 + ch_rows + 2
+            start_y = max(0, (self.h - total_h) // 2)
             lgx = (self.w - 14) // 2
             for i, line in enumerate(LOGO):
-                safe_addstr(self.scr, i, lgx, line, curses.color_pair(1) | curses.A_BOLD)
-            safe_addstr(self.scr, lh + 1, (self.w - 10) // 2, "NOTEWORTHY", curses.color_pair(1) | curses.A_BOLD)
+                safe_addstr(self.scr, start_y + i, lgx, line, curses.color_pair(1) | curses.A_BOLD)
+            safe_addstr(self.scr, start_y + lh + 1, (self.w - 10) // 2, "NOTEWORTHY", curses.color_pair(1) | curses.A_BOLD)
             bw, bx = min(60, self.w - 4), (self.w - min(60, self.w - 4)) // 2
-            draw_box(self.scr, lh + 3, bx, obh, bw, "Options")
-            opts(lh + 3, bx, bw)
-            cy = lh + 3 + obh + 1
+            draw_box(self.scr, start_y + lh + 3, bx, obh, bw, "Options")
+            opts(start_y + lh + 3, bx, bw)
+            cy = start_y + lh + 3 + obh + 1
             ch = min(len(self.items) + 2, self.h - cy - 3)
             draw_box(self.scr, cy, bx, ch, bw, "Select Chapters")
             items(cy, bx, bw, ch)
@@ -413,6 +454,7 @@ class BuildUI:
         self.logs, self.typst_logs = [], []
         self.task, self.phase, self.progress, self.total = "", "", 0, 0
         self.view, self.scroll = "normal", 0
+        self.has_warnings = False
         init_colors()
         self.h, self.w = scr.getmaxyx()
     
@@ -420,7 +462,10 @@ class BuildUI:
     def debug(self, msg):
         if self.debug_mode: self.log(f"[DEBUG] {msg}")
     def log_typst(self, out):
-        if out: self.typst_logs.extend([l for l in out.split('\n') if l.strip()]); self.typst_logs = self.typst_logs[-100:]
+        if out:
+            self.typst_logs.extend([l for l in out.split('\n') if l.strip()])
+            self.typst_logs = self.typst_logs[-100:]
+            if 'warning:' in out.lower(): self.has_warnings = True
     def set_phase(self, p): self.phase = p; self.refresh()
     def set_task(self, t): self.task = t; self.refresh()
     def set_progress(self, p, t): self.progress, self.total = p, t; self.refresh()
@@ -436,28 +481,31 @@ class BuildUI:
         self.h, self.w = self.scr.getmaxyx()
         self.scr.clear()
         
+        lh = min(15, self.h - 12)
+        total_h = 1 + 5 + 1 + lh + 1  # title + progress box + gap + log box + footer
+        start_y = max(0, (self.h - total_h) // 2)
+        
         title = "NOTEWORTHY BUILD SYSTEM" + (" [DEBUG]" if self.debug_mode else "")
-        safe_addstr(self.scr, 1, (self.w - len(title)) // 2, title, curses.color_pair(1) | curses.A_BOLD)
+        safe_addstr(self.scr, start_y, (self.w - len(title)) // 2, title, curses.color_pair(1) | curses.A_BOLD)
         
         bw, bx = min(60, self.w - 4), (self.w - min(60, self.w - 4)) // 2
-        draw_box(self.scr, 3, bx, 5, bw, "Progress")
-        if self.phase: safe_addstr(self.scr, 4, bx + 2, self.phase[:bw-4], curses.color_pair(5))
-        if self.task: safe_addstr(self.scr, 5, bx + 2, f"→ {self.task}"[:bw-4], curses.color_pair(4))
+        draw_box(self.scr, start_y + 2, bx, 5, bw, "Progress")
+        if self.phase: safe_addstr(self.scr, start_y + 3, bx + 2, self.phase[:bw-4], curses.color_pair(5))
+        if self.task: safe_addstr(self.scr, start_y + 4, bx + 2, f"→ {self.task}"[:bw-4], curses.color_pair(4))
         if self.total:
             filled = int((bw - 12) * self.progress / self.total)
-            safe_addstr(self.scr, 6, bx + 2, "█" * filled + "░" * (bw - 12 - filled), curses.color_pair(3))
-            safe_addstr(self.scr, 6, bx + bw - 8, f"{100*self.progress//self.total:3d}%", curses.color_pair(3) | curses.A_BOLD)
+            safe_addstr(self.scr, start_y + 5, bx + 2, "█" * filled + "░" * (bw - 12 - filled), curses.color_pair(3))
+            safe_addstr(self.scr, start_y + 5, bx + bw - 8, f"{100*self.progress//self.total:3d}%", curses.color_pair(3) | curses.A_BOLD)
         
-        lh = min(15, self.h - 12)
         if self.view == "typst" and self.typst_logs:
-            draw_box(self.scr, 9, bx, lh, bw, "Typst Output (↑↓ scroll)")
+            draw_box(self.scr, start_y + 8, bx, lh, bw, "Typst Output (↑↓ scroll)")
             for i, line in enumerate(self.typst_logs[self.scroll:self.scroll + lh - 2]):
                 c = 6 if 'error:' in line.lower() else 3 if 'warning:' in line.lower() else 4
-                safe_addstr(self.scr, 10 + i, bx + 2, line[:bw-4], curses.color_pair(c))
+                safe_addstr(self.scr, start_y + 9 + i, bx + 2, line[:bw-4], curses.color_pair(c))
         else:
-            draw_box(self.scr, 9, bx, lh, bw, "Build Log")
+            draw_box(self.scr, start_y + 8, bx, lh, bw, "Build Log")
             for i, (msg, ok) in enumerate(self.logs[-(lh-2):]):
-                safe_addstr(self.scr, 10 + i, bx + 2, ("✓ " if ok else "  ") + msg[:bw-6], curses.color_pair(2 if ok else 4))
+                safe_addstr(self.scr, start_y + 9 + i, bx + 2, ("✓ " if ok else "  ") + msg[:bw-6], curses.color_pair(2 if ok else 4))
         
         safe_addstr(self.scr, self.h - 1, (self.w - 50) // 2, "Press Ctrl+C to cancel  |  Press 'v' to toggle view", curses.color_pair(4) | curses.A_DIM)
         self.scr.refresh()
@@ -551,7 +599,7 @@ def run_build(scr, args, hierarchy, opts):
     ui.log(f"Created {OUTPUT_FILE} ({current - 1} pages)", True)
     
     scr.nodelay(False)
-    show_success_screen(scr, current - 1)
+    show_success_screen(scr, current - 1, ui.has_warnings, ui.typst_logs)
 
 # ENTRY POINTS
 

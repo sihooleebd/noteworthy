@@ -21,9 +21,13 @@
   // Optional stylin
   set text(font: font, size: 11pt, fill: theme.text-main)
   context {
-    let chapter = query(selector(<chapter-cover>).before(here())).last()
+    let chapter = query(selector(metadata).before(here()))
+      .filter(el => {
+        el.label != none and str(el.label).starts-with("chapter-") and str(el.label).len() == 10
+      })
+      .last()
 
-    [#metadata((number, title, chapter)) <subchapter-cover>#label(page-id)]
+    [#metadata((number, title, chapter)) #label(page-id)]
 
     let display_date = if date == none {
       datetime.today().display("[Month]/[day], [year]")
