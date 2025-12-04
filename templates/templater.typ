@@ -13,6 +13,13 @@
 #import "@preview/cetz:0.4.2"
 #import "@preview/cetz:0.4.2": *
 #import "@preview/cetz-plot:0.1.3": plot
+#let add-graph(..args) = {
+  let kwargs = args.named()
+  if "samples" not in kwargs {
+    kwargs.insert("samples", render-sample-count)
+  }
+  plot.add(..args.pos(), ..kwargs)
+}
 
 // Re-export cetz module for content files
 #import "@preview/cetz:0.4.2" as cetz-mod

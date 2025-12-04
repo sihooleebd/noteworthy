@@ -1,5 +1,22 @@
 # Noteworthy
 
+```
+         ,--. 
+       ,--.'| 
+   ,--,:  : | 
+,`--.'`|  ' : 
+|   :  :  | | 
+:   |   \ | : 
+|   : '  '; | 
+'   ' ;.    ; 
+|   | | \   | 
+'   : |  ; .' 
+|   | '`--'   
+'   : |       
+;   |.'       
+'---'         
+```
+
 **A powerful Typst framework for creating beautiful, themed educational documents.**
 
 [![Typst](https://img.shields.io/badge/Typst-0.12%2B-239DAD?logo=typst)](https://typst.app/)
@@ -103,13 +120,13 @@ noteworthy/
 
 ## Build System
 
-The `build.py` script provides powerful incremental compilation:
+The `build.py` script provides efficient single-pass incremental compilation:
 
 ### Features
 
-- **Two-Pass Compilation**: First pass compiles all sections and tracks page numbers; second pass regenerates TOC with accurate page numbers
+- **Interactive TUI**: Full-screen terminal interface with menu for chapter selection and options
+- **Single-Pass Compilation**: Each section compiles once with accumulated page offsets; only TOC regenerates at the end
 - **Incremental Compilation**: Compiles cover, preface, TOC, and each chapter/section separately
-- **Progress Bars**: Real-time visual feedback with `tqdm` showing compilation progress, speed, and ETA
 - **Automatic Merging**: Uses `pdfunite` or `ghostscript` to merge individual PDFs
 - **PDF Metadata**: Adds document title, author, and clickable bookmarks/outline using `pdftk`
 - **Interactive TOC**: Sidebar bookmarks allow easy navigation in PDF readers
@@ -118,33 +135,33 @@ The `build.py` script provides powerful incremental compilation:
 
 ### Usage
 
-```bash
-# Standard build
-python3 build.py
-# Output: output.pdf (merged document)
-# Build directory automatically cleaned up
+Run the build script to launch the interactive menu:
 
-# Preserve individual PDFs
-python3 build.py --leave-individual
-# Output: output.pdf + build_pdfs.zip (15 individual PDFs)
-``
+```bash
+python3 build.py
+```
+
+**Menu Controls:**
+- `↑/↓` or `j/k`: Navigate chapters
+- `Space`: Toggle selection
+- `a`: Select all chapters
+- `n`: Deselect all chapters
+- `d`: Toggle Debug Mode (verbose logging)
+- `f`: Toggle Frontmatter (Cover, Preface, TOC)
+- `l`: Toggle Leave PDFs (archive individual files)
+- `Enter`: Start Build
+- `q`: Quit
 
 ### Build Process
 
-**Pass 1: Initial Compilation**
+**Compilation (Single Pass)**
 1. Extracts document structure from `config.typ`
-2. Compiles components in order, tracking page numbers:
-   - Cover page
-   - Preface
-   - Table of contents (placeholder)
-   - For each chapter:
-     - Chapter cover
-     - Chapter sections (01.01, 01.02, etc.)
-3. Generates `page_map.json` with starting pages
-
-**Pass 2: Regeneration**
-1. Regenerates table of contents with accurate page numbers
-2. Recompiles chapters with correct page offsets
+2. Compiles front matter (cover, preface, TOC placeholder)
+3. Compiles each chapter/section with correct page offset:
+   - Accumulates page count as it goes
+   - Each section gets the correct starting page number immediately
+4. Regenerates TOC with final page map
+5. Generates `page_map.json` with all page numbers
 
 **Finalization**
 1. Merges all PDFs using `pdfunite` (or `ghostscript` as fallback)
