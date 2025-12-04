@@ -38,8 +38,6 @@ def get_pdf_page_count(pdf_path):
         return 0
 
 def extract_hierarchy():
-    print("Extracting document hierarchy...")
-    
     temp_file = Path("extract_hierarchy.typ")
     temp_file.write_text('#import "templates/setup.typ": hierarchy\n#metadata(hierarchy) <hierarchy>')
     
@@ -356,6 +354,36 @@ def show_error_screen(stdscr, error_message):
         elif not view_log:
             break
 
+
+def check_terminal_size_loop(stdscr):
+    min_lines, min_cols = 20, 50
+    
+    while True:
+        height, width = stdscr.getmaxyx()
+        if height >= min_lines and width >= min_cols:
+            return True
+        
+        stdscr.clear()
+        msg1 = "Terminal too small!"
+        msg2 = f"Current: {height}×{width}"
+        msg3 = f"Required: {min_lines}×{min_cols}"
+        
+        y = height // 2 - 1
+        try:
+            stdscr.addstr(y, max(0, (width - len(msg1)) // 2), msg1, curses.color_pair(6) | curses.A_BOLD)
+            stdscr.addstr(y + 1, max(0, (width - len(msg2)) // 2), msg2, curses.color_pair(4))
+            stdscr.addstr(y + 2, max(0, (width - len(msg3)) // 2), msg3, curses.color_pair(4) | curses.A_DIM)
+        except curses.error:
+            pass
+        
+        stdscr.refresh()
+        stdscr.timeout(100)
+        key = stdscr.getch()
+        if key == ord('q'):
+            return False
+    
+    stdscr.timeout(-1)
+
 class BuildMenu:
     def __init__(self, stdscr, hierarchy):
         self.stdscr = stdscr
@@ -410,12 +438,17 @@ class BuildMenu:
         self.selected[(ch_idx, art_idx)] = not self.selected.get((ch_idx, art_idx), False)
     
     def draw_box(self, y, x, h, w, title=""):
-        self.stdscr.addstr(y, x, "╔" + "═" * (w - 2) + "╗")
-        for i in range(1, h - 1):
-            self.stdscr.addstr(y + i, x, "║" + " " * (w - 2) + "║")
-        self.stdscr.addstr(y + h - 1, x, "╚" + "═" * (w - 2) + "╝")
-        if title:
-            self.stdscr.addstr(y, x + 2, f" {title} ", curses.color_pair(1) | curses.A_BOLD)
+        try:
+            if y < 0 or x < 0 or y + h > self.height or x + w > self.width:
+                return
+            self.stdscr.addstr(y, x, "╔" + "═" * (w - 2) + "╗")
+            for i in range(1, h - 1):
+                self.stdscr.addstr(y + i, x, "║" + " " * (w - 2) + "║")
+            self.stdscr.addstr(y + h - 1, x, "╚" + "═" * (w - 2) + "╝")
+            if title:
+                self.stdscr.addstr(y, x + 2, f" {title} ", curses.color_pair(1) | curses.A_BOLD)
+        except curses.error:
+            pass
     
     def safe_addstr(self, y, x, text, attr=0):
         try:
@@ -449,8 +482,8 @@ class BuildMenu:
         options_box_height = 7
         min_chapter_rows = 3
         
-        vertical_layout_min_height = logo_height + 2 + options_box_height + 1 + (min_chapter_rows + 2) + 2
-        horizontal_layout_min_height = logo_height + 2 + options_box_height
+        vertical_layout_min_height = logo_height + 3 + options_box_height + 2 + (min_chapter_rows + 2) + 2
+        horizontal_layout_min_height = logo_height + 3 + options_box_height + 2
         
         if self.height >= vertical_layout_min_height:
             layout = "vertical"
@@ -690,6 +723,9 @@ class BuildMenu:
         self.refresh()
         
         while True:
+            if not check_terminal_size_loop(self.stdscr):
+                return None
+            
             key = self.stdscr.getch()
             
             if key == ord('q'):
@@ -1172,6 +1208,22 @@ def run_build(stdscr, args, hierarchy, options):
     return current_page - 1, len(selected_chapters)
 
 def run_app(stdscr, args):
+    curses.start_color()
+    curses.use_default_colors()
+    curses.init_pair(1, curses.COLOR_CYAN, -1)
+    curses.init_pair(4, curses.COLOR_WHITE, -1)
+    curses.init_pair(6, curses.COLOR_RED, -1)
+    curses.curs_set(0)
+    
+    if not check_terminal_size_loop(stdscr):
+        return
+    
+    stdscr.clear()
+    height, width = stdscr.getmaxyx()
+    msg = "Indexing..."
+    stdscr.addstr(height // 2, (width - len(msg)) // 2, msg, curses.color_pair(1) | curses.A_BOLD)
+    stdscr.refresh()
+    
     hierarchy, options = show_menu(stdscr)
     
     if options is None:
@@ -1194,19 +1246,6 @@ def main():
         help="Keep individual PDFs as a zip file instead of deleting them"
     )
     args = parser.parse_args()
-    
-    try:
-        import shutil as sh
-        term_size = sh.get_terminal_size()
-        min_lines, min_cols = 15, 50
-        if term_size.lines < min_lines or term_size.columns < min_cols:
-            print(f"Error: Terminal too small!")
-            print(f"Current size: {term_size.lines} lines × {term_size.columns} columns")
-            print(f"Required:     {min_lines} lines × {min_cols} columns")
-            print(f"\nPlease resize your terminal window and try again.")
-            sys.exit(1)
-    except Exception:
-        pass
     
     try:
         curses.wrapper(lambda stdscr: run_app(stdscr, args))
