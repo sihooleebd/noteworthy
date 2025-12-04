@@ -1,1265 +1,597 @@
-import os
-import sys
-import json
-import subprocess
-import shutil
-import argparse
-import zipfile
-import curses
+#!/usr/bin/env python3
+
+import os, sys, json, subprocess, shutil, argparse, zipfile, curses, time
 from pathlib import Path
+
+# CONSTANTS
 
 BUILD_DIR = Path("build")
 OUTPUT_FILE = Path("output.pdf")
 RENDERER_FILE = "templates/parser.typ"
+MIN_TERM_HEIGHT, MIN_TERM_WIDTH = 20, 50
+
+LOGO = [
+    "         ,--. ", "       ,--.'| ", "   ,--,:  : | ", ",`--.'`|  ' : ",
+    "|   :  :  | | ", ":   |   \\ | : ", "|   : '  '; | ", "'   ' ;.    ; ",
+    "|   | | \\   | ", "'   : |  ; .' ", "|   | '`--'   ", "'   : |       ",
+    ";   |.'       ", "'---'         ",
+]
+
+CONFETTI = [
+    "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡀⠀⠀⠀⠀⠀⠀⠀", "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡈⠀⡠⠀⠀⣤⡄⠀⠀",
+    "⠀⠀⠀⠀⠒⢀⣴⠟⠛⠓⠀⠀⠓⠀⠀⠀⢠⠉⠡⠀⠀", "⠀⠀⠀⣴⡆⠘⠧⠶⠶⢦⠀⠀⠰⠇⠀⠀⣀⠀⠀⣀⠀",
+    "⠀⠀⠀⠀⠀⡠⠤⢀⣀⣼⠀⠀⣀⣀⡀⣦⠉⠳⠆⠋⠀", "⠀⠀⠀⢀⠄⡁⠀⣠⠿⠃⢤⡀⢽⠈⠉⠁⣀⣀⠀⠀⠀",
+    "⠀⠀⠀⣾⠜⢐⠀⠁⠀⠀⠙⠻⣎⠀⠀⠀⠙⠉⠀⡀⢄", "⠀⠀⠜⠋⣎⠀⠀⠠⠀⢀⣠⣤⣼⣦⣤⣤⣀⠀⠀⠐⠈",
+    "⠀⣌⠎⠘⢿⣦⡀⠀⠈⠙⠥⢀⣀⠄⠀⠈⠉⠃⠀⣴⡀", "⢠⢿⣦⡀⠈⠻⣿⣦⣔⢀⠠⠂⠀⠀⠠⣾⠗⠀⠀⠈⠀",
+    "⣏⠀⠙⣿⣦⡂⠄⠋⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀", "⠈⠓⠂⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+]
+
+SAD_FACE = ["       __", "  _   / /", " (_) | | ", "     | | ", "  _  | | ", " (_) | | ", "      \\_\\"]
+
+# UTILITY FUNCTIONS
 
 def check_dependencies():
-    if shutil.which("typst") is None:
-        print("Error: 'typst' executable not found in PATH.")
+    if not shutil.which("typst"):
+        print("Error: 'typst' not found. Install from https://typst.app")
         sys.exit(1)
-    if shutil.which("pdfinfo") is None:
-        print("Error: 'pdfinfo' executable not found in PATH.")
-        print("Install with: brew install poppler")
+    if not shutil.which("pdfinfo"):
+        print("Error: 'pdfinfo' not found. Install with: brew install poppler")
         sys.exit(1)
 
 def get_pdf_page_count(pdf_path):
     try:
-        result = subprocess.run(
-            ["pdfinfo", str(pdf_path)],
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        result = subprocess.run(["pdfinfo", str(pdf_path)], capture_output=True, text=True, check=True)
         for line in result.stdout.split('\n'):
             if line.startswith('Pages:'):
                 return int(line.split(':')[1].strip())
-        return 0
-    except (subprocess.CalledProcessError, ValueError) as e:
-        print(f"Error getting page count for {pdf_path}: {e}")
-        return 0
+    except:
+        pass
+    return 0
 
 def extract_hierarchy():
     temp_file = Path("extract_hierarchy.typ")
     temp_file.write_text('#import "templates/setup.typ": hierarchy\n#metadata(hierarchy) <hierarchy>')
-    
     try:
-        result = subprocess.run(
-            ["typst", "query", str(temp_file), "<hierarchy>"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        data = json.loads(result.stdout)
-        return data[0]["value"]
+        result = subprocess.run(["typst", "query", str(temp_file), "<hierarchy>"], capture_output=True, text=True, check=True)
+        return json.loads(result.stdout)[0]["value"]
     except subprocess.CalledProcessError as e:
         print(f"Error extracting hierarchy: {e.stderr}")
         sys.exit(1)
     finally:
-        if temp_file.exists():
-            temp_file.unlink()
+        temp_file.unlink(missing_ok=True)
 
-def compile_target(target, output_path, page_offset=None, page_map=None, quiet=True, extra_flags=None, keyboard_check_callback=None):
-    cmd = [
-        "typst", "compile", 
-        RENDERER_FILE, 
-        str(output_path),
-        "--root", ".",
-        "--input", f"target={target}"
-    ]
+def compile_target(target, output, page_offset=None, page_map=None, extra_flags=None, callback=None):
+    cmd = ["typst", "compile", RENDERER_FILE, str(output), "--root", ".", "--input", f"target={target}"]
+    if page_offset: cmd.extend(["--input", f"page-offset={page_offset}"])
+    if page_map: cmd.extend(["--input", f"page-map={json.dumps(page_map)}"])
+    if extra_flags: cmd.extend(extra_flags)
     
-    if page_offset is not None:
-        cmd.extend(["--input", f"page-offset={page_offset}"])
-    
-    if page_map is not None:
-        page_map_json_str = json.dumps(page_map)
-        cmd.extend(["--input", f"page-map={page_map_json_str}"])
-    
-    if extra_flags:
-        cmd.extend(extra_flags)
-    
-    try:
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        
-        import time
-        while process.poll() is None:
-            if keyboard_check_callback:
-                keyboard_check_callback()
-            time.sleep(0.05)
-        
-        stdout, stderr = process.communicate()
-        
-        if process.returncode != 0:
-            raise subprocess.CalledProcessError(process.returncode, cmd, output=stdout, stderr=stderr)
-        
-        return stderr if stderr else ""
-    except subprocess.CalledProcessError as e:
-        if not quiet:
-            print(f"Error compiling {target}:")
-            print(e.stderr)
-        raise
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    while proc.poll() is None:
+        if callback: callback()
+        time.sleep(0.05)
+    stdout, stderr = proc.communicate()
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, output=stdout, stderr=stderr)
+    return stderr or ""
 
-def merge_pdfs_with_command(pdf_files, output_path):
-    existing_files = [str(pdf) for pdf in pdf_files if pdf.exists()]
-    
-    if not existing_files:
-        print("No PDF files to merge!")
-        return
-    
-    print(f"Merging {len(existing_files)} files into {output_path}...")
+def merge_pdfs(pdf_files, output):
+    files = [str(p) for p in pdf_files if p.exists()]
+    if not files: return False
     
     if shutil.which("pdfunite"):
-        cmd = ["pdfunite"] + existing_files + [str(output_path)]
-        try:
-            subprocess.run(cmd, check=True, capture_output=True)
-            print(f"Successfully merged PDFs using pdfunite")
-            return
-        except subprocess.CalledProcessError as e:
-            print(f"pdfunite failed: {e.stderr.decode()}")
-    
-    if shutil.which("gs"):
-        cmd = [
-            "gs", "-dBATCH", "-dNOPAUSE", "-q", "-sDEVICE=pdfwrite",
-            f"-sOutputFile={output_path}"
-        ] + existing_files
-        try:
-            subprocess.run(cmd, check=True, capture_output=True)
-            print(f"Successfully merged PDFs using ghostscript")
-            return
-        except subprocess.CalledProcessError as e:
-            print(f"ghostscript failed: {e.stderr.decode()}")
-    
-    print("Warning: No PDF merge tool found (tried pdfunite and gs)")
-    print("Individual PDFs are available in the build/ directory")
-    print("To install a merge tool:")
-    print("  - macOS: brew install poppler")
-    print("  - Linux: apt-get install poppler-utils or ghostscript")
+        subprocess.run(["pdfunite"] + files + [str(output)], check=True, capture_output=True)
+        return "pdfunite"
+    elif shutil.which("gs"):
+        subprocess.run(["gs", "-dBATCH", "-dNOPAUSE", "-q", "-sDEVICE=pdfwrite", f"-sOutputFile={output}"] + files, check=True, capture_output=True)
+        return "ghostscript"
+    return None
 
-def zip_build_directory(build_dir, output_file="build_pdfs.zip"):
-    print(f"Zipping build directory to {output_file}...")
-    with zipfile.ZipFile(output_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(build_dir):
-            for file in files:
-                file_path = Path(root) / file
-                arcname = file_path.relative_to(build_dir.parent)
-                zipf.write(file_path, arcname)
-    print(f"Created {output_file}")
+def zip_build_directory(build_dir, output="build_pdfs.zip"):
+    with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as z:
+        for root, _, files in os.walk(build_dir):
+            for f in files:
+                path = Path(root) / f
+                z.write(path, path.relative_to(build_dir.parent))
 
-def create_pdf_metadata(hierarchy, page_map, output_file="bookmarks.txt"):
-    print(f"Creating PDF bookmarks file: {output_file}...")
-    
+def create_pdf_metadata(chapters, page_map, output_file):
     bookmarks = []
+    for key, title in [("cover", "Cover"), ("preface", "Preface"), ("outline", "Table of Contents")]:
+        if key in page_map:
+            bookmarks.extend([f"BookmarkBegin", f"BookmarkTitle: {title}", f"BookmarkLevel: 1", f"BookmarkPageNumber: {page_map[key]}"])
     
-    if "cover" in page_map:
-        bookmarks.append(f"BookmarkBegin")
-        bookmarks.append(f"BookmarkTitle: Cover")
-        bookmarks.append(f"BookmarkLevel: 1")
-        bookmarks.append(f"BookmarkPageNumber: {page_map['cover']}")
+    for ch in chapters:
+        ch_id = ch["pages"][0]["id"][:2]
+        if f"chapter-{ch_id}" in page_map:
+            bookmarks.extend([f"BookmarkBegin", f"BookmarkTitle: {ch['title']}", f"BookmarkLevel: 1", f"BookmarkPageNumber: {page_map[f'chapter-{ch_id}']}"])
+        for p in ch["pages"]:
+            if p["id"] in page_map:
+                bookmarks.extend([f"BookmarkBegin", f"BookmarkTitle: {p['title']}", f"BookmarkLevel: 2", f"BookmarkPageNumber: {page_map[p['id']]}"])
     
-    if "preface" in page_map:
-        bookmarks.append(f"BookmarkBegin")
-        bookmarks.append(f"BookmarkTitle: Preface")
-        bookmarks.append(f"BookmarkLevel: 1")
-        bookmarks.append(f"BookmarkPageNumber: {page_map['preface']}")
-    
-    if "outline" in page_map:
-        bookmarks.append(f"BookmarkBegin")
-        bookmarks.append(f"BookmarkTitle: Table of Contents")
-        bookmarks.append(f"BookmarkLevel: 1")
-        bookmarks.append(f"BookmarkPageNumber: {page_map['outline']}")
-    
-    for chapter in hierarchy:
-        first_page = chapter["pages"][0]
-        chapter_id = first_page["id"][:2]
-        
-        if f"chapter-{chapter_id}" in page_map:
-            bookmarks.append(f"BookmarkBegin")
-            bookmarks.append(f"BookmarkTitle: {chapter['title']}")
-            bookmarks.append(f"BookmarkLevel: 1")
-            bookmarks.append(f"BookmarkPageNumber: {page_map[f'chapter-{chapter_id}']}")
-        
-        for page in chapter["pages"]:
-            page_id = page["id"]
-            if page_id in page_map:
-                bookmarks.append(f"BookmarkBegin")
-                bookmarks.append(f"BookmarkTitle: {page['title']}")
-                bookmarks.append(f"BookmarkLevel: 2")
-                bookmarks.append(f"BookmarkPageNumber: {page_map[page_id]}")
-    
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(bookmarks))
-    
-    print(f"✓ Created bookmarks file with {len(bookmarks)//4} entries")
-    return output_file
+    Path(output_file).write_text('\n'.join(bookmarks))
 
-def apply_pdf_metadata(pdf_path, bookmarks_file, title="Noteworthy Framework", author=""):
-    temp_pdf = BUILD_DIR / "temp_with_metadata.pdf"
-    
+def apply_pdf_metadata(pdf, bookmarks_file, title, author):
+    temp = BUILD_DIR / "temp.pdf"
     if shutil.which("pdftk"):
-        try:
-            info_file = BUILD_DIR / "pdf_info.txt"
-            with open(info_file, 'w', encoding='utf-8') as f:
-                f.write(f"InfoBegin\n")
-                f.write(f"InfoKey: Title\n")
-                f.write(f"InfoValue: {title}\n")
-                if author:
-                    f.write(f"InfoKey: Author\n")
-                    f.write(f"InfoValue: {author}\n")
-            
-            subprocess.run([
-                "pdftk", str(pdf_path), "update_info", str(info_file), 
-                "output", str(temp_pdf)
-            ], check=True, capture_output=True)
-            
-            temp_pdf2 = BUILD_DIR / "temp_with_bookmarks.pdf"
-            subprocess.run([
-                "pdftk", str(temp_pdf), "update_info", str(bookmarks_file),
-                "output", str(temp_pdf2)
-            ], check=True, capture_output=True)
-            
-            shutil.move(temp_pdf2, pdf_path)
-            print("✓ Applied PDF metadata and bookmarks using pdftk")
-            return True
-        except subprocess.CalledProcessError as e:
-            print(f"pdftk failed: {e.stderr.decode()}")
-    
-    if shutil.which("gs"):
-        try:
-            pdfmark_file = BUILD_DIR / "bookmarks.pdfmark"
-            with open(bookmarks_file, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-            
-            pdfmarks = []
-            pdfmarks.append("[ /Title (%s) /Author (%s) /DOCINFO pdfmark" % (title, author))
-            
-            i = 0
-            while i < len(lines):
-                if lines[i].strip() == "BookmarkBegin":
-                    title_line = lines[i+1].strip()
-                    level_line = lines[i+2].strip()
-                    page_line = lines[i+3].strip()
-                    
-                    bm_title = title_line.split(": ", 1)[1] if ": " in title_line else ""
-                    bm_level = level_line.split(": ", 1)[1] if ": " in level_line else "1"
-                    bm_page = page_line.split(": ", 1)[1] if ": " in page_line else "1"
-                    
-                    pdfmarks.append(f"[ /Title ({bm_title}) /Page {bm_page} /Count 0 /OUT pdfmark")
-                    i += 4
-                else:
-                    i += 1
-            
-            with open(pdfmark_file, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(pdfmarks))
-            
-            subprocess.run([
-                "gs", "-dBATCH", "-dNOPAUSE", "-q", "-sDEVICE=pdfwrite",
-                f"-sOutputFile={temp_pdf}",
-                str(pdf_path),
-                str(pdfmark_file)
-            ], check=True, capture_output=True)
-            
-            shutil.move(temp_pdf, pdf_path)
-            print("✓ Applied PDF metadata using ghostscript")
-            return True
-        except subprocess.CalledProcessError as e:
-            print(f"ghostscript metadata failed: {e.stderr.decode()}")
-    
-    print("⚠ Warning: Could not apply PDF metadata (pdftk or gs required)")
-    print("  Install with: brew install pdftk-java")
+        info = BUILD_DIR / "info.txt"
+        info.write_text(f"InfoBegin\nInfoKey: Title\nInfoValue: {title}\nInfoKey: Author\nInfoValue: {author}\n")
+        subprocess.run(["pdftk", str(pdf), "update_info", str(info), "output", str(temp)], check=True, capture_output=True)
+        temp2 = BUILD_DIR / "temp2.pdf"
+        subprocess.run(["pdftk", str(temp), "update_info", str(bookmarks_file), "output", str(temp2)], check=True, capture_output=True)
+        shutil.move(temp2, pdf)
+        return True
+    elif shutil.which("gs"):
+        pdfmark = BUILD_DIR / "bookmarks.pdfmark"
+        marks = [f"[ /Title ({title}) /Author ({author}) /DOCINFO pdfmark"]
+        lines = Path(bookmarks_file).read_text().split('\n')
+        i = 0
+        while i < len(lines):
+            if lines[i].strip() == "BookmarkBegin":
+                t = lines[i+1].split(": ", 1)[1] if ": " in lines[i+1] else ""
+                pg = lines[i+3].split(": ", 1)[1] if ": " in lines[i+3] else "1"
+                marks.append(f"[ /Title ({t}) /Page {pg} /Count 0 /OUT pdfmark")
+                i += 4
+            else:
+                i += 1
+        pdfmark.write_text('\n'.join(marks))
+        subprocess.run(["gs", "-dBATCH", "-dNOPAUSE", "-q", "-sDEVICE=pdfwrite", f"-sOutputFile={temp}", str(pdf), str(pdfmark)], check=True, capture_output=True)
+        shutil.move(temp, pdf)
+        return True
     return False
 
-def show_error_screen(stdscr, error_message):
-    import curses
-    import traceback
-    
+# CURSES HELPERS
+
+def init_colors():
     curses.start_color()
     curses.use_default_colors()
-    curses.init_pair(1, curses.COLOR_CYAN, -1)
-    curses.init_pair(6, curses.COLOR_RED, -1)
-    curses.init_pair(4, curses.COLOR_WHITE, -1)
-    
-    sad_face = [
-        "       __",
-        "  _   / /",
-        " (_) | | ",
-        "     | | ",
-        "  _  | | ",
-        " (_) | | ",
-        "      \\_\\",
-    ]
-    
-    full_log = traceback.format_exc()
-    if full_log.strip() == "NoneType: None":
-        full_log = str(error_message)
+    for i, color in enumerate([curses.COLOR_CYAN, curses.COLOR_GREEN, curses.COLOR_YELLOW, 
+                               curses.COLOR_WHITE, curses.COLOR_MAGENTA, curses.COLOR_RED], 1):
+        curses.init_pair(i, color, -1)
+    curses.curs_set(0)
+
+def safe_addstr(scr, y, x, text, attr=0):
+    try:
+        h, w = scr.getmaxyx()
+        if 0 <= y < h and 0 <= x < w:
+            scr.addstr(y, x, text[:w - x - 1], attr)
+    except curses.error:
+        pass
+
+def draw_box(scr, y, x, h, w, title=""):
+    try:
+        scr.addstr(y, x, "╔" + "═" * (w - 2) + "╗")
+        for i in range(1, h - 1):
+            scr.addstr(y + i, x, "║" + " " * (w - 2) + "║")
+        scr.addstr(y + h - 1, x, "╚" + "═" * (w - 2) + "╝")
+        if title:
+            scr.addstr(y, x + 2, f" {title} ", curses.color_pair(1) | curses.A_BOLD)
+    except curses.error:
+        pass
+
+def check_terminal_size(scr):
+    while True:
+        h, w = scr.getmaxyx()
+        if h >= MIN_TERM_HEIGHT and w >= MIN_TERM_WIDTH:
+            return True
+        scr.clear()
+        y = h // 2 - 1
+        safe_addstr(scr, y, max(0, (w - 19) // 2), "Terminal too small!", curses.color_pair(6) | curses.A_BOLD)
+        safe_addstr(scr, y + 1, max(0, (w - 15) // 2), f"Current: {h}×{w}", curses.color_pair(4))
+        safe_addstr(scr, y + 2, max(0, (w - 15) // 2), f"Required: {MIN_TERM_HEIGHT}×{MIN_TERM_WIDTH}", curses.color_pair(4) | curses.A_DIM)
+        scr.refresh()
+        scr.timeout(100)
+        if scr.getch() == ord('q'):
+            return False
+    scr.timeout(-1)
+
+# SCREEN DISPLAYS
+
+def show_error_screen(scr, error):
+    import traceback
+    log = traceback.format_exc()
+    if log.strip() == "NoneType: None":
+        log = str(error)
     
     view_log = False
-    
     while True:
-        stdscr.clear()
-        height, width = stdscr.getmaxyx()
+        scr.clear()
+        h, w = scr.getmaxyx()
         
         if view_log:
-            stdscr.addstr(0, 2, "ERROR LOG (press 'v' to go back)", 
-                         curses.color_pair(6) | curses.A_BOLD)
-            stdscr.addstr(1, 0, "─" * width, curses.color_pair(4))
-            
-            log_lines = full_log.split('\n')
-            for i, line in enumerate(log_lines):
-                if i + 3 >= height - 1:
-                    break
-                try:
-                    stdscr.addstr(i + 3, 2, line[:width - 4], curses.color_pair(4))
-                except curses.error:
-                    pass
+            safe_addstr(scr, 0, 2, "ERROR LOG (press 'v' to go back)", curses.color_pair(6) | curses.A_BOLD)
+            for i, line in enumerate(log.split('\n')[:h-3]):
+                safe_addstr(scr, i + 2, 2, line, curses.color_pair(4))
         else:
-            face_width = 9
-            start_y = max(0, (height - len(sad_face) - 10) // 2)
-            face_x = (width - face_width) // 2
+            y = max(0, (h - len(SAD_FACE) - 8) // 2)
+            for i, line in enumerate(SAD_FACE):
+                safe_addstr(scr, y + i, (w - 9) // 2, line, curses.color_pair(6) | curses.A_BOLD)
             
-            for i, line in enumerate(sad_face):
-                try:
-                    stdscr.addstr(start_y + i, face_x, line, curses.color_pair(6) | curses.A_BOLD)
-                except curses.error:
-                    pass
-            
-            msg_y = start_y + len(sad_face) + 2
-            error_title = "BUILD FAILED"
-            try:
-                stdscr.addstr(msg_y, (width - len(error_title)) // 2, error_title, 
-                             curses.color_pair(6) | curses.A_BOLD)
-            except curses.error:
-                pass
-            
-            error_str = str(error_message)
-            max_error_len = width - 10
-            if len(error_str) > max_error_len:
-                error_str = error_str[:max_error_len - 3] + "..."
-            try:
-                stdscr.addstr(msg_y + 2, (width - len(error_str)) // 2, error_str, 
-                             curses.color_pair(4))
-            except curses.error:
-                pass
-            
-            view_msg = "Press 'v' to view log  |  Press any other key to exit"
-            try:
-                stdscr.addstr(msg_y + 4, (width - len(view_msg)) // 2, view_msg, 
-                             curses.color_pair(4) | curses.A_DIM)
-            except curses.error:
-                pass
+            my = y + len(SAD_FACE) + 2
+            safe_addstr(scr, my, (w - 12) // 2, "BUILD FAILED", curses.color_pair(6) | curses.A_BOLD)
+            err = str(error)[:w-10]
+            safe_addstr(scr, my + 2, (w - len(err)) // 2, err, curses.color_pair(4))
+            safe_addstr(scr, my + 4, (w - 50) // 2, "Press 'v' to view log  |  Press any other key to exit", curses.color_pair(4) | curses.A_DIM)
         
-        stdscr.refresh()
-        stdscr.nodelay(False)
-        key = stdscr.getch()
-        
+        scr.refresh()
+        key = scr.getch()
         if key == ord('v'):
             view_log = not view_log
         elif not view_log:
             break
 
+def show_success_screen(scr, page_count):
+    scr.clear()
+    h, w = scr.getmaxyx()
+    y = max(0, (h - len(CONFETTI) - 8) // 2)
+    
+    for i, line in enumerate(CONFETTI):
+        safe_addstr(scr, y + i, (w - 17) // 2, line, curses.color_pair(2))
+    
+    my = y + len(CONFETTI) + 2
+    safe_addstr(scr, my, (w - 16) // 2, "BUILD SUCCEEDED!", curses.color_pair(2) | curses.A_BOLD)
+    msg = f"Created: {OUTPUT_FILE} ({page_count} pages)"
+    safe_addstr(scr, my + 2, (w - len(msg)) // 2, msg, curses.color_pair(4))
+    safe_addstr(scr, my + 4, (w - 24) // 2, "Press any key to exit...", curses.color_pair(4) | curses.A_DIM)
+    scr.refresh()
+    scr.getch()
 
-def check_terminal_size_loop(stdscr):
-    min_lines, min_cols = 20, 50
-    
-    while True:
-        height, width = stdscr.getmaxyx()
-        if height >= min_lines and width >= min_cols:
-            return True
-        
-        stdscr.clear()
-        msg1 = "Terminal too small!"
-        msg2 = f"Current: {height}×{width}"
-        msg3 = f"Required: {min_lines}×{min_cols}"
-        
-        y = height // 2 - 1
-        try:
-            stdscr.addstr(y, max(0, (width - len(msg1)) // 2), msg1, curses.color_pair(6) | curses.A_BOLD)
-            stdscr.addstr(y + 1, max(0, (width - len(msg2)) // 2), msg2, curses.color_pair(4))
-            stdscr.addstr(y + 2, max(0, (width - len(msg3)) // 2), msg3, curses.color_pair(4) | curses.A_DIM)
-        except curses.error:
-            pass
-        
-        stdscr.refresh()
-        stdscr.timeout(100)
-        key = stdscr.getch()
-        if key == ord('q'):
-            return False
-    
-    stdscr.timeout(-1)
+# BUILD MENU (Selection TUI)
 
 class BuildMenu:
-    def __init__(self, stdscr, hierarchy):
-        self.stdscr = stdscr
-        self.hierarchy = hierarchy
-        self.debug_mode = False
-        self.include_frontmatter = True
-        self.leave_individual = False
-        self.typst_flags = []
-        self.scroll_offset = 0
+    def __init__(self, scr, hierarchy):
+        self.scr, self.hierarchy = scr, hierarchy
+        self.debug, self.frontmatter, self.leave_pdfs = False, True, False
+        self.typst_flags, self.scroll, self.cursor = [], 0, 0
         
-        self.items = []
-        self.selected = {}
+        self.items, self.selected = [], {}
+        for ci, ch in enumerate(hierarchy):
+            self.items.append(('ch', ci, None))
+            for ai in range(len(ch["pages"])):
+                self.items.append(('art', ci, ai))
+                self.selected[(ci, ai)] = True
         
-        for ch_idx, chapter in enumerate(hierarchy):
-            self.items.append(('chapter', ch_idx, None))
-            self.selected[(ch_idx, None)] = True
-            for art_idx, page in enumerate(chapter["pages"]):
-                self.items.append(('article', ch_idx, art_idx))
-                self.selected[(ch_idx, art_idx)] = True
-        
-        self.cursor = 0
-        
-        curses.curs_set(0)
-        curses.start_color()
-        curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_CYAN, -1)
-        curses.init_pair(2, curses.COLOR_GREEN, -1)
-        curses.init_pair(3, curses.COLOR_YELLOW, -1)
-        curses.init_pair(4, curses.COLOR_WHITE, -1)
-        curses.init_pair(5, curses.COLOR_MAGENTA, -1)
-        curses.init_pair(6, curses.COLOR_RED, -1)
-        
-        self.stdscr.clear()
-        self.height, self.width = stdscr.getmaxyx()
+        init_colors()
+        self.h, self.w = scr.getmaxyx()
     
-    def is_chapter_selected(self, ch_idx):
-        chapter = self.hierarchy[ch_idx]
-        return all(self.selected.get((ch_idx, art_idx), False) for art_idx in range(len(chapter["pages"])))
+    def ch_selected(self, ci):
+        return all(self.selected.get((ci, ai), False) for ai in range(len(self.hierarchy[ci]["pages"])))
     
-    def is_chapter_partial(self, ch_idx):
-        chapter = self.hierarchy[ch_idx]
-        selected_count = sum(1 for art_idx in range(len(chapter["pages"])) if self.selected.get((ch_idx, art_idx), False))
-        return 0 < selected_count < len(chapter["pages"])
+    def ch_partial(self, ci):
+        cnt = sum(1 for ai in range(len(self.hierarchy[ci]["pages"])) if self.selected.get((ci, ai)))
+        return 0 < cnt < len(self.hierarchy[ci]["pages"])
     
-    def toggle_chapter(self, ch_idx):
-        new_state = not self.is_chapter_selected(ch_idx)
-        chapter = self.hierarchy[ch_idx]
-        for art_idx in range(len(chapter["pages"])):
-            self.selected[(ch_idx, art_idx)] = new_state
-    
-    def toggle_article(self, ch_idx, art_idx):
-        self.selected[(ch_idx, art_idx)] = not self.selected.get((ch_idx, art_idx), False)
-    
-    def draw_box(self, y, x, h, w, title=""):
-        try:
-            if y < 0 or x < 0 or y + h > self.height or x + w > self.width:
-                return
-            self.stdscr.addstr(y, x, "╔" + "═" * (w - 2) + "╗")
-            for i in range(1, h - 1):
-                self.stdscr.addstr(y + i, x, "║" + " " * (w - 2) + "║")
-            self.stdscr.addstr(y + h - 1, x, "╚" + "═" * (w - 2) + "╝")
-            if title:
-                self.stdscr.addstr(y, x + 2, f" {title} ", curses.color_pair(1) | curses.A_BOLD)
-        except curses.error:
-            pass
-    
-    def safe_addstr(self, y, x, text, attr=0):
-        try:
-            if y < self.height and x < self.width:
-                self.stdscr.addstr(y, x, text[:self.width - x - 1], attr)
-        except curses.error:
-            pass
+    def toggle_ch(self, ci):
+        v = not self.ch_selected(ci)
+        for ai in range(len(self.hierarchy[ci]["pages"])):
+            self.selected[(ci, ai)] = v
     
     def refresh(self):
-        self.height, self.width = self.stdscr.getmaxyx()
-        self.stdscr.clear()
+        self.h, self.w = self.scr.getmaxyx()
+        self.scr.clear()
         
-        logo = [
-            "         ,--. ",
-            "       ,--.'| ",
-            "   ,--,:  : | ",
-            ",`--.'`|  ' : ",
-            "|   :  :  | | ",
-            ":   |   \\ | : ",
-            "|   : '  '; | ",
-            "'   ' ;.    ; ",
-            "|   | | \\   | ",
-            "'   : |  ; .' ",
-            "|   | '`--'   ",
-            "'   : |       ",
-            ";   |.'       ",
-            "'---'         ",
-        ]
+        lh, obh = len(LOGO), 7
+        layout = "vert" if self.h >= lh + 3 + obh + 7 else ("horz" if self.h >= lh + 3 + obh and self.w >= 90 else "compact" if self.w >= 90 else "vert")
         
-        logo_height = len(logo)
-        options_box_height = 7
-        min_chapter_rows = 3
-        
-        vertical_layout_min_height = logo_height + 3 + options_box_height + 2 + (min_chapter_rows + 2) + 2
-        horizontal_layout_min_height = logo_height + 3 + options_box_height + 2
-        
-        if self.height >= vertical_layout_min_height:
-            layout = "vertical"
-        elif self.height >= horizontal_layout_min_height and self.width >= 90:
-            layout = "horizontal"
-        elif self.width >= 90:
-            layout = "ultra_compact"
-        else:
-            layout = "vertical"
-        
-        def render_items(box_y, box_x, box_width, max_rows):
-            visible_rows = max_rows - 2
+        def items(by, bx, bw, rows):
+            vr = rows - 2
+            if self.cursor < self.scroll: self.scroll = self.cursor
+            elif self.cursor >= self.scroll + vr: self.scroll = self.cursor - vr + 1
             
-            if self.cursor < self.scroll_offset:
-                self.scroll_offset = self.cursor
-            elif self.cursor >= self.scroll_offset + visible_rows:
-                self.scroll_offset = self.cursor - visible_rows + 1
-            
-            for row_idx in range(visible_rows):
-                item_idx = self.scroll_offset + row_idx
-                if item_idx >= len(self.items):
-                    break
+            for r in range(vr):
+                idx = self.scroll + r
+                if idx >= len(self.items): break
+                t, ci, ai = self.items[idx]
+                y = by + 1 + r
+                cur = idx == self.cursor
                 
-                item_type, ch_idx, art_idx = self.items[item_idx]
-                row_y = box_y + 1 + row_idx
+                if cur: safe_addstr(self.scr, y, bx + 2, "▶", curses.color_pair(3) | curses.A_BOLD)
                 
-                is_cursor = item_idx == self.cursor
-                if is_cursor:
-                    self.safe_addstr(row_y, box_x + 2, "▶", curses.color_pair(3) | curses.A_BOLD)
-                    attr = curses.A_BOLD
+                if t == 'ch':
+                    ch = self.hierarchy[ci]
+                    cb = "[✓]" if self.ch_selected(ci) else "[~]" if self.ch_partial(ci) else "[ ]"
+                    cc = 2 if self.ch_selected(ci) else 3 if self.ch_partial(ci) else 4
+                    safe_addstr(self.scr, y, bx + 4, cb, curses.color_pair(cc))
+                    safe_addstr(self.scr, y, bx + 7, f" Ch {ch['pages'][0]['id'][:2]}: {ch['title']}"[:bw-12], curses.color_pair(1))
                 else:
-                    attr = 0
-                
-                if item_type == 'chapter':
-                    chapter = self.hierarchy[ch_idx]
-                    first_page = chapter["pages"][0]
-                    chapter_id = first_page["id"][:2]
-                    
-                    if self.is_chapter_selected(ch_idx):
-                        checkbox = "[✓]"
-                        checkbox_color = curses.color_pair(2)
-                    elif self.is_chapter_partial(ch_idx):
-                        checkbox = "[~]"
-                        checkbox_color = curses.color_pair(3)
-                    else:
-                        checkbox = "[ ]"
-                        checkbox_color = curses.color_pair(4)
-                    
-                    self.safe_addstr(row_y, box_x + 4, checkbox, checkbox_color | attr)
-                    chapter_text = f" Ch {chapter_id}: {chapter['title']}"[:box_width - 12]
-                    self.safe_addstr(row_y, box_x + 7, chapter_text, curses.color_pair(1) | attr)
-                
-                else:
-                    chapter = self.hierarchy[ch_idx]
-                    page = chapter["pages"][art_idx]
-                    page_id = page["id"]
-                    
-                    is_selected = self.selected.get((ch_idx, art_idx), False)
-                    checkbox = "[✓]" if is_selected else "[ ]"
-                    checkbox_color = curses.color_pair(2) if is_selected else curses.color_pair(4)
-                    
-                    self.safe_addstr(row_y, box_x + 6, checkbox, checkbox_color | attr)
-                    article_text = f" {page_id}: {page['title']}"[:box_width - 14]
-                    self.safe_addstr(row_y, box_x + 9, article_text, curses.color_pair(4) | attr)
+                    p = self.hierarchy[ci]["pages"][ai]
+                    sel = self.selected.get((ci, ai), False)
+                    safe_addstr(self.scr, y, bx + 6, "[✓]" if sel else "[ ]", curses.color_pair(2 if sel else 4))
+                    safe_addstr(self.scr, y, bx + 9, f" {p['id']}: {p['title']}"[:bw-14], curses.color_pair(4))
         
-        def render_options(start_y, box_x, box_width):
-            debug_status = "[ON] " if self.debug_mode else "[OFF]"
-            debug_color = curses.color_pair(2) if self.debug_mode else curses.color_pair(6)
-            self.safe_addstr(start_y + 1, box_x + 2, "Debug Mode:   ", curses.color_pair(4))
-            self.safe_addstr(start_y + 1, box_x + 16, debug_status, debug_color | curses.A_BOLD)
-            self.safe_addstr(start_y + 1, box_x + 22, "(d)", curses.color_pair(4) | curses.A_DIM)
+        def opts(sy, bx, bw):
+            for i, (lbl, val, key) in enumerate([
+                ("Debug Mode:", self.debug, "d"), ("Frontmatter:", self.frontmatter, "f"), ("Leave PDFs:", self.leave_pdfs, "l")
+            ]):
+                safe_addstr(self.scr, sy + 1 + i, bx + 2, f"{lbl:14}", curses.color_pair(4))
+                safe_addstr(self.scr, sy + 1 + i, bx + 16, "[ON] " if val else "[OFF]", curses.color_pair(2 if val else 6) | curses.A_BOLD)
+                safe_addstr(self.scr, sy + 1 + i, bx + 22, f"({key})", curses.color_pair(4) | curses.A_DIM)
             
-            fm_status = "[ON] " if self.include_frontmatter else "[OFF]"
-            fm_color = curses.color_pair(2) if self.include_frontmatter else curses.color_pair(6)
-            self.safe_addstr(start_y + 2, box_x + 2, "Frontmatter:  ", curses.color_pair(4))
-            self.safe_addstr(start_y + 2, box_x + 16, fm_status, fm_color | curses.A_BOLD)
-            self.safe_addstr(start_y + 2, box_x + 22, "(f)", curses.color_pair(4) | curses.A_DIM)
-            
-            li_status = "[ON] " if self.leave_individual else "[OFF]"
-            li_color = curses.color_pair(2) if self.leave_individual else curses.color_pair(6)
-            self.safe_addstr(start_y + 3, box_x + 2, "Leave PDFs:   ", curses.color_pair(4))
-            self.safe_addstr(start_y + 3, box_x + 16, li_status, li_color | curses.A_BOLD)
-            self.safe_addstr(start_y + 3, box_x + 22, "(l)", curses.color_pair(4) | curses.A_DIM)
-            
-            flags_display = " ".join(self.typst_flags) if self.typst_flags else "(none)"
-            self.safe_addstr(start_y + 4, box_x + 2, "Typst Flags:  ", curses.color_pair(4))
-            self.safe_addstr(start_y + 4, box_x + 16, flags_display[:box_width - 20],
-                            curses.color_pair(5) if self.typst_flags else curses.color_pair(4) | curses.A_DIM)
-            self.safe_addstr(start_y + 5, box_x + 16, "(c)", curses.color_pair(4) | curses.A_DIM)
+            flags = " ".join(self.typst_flags) or "(none)"
+            safe_addstr(self.scr, sy + 4, bx + 2, "Typst Flags:  ", curses.color_pair(4))
+            safe_addstr(self.scr, sy + 4, bx + 16, flags[:bw-20], curses.color_pair(5 if self.typst_flags else 4) | curses.A_DIM)
+            safe_addstr(self.scr, sy + 5, bx + 16, "(c)", curses.color_pair(4) | curses.A_DIM)
         
-        if layout == "ultra_compact":
-            # === ULTRA-COMPACT LAYOUT (logo | options + chapters) ===
-            left_col_width = 20
-            right_col_width = min(50, self.width - left_col_width - 4)
-            total_width = left_col_width + right_col_width + 2
-            
-            left_x = (self.width - total_width) // 2
-            right_x = left_x + left_col_width + 2
-            
-            logo_start_y = max(0, (self.height - logo_height) // 2 - 1)
-            logo_x = left_x + (left_col_width - 14) // 2
-            for i, line in enumerate(logo):
-                if logo_start_y + i < self.height - 1:
-                    self.safe_addstr(logo_start_y + i, logo_x, line, curses.color_pair(1) | curses.A_BOLD)
-            
-            title = "NOTEWORTHY"
-            title_y = logo_start_y + logo_height
-            if title_y < self.height - 1:
-                self.safe_addstr(title_y, left_x + (left_col_width - len(title)) // 2, title,
-                                curses.color_pair(1) | curses.A_BOLD)
-            
-            options_y = 0
-            self.draw_box(options_y, right_x, options_box_height, right_col_width, "Options")
-            render_options(options_y, right_x, right_col_width)
-            
-            chapter_box_y = options_box_height + 1
-            chapter_box_height = max(3, self.height - chapter_box_y - 2)
-            self.draw_box(chapter_box_y, right_x, chapter_box_height, right_col_width, "Select Chapters")
-            render_items(chapter_box_y, right_x, right_col_width, chapter_box_height)
-            
-            footer_y = self.height - 1
-            controls = "↑↓:Nav  Space:Toggle  a:All  n:None  Enter:Build  q:Quit"
-            self.safe_addstr(footer_y, (self.width - len(controls)) // 2, controls,
-                            curses.color_pair(4) | curses.A_DIM)
-        
-        elif layout == "horizontal":
-            # === HORIZONTAL LAYOUT (side-by-side) ===
-            left_box_width = min(40, (self.width - 6) // 2)
-            right_box_width = min(50, (self.width - 6) // 2)
-            total_content_width = left_box_width + right_box_width + 2
-            
-            left_x = (self.width - total_content_width) // 2
-            right_x = left_x + left_box_width + 2
-            
-            left_col_height = logo_height + 2 + options_box_height
-            
-            logo_x = left_x + (left_box_width - 14) // 2
-            for i, line in enumerate(logo):
-                if i < self.height - 2:
-                    self.safe_addstr(i, logo_x, line, curses.color_pair(1) | curses.A_BOLD)
-            
-            title = "NOTEWORTHY"
-            title_y = logo_height
-            self.safe_addstr(title_y, left_x + (left_box_width - len(title)) // 2, title,
-                            curses.color_pair(1) | curses.A_BOLD)
-            
-            options_y = logo_height + 2
-            self.draw_box(options_y, left_x, options_box_height, left_box_width, "Options")
-            render_options(options_y, left_x, left_box_width)
-            
-            chapter_box_y = 0
-            chapter_box_height = min(left_col_height, self.height - 2)
-            if chapter_box_height > 2:
-                self.draw_box(chapter_box_y, right_x, chapter_box_height, right_box_width, "Select Chapters")
-                render_items(chapter_box_y, right_x, right_box_width, chapter_box_height)
-            
-            footer_y = self.height - 1
-            controls = "↑↓:Nav  Space:Toggle  a:All  n:None  Enter:Build  q:Quit"
-            self.safe_addstr(footer_y, (self.width - len(controls)) // 2, controls,
-                            curses.color_pair(4) | curses.A_DIM)
-        
+        if layout == "compact":
+            lw, rw = 20, min(50, self.w - 24)
+            lx = (self.w - lw - rw - 2) // 2
+            rx = lx + lw + 2
+            ly = max(0, (self.h - lh) // 2 - 1)
+            for i, line in enumerate(LOGO[:self.h-1]):
+                safe_addstr(self.scr, ly + i, lx + 3, line, curses.color_pair(1) | curses.A_BOLD)
+            safe_addstr(self.scr, ly + lh, lx + (lw - 10) // 2, "NOTEWORTHY", curses.color_pair(1) | curses.A_BOLD)
+            draw_box(self.scr, 0, rx, obh, rw, "Options")
+            opts(0, rx, rw)
+            ch = max(3, self.h - obh - 3)
+            draw_box(self.scr, obh + 1, rx, ch, rw, "Select Chapters")
+            items(obh + 1, rx, rw, ch)
+        elif layout == "horz":
+            lbw, rbw = min(40, (self.w - 6) // 2), min(50, (self.w - 6) // 2)
+            lx = (self.w - lbw - rbw - 2) // 2
+            rx = lx + lbw + 2
+            lgx = lx + (lbw - 14) // 2
+            for i, line in enumerate(LOGO[:self.h-2]):
+                safe_addstr(self.scr, i, lgx, line, curses.color_pair(1) | curses.A_BOLD)
+            safe_addstr(self.scr, lh, lx + (lbw - 10) // 2, "NOTEWORTHY", curses.color_pair(1) | curses.A_BOLD)
+            draw_box(self.scr, lh + 2, lx, obh, lbw, "Options")
+            opts(lh + 2, lx, lbw)
+            ch = min(lh + 2 + obh, self.h - 2)
+            draw_box(self.scr, 0, rx, ch, rbw, "Select Chapters")
+            items(0, rx, rbw, ch)
         else:
-            # === VERTICAL LAYOUT (original stacked) ===
-            logo_x = (self.width - 14) // 2
-            for i, line in enumerate(logo):
-                self.safe_addstr(i, logo_x, line, curses.color_pair(1) | curses.A_BOLD)
-            
-            title = "NOTEWORTHY"
-            self.safe_addstr(logo_height + 1, (self.width - len(title)) // 2, title, 
-                            curses.color_pair(1) | curses.A_BOLD)
-            
-            box_width = min(60, self.width - 4)
-            box_x = (self.width - box_width) // 2
-            start_y = logo_height + 3
-            
-            self.draw_box(start_y, box_x, options_box_height, box_width, "Options")
-            render_options(start_y, box_x, box_width)
-            
-            chapter_box_y = start_y + 8
-            chapter_box_height = min(len(self.items) + 2, self.height - chapter_box_y - 3)
-            if chapter_box_height > 2:
-                self.draw_box(chapter_box_y, box_x, chapter_box_height, box_width, "Select Chapters")
-                render_items(chapter_box_y, box_x, box_width, chapter_box_height)
-            
-            footer_y = chapter_box_y + chapter_box_height + 1
-            controls = "↑↓:Nav  Space:Toggle  a:All  n:None  Enter:Build  q:Quit"
-            self.safe_addstr(footer_y, (self.width - len(controls)) // 2, controls,
-                            curses.color_pair(4) | curses.A_DIM)
+            lgx = (self.w - 14) // 2
+            for i, line in enumerate(LOGO):
+                safe_addstr(self.scr, i, lgx, line, curses.color_pair(1) | curses.A_BOLD)
+            safe_addstr(self.scr, lh + 1, (self.w - 10) // 2, "NOTEWORTHY", curses.color_pair(1) | curses.A_BOLD)
+            bw, bx = min(60, self.w - 4), (self.w - min(60, self.w - 4)) // 2
+            draw_box(self.scr, lh + 3, bx, obh, bw, "Options")
+            opts(lh + 3, bx, bw)
+            cy = lh + 3 + obh + 1
+            ch = min(len(self.items) + 2, self.h - cy - 3)
+            draw_box(self.scr, cy, bx, ch, bw, "Select Chapters")
+            items(cy, bx, bw, ch)
         
-        self.stdscr.refresh()
-    
-    def configure_typst_flags(self):
-        curses.echo()
-        curses.curs_set(1)
-        
-        dialog_height = 12
-        dialog_width = min(70, self.width - 4)
-        dialog_y = (self.height - dialog_height) // 2
-        dialog_x = (self.width - dialog_width) // 2
-        
-        dialog = curses.newwin(dialog_height, dialog_width, dialog_y, dialog_x)
-        dialog.box()
-        dialog.addstr(0, 2, " Configure Typst Flags ", curses.color_pair(1) | curses.A_BOLD)
-        
-        current = " ".join(self.typst_flags) if self.typst_flags else "(none)"
-        dialog.addstr(2, 2, "Current: " + current[:dialog_width - 12])
-        
-        dialog.addstr(4, 2, "Common presets:", curses.color_pair(5))
-        dialog.addstr(5, 2, "  1. --font-path /path/to/fonts")
-        dialog.addstr(6, 2, "  2. --ppi 144")
-        dialog.addstr(7, 2, "  3. Clear all flags")
-        
-        dialog.addstr(9, 2, "Enter flags (or preset number): ", curses.color_pair(4))
-        dialog.refresh()
-        
-        curses.curs_set(1)
-        input_str = dialog.getstr(9, 35, dialog_width - 37).decode('utf-8').strip()
-        
-        if input_str == "1":
-            dialog.addstr(10, 2, "Enter font path: ")
-            dialog.refresh()
-            font_path = dialog.getstr(10, 19, dialog_width - 21).decode('utf-8').strip()
-            if font_path:
-                self.typst_flags = ["--font-path", font_path]
-        elif input_str == "2":
-            self.typst_flags = ["--ppi", "144"]
-        elif input_str == "3":
-            self.typst_flags = []
-        elif input_str:
-            self.typst_flags = input_str.split()
-        
-        curses.noecho()
-        curses.curs_set(0)
-        self.refresh()
+        safe_addstr(self.scr, self.h - 1, (self.w - 58) // 2, "↑↓:Nav  Space:Toggle  a:All  n:None  Enter:Build  q:Quit", curses.color_pair(4) | curses.A_DIM)
+        self.scr.refresh()
     
     def run(self):
         self.refresh()
-        
         while True:
-            if not check_terminal_size_loop(self.stdscr):
-                return None
+            if not check_terminal_size(self.scr): return None
             
-            key = self.stdscr.getch()
-            
-            if key == ord('q'):
-                return None
-            elif key == ord('\n') or key == curses.KEY_ENTER or key == 10:
-                selected_pages = []
-                for ch_idx, chapter in enumerate(self.hierarchy):
-                    for art_idx in range(len(chapter["pages"])):
-                        if self.selected.get((ch_idx, art_idx), False):
-                            selected_pages.append((ch_idx, art_idx))
-                return {
-                    'selected_pages': selected_pages,
-                    'debug': self.debug_mode,
-                    'frontmatter': self.include_frontmatter,
-                    'leave_individual': self.leave_individual,
-                    'typst_flags': self.typst_flags,
-                }
-            elif key == curses.KEY_UP or key == ord('k'):
-                self.cursor = max(0, self.cursor - 1)
-            elif key == curses.KEY_DOWN or key == ord('j'):
-                self.cursor = min(len(self.items) - 1, self.cursor + 1)
-            elif key == ord(' '):
-                item_type, ch_idx, art_idx = self.items[self.cursor]
-                if item_type == 'chapter':
-                    self.toggle_chapter(ch_idx)
-                else:
-                    self.toggle_article(ch_idx, art_idx)
-            elif key == ord('a'):
-                for ch_idx, chapter in enumerate(self.hierarchy):
-                    for art_idx in range(len(chapter["pages"])):
-                        self.selected[(ch_idx, art_idx)] = True
-            elif key == ord('n'):
-                for ch_idx, chapter in enumerate(self.hierarchy):
-                    for art_idx in range(len(chapter["pages"])):
-                        self.selected[(ch_idx, art_idx)] = False
-            elif key == ord('d'):
-                self.debug_mode = not self.debug_mode
-            elif key == ord('f'):
-                self.include_frontmatter = not self.include_frontmatter
-            elif key == ord('l'):
-                self.leave_individual = not self.leave_individual
-            elif key == ord('c'):
-                self.configure_typst_flags()
-            
+            k = self.scr.getch()
+            if k == ord('q'): return None
+            elif k in (ord('\n'), curses.KEY_ENTER, 10):
+                return {'selected_pages': [(ci, ai) for ci in range(len(self.hierarchy)) for ai in range(len(self.hierarchy[ci]["pages"])) if self.selected.get((ci, ai))],
+                        'debug': self.debug, 'frontmatter': self.frontmatter, 'leave_individual': self.leave_pdfs, 'typst_flags': self.typst_flags}
+            elif k in (curses.KEY_UP, ord('k')): self.cursor = max(0, self.cursor - 1)
+            elif k in (curses.KEY_DOWN, ord('j')): self.cursor = min(len(self.items) - 1, self.cursor + 1)
+            elif k == ord(' '):
+                t, ci, ai = self.items[self.cursor]
+                if t == 'ch': self.toggle_ch(ci)
+                else: self.selected[(ci, ai)] = not self.selected.get((ci, ai), False)
+            elif k == ord('a'):
+                for ci in range(len(self.hierarchy)):
+                    for ai in range(len(self.hierarchy[ci]["pages"])): self.selected[(ci, ai)] = True
+            elif k == ord('n'):
+                for ci in range(len(self.hierarchy)):
+                    for ai in range(len(self.hierarchy[ci]["pages"])): self.selected[(ci, ai)] = False
+            elif k == ord('d'): self.debug = not self.debug
+            elif k == ord('f'): self.frontmatter = not self.frontmatter
+            elif k == ord('l'): self.leave_pdfs = not self.leave_pdfs
+            elif k == ord('c'): self.configure_flags()
             self.refresh()
+    
+    def configure_flags(self):
+        curses.echo()
+        curses.curs_set(1)
+        dh, dw = 10, min(60, self.w - 4)
+        dy, dx = (self.h - dh) // 2, (self.w - dw) // 2
+        d = curses.newwin(dh, dw, dy, dx)
+        d.box()
+        d.addstr(0, 2, " Typst Flags ", curses.color_pair(1) | curses.A_BOLD)
+        d.addstr(2, 2, "Current: " + (" ".join(self.typst_flags) or "(none)")[:dw-12])
+        d.addstr(4, 2, "1. --font-path /path  2. --ppi 144  3. Clear")
+        d.addstr(6, 2, "Enter flags or preset: ")
+        d.refresh()
+        s = d.getstr(6, 25, dw - 27).decode('utf-8').strip()
+        if s == "1":
+            d.addstr(7, 2, "Font path: ")
+            d.refresh()
+            p = d.getstr(7, 13, dw - 15).decode('utf-8').strip()
+            if p: self.typst_flags = ["--font-path", p]
+        elif s == "2": self.typst_flags = ["--ppi", "144"]
+        elif s == "3": self.typst_flags = []
+        elif s: self.typst_flags = s.split()
+        curses.noecho()
+        curses.curs_set(0)
+
+# BUILD UI (Progress Display)
 
 class BuildUI:
-    def __init__(self, stdscr, debug_mode=False):
-        self.stdscr = stdscr
-        self.logs = []
-        self.typst_logs = []
-        self.current_task = ""
-        self.progress = 0
-        self.total = 0
-        self.phase = ""
-        self.debug_mode = debug_mode
-        self.view_mode = "normal"
-        self.typst_scroll_offset = 0
-        
-        curses.curs_set(0)
-        curses.start_color()
-        curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_CYAN, -1)
-        curses.init_pair(2, curses.COLOR_GREEN, -1)
-        curses.init_pair(3, curses.COLOR_YELLOW, -1)
-        curses.init_pair(4, curses.COLOR_WHITE, -1)
-        curses.init_pair(5, curses.COLOR_MAGENTA, -1)
-        curses.init_pair(6, curses.COLOR_RED, -1)
-        curses.init_pair(7, curses.COLOR_YELLOW, -1)
-        
-        self.stdscr.clear()
-        self.height, self.width = stdscr.getmaxyx()
+    def __init__(self, scr, debug=False):
+        self.scr, self.debug_mode = scr, debug
+        self.logs, self.typst_logs = [], []
+        self.task, self.phase, self.progress, self.total = "", "", 0, 0
+        self.view, self.scroll = "normal", 0
+        init_colors()
+        self.h, self.w = scr.getmaxyx()
     
-    def draw_box(self, y, x, h, w, title=""):
-        self.stdscr.addstr(y, x, "╔" + "═" * (w - 2) + "╗")
-        for i in range(1, h - 1):
-            self.stdscr.addstr(y + i, x, "║" + " " * (w - 2) + "║")
-        self.stdscr.addstr(y + h - 1, x, "╚" + "═" * (w - 2) + "╝")
-        
-        if title:
-            self.stdscr.addstr(y, x + 2, f" {title} ", curses.color_pair(1) | curses.A_BOLD)
-    
-    def draw_progress_bar(self, y, x, width, progress, total):
-        if total == 0:
-            return
-        
-        bar_width = width - 2
-        filled = int(bar_width * progress / total)
-        empty = bar_width - filled
-        
-        bar = "█" * filled + "░" * empty
-        percent = int(100 * progress / total)
-        
-        self.stdscr.addstr(y, x, bar, curses.color_pair(3))
-        self.stdscr.addstr(y, x + bar_width + 2, f"{percent:3d}%", curses.color_pair(3) | curses.A_BOLD)
-    
-    def log(self, message, success=False):
-        self.logs.append((message, success))
-        if len(self.logs) > 20:
-            self.logs.pop(0)
-        self.refresh()
-    
-    def debug(self, message):
-        if self.debug_mode:
-            self.logs.append((f"[DEBUG] {message}", False))
-            if len(self.logs) > 20:
-                self.logs.pop(0)
-            self.refresh()
-    
-    def log_typst(self, output):
-        if output:
-            for line in output.split('\n'):
-                if line.strip():
-                    self.typst_logs.append(line)
-            if len(self.typst_logs) > 100:
-                self.typst_logs = self.typst_logs[-100:]
-    
-    def set_phase(self, phase):
-        self.phase = phase
-        self.refresh()
-    
-    def set_task(self, task):
-        self.current_task = task
-        self.refresh()
-    
-    def set_progress(self, progress, total):
-        self.progress = progress
-        self.total = total
-        self.refresh()
-    
+    def log(self, msg, ok=False): self.logs.append((msg, ok)); self.logs = self.logs[-20:]; self.refresh()
+    def debug(self, msg):
+        if self.debug_mode: self.log(f"[DEBUG] {msg}")
+    def log_typst(self, out):
+        if out: self.typst_logs.extend([l for l in out.split('\n') if l.strip()]); self.typst_logs = self.typst_logs[-100:]
+    def set_phase(self, p): self.phase = p; self.refresh()
+    def set_task(self, t): self.task = t; self.refresh()
+    def set_progress(self, p, t): self.progress, self.total = p, t; self.refresh()
     
     def refresh(self):
         try:
-            key = self.stdscr.getch()
-            if key == ord('v'):
-                self.view_mode = "typst" if self.view_mode == "normal" else "normal"
-                self.typst_scroll_offset = 0
-            elif self.view_mode == "typst":
-                if key == curses.KEY_UP or key == ord('k'):
-                    self.typst_scroll_offset = max(0, self.typst_scroll_offset - 1)
-                    curses.flushinp()
-                elif key == curses.KEY_DOWN or key == ord('j'):
-                    self.typst_scroll_offset = min(len(self.typst_logs) - 1, self.typst_scroll_offset + 1)
-                    curses.flushinp()
-        except:
-            pass
+            k = self.scr.getch()
+            if k == ord('v'): self.view = "typst" if self.view == "normal" else "normal"; self.scroll = 0
+            elif self.view == "typst" and k in (curses.KEY_UP, ord('k')): self.scroll = max(0, self.scroll - 1)
+            elif self.view == "typst" and k in (curses.KEY_DOWN, ord('j')): self.scroll = min(len(self.typst_logs) - 1, self.scroll + 1)
+        except: pass
         
-        self.height, self.width = self.stdscr.getmaxyx()
-        self.stdscr.clear()
+        self.h, self.w = self.scr.getmaxyx()
+        self.scr.clear()
         
-        title = "NOTEWORTHY BUILD SYSTEM"
-        if self.debug_mode:
-            title += " [DEBUG]"
-        self.stdscr.addstr(1, (self.width - len(title)) // 2, title, 
-                          curses.color_pair(1) | curses.A_BOLD)
+        title = "NOTEWORTHY BUILD SYSTEM" + (" [DEBUG]" if self.debug_mode else "")
+        safe_addstr(self.scr, 1, (self.w - len(title)) // 2, title, curses.color_pair(1) | curses.A_BOLD)
         
-        box_width = min(60, self.width - 4)
-        box_x = (self.width - box_width) // 2
+        bw, bx = min(60, self.w - 4), (self.w - min(60, self.w - 4)) // 2
+        draw_box(self.scr, 3, bx, 5, bw, "Progress")
+        if self.phase: safe_addstr(self.scr, 4, bx + 2, self.phase[:bw-4], curses.color_pair(5))
+        if self.task: safe_addstr(self.scr, 5, bx + 2, f"→ {self.task}"[:bw-4], curses.color_pair(4))
+        if self.total:
+            filled = int((bw - 12) * self.progress / self.total)
+            safe_addstr(self.scr, 6, bx + 2, "█" * filled + "░" * (bw - 12 - filled), curses.color_pair(3))
+            safe_addstr(self.scr, 6, bx + bw - 8, f"{100*self.progress//self.total:3d}%", curses.color_pair(3) | curses.A_BOLD)
         
-        self.draw_box(3, box_x, 5, box_width, "Progress")
-        
-        if self.phase:
-            phase_text = self.phase[:box_width - 6]
-            self.stdscr.addstr(4, box_x + 2, phase_text, curses.color_pair(5))
-        
-        if self.current_task:
-            task_text = self.current_task[:box_width - 6]
-            self.stdscr.addstr(5, box_x + 2, f"→ {task_text}", curses.color_pair(4))
-        
-        self.draw_progress_bar(6, box_x + 2, box_width - 12, self.progress, self.total)
-        
-        log_height = min(15, self.height - 12)
-        
-        if self.view_mode == "typst" and self.typst_logs:
-            box_title = "Typst Compiler Output (↑↓ or jk to scroll)"
-            
-            max_offset = max(0, len(self.typst_logs) - (log_height - 2))
-            self.typst_scroll_offset = min(self.typst_scroll_offset, max_offset)
-            
-            start_idx = self.typst_scroll_offset
-            end_idx = start_idx + (log_height - 2)
-            visible_logs = self.typst_logs[start_idx:end_idx]
-            
-            log_items = []
-            for msg in visible_logs:
-                if 'error:' in msg.lower():
-                    log_items.append((msg, False, 6))
-                elif 'warning:' in msg.lower():
-                    log_items.append((msg, False, 7))
-                elif 'hint:' in msg.lower() or '= hint:' in msg:
-                    log_items.append((msg, False, 1))
-                elif msg.strip().startswith('┌─') or msg.strip().startswith('│') or '──' in msg:
-                    log_items.append((msg, False, 5))
-                else:
-                    log_items.append((msg, False, 4))
+        lh = min(15, self.h - 12)
+        if self.view == "typst" and self.typst_logs:
+            draw_box(self.scr, 9, bx, lh, bw, "Typst Output (↑↓ scroll)")
+            for i, line in enumerate(self.typst_logs[self.scroll:self.scroll + lh - 2]):
+                c = 6 if 'error:' in line.lower() else 3 if 'warning:' in line.lower() else 4
+                safe_addstr(self.scr, 10 + i, bx + 2, line[:bw-4], curses.color_pair(c))
         else:
-            box_title = "Build Log"
-            log_items = [(msg, success, 2 if success else 4) for msg, success in self.logs[-(log_height - 2):]]
+            draw_box(self.scr, 9, bx, lh, bw, "Build Log")
+            for i, (msg, ok) in enumerate(self.logs[-(lh-2):]):
+                safe_addstr(self.scr, 10 + i, bx + 2, ("✓ " if ok else "  ") + msg[:bw-6], curses.color_pair(2 if ok else 4))
         
-        self.draw_box(9, box_x, log_height, box_width, box_title)
-        
-        for i, item in enumerate(log_items):
-            if len(item) == 3:
-                msg, success, color_pair = item
-            else:
-                msg, success = item
-                color_pair = 2 if success else 4
-            
-            prefix = "✓ " if success and self.view_mode != "typst" else "  "
-            text = (prefix + msg)[:box_width - 4]
-            try:
-                self.stdscr.addstr(10 + i, box_x + 2, text, curses.color_pair(color_pair))
-            except curses.error:
-                pass
-        
-        footer = "Press Ctrl+C to cancel  |  Press 'v' to toggle view"
-        try:
-            self.stdscr.addstr(self.height - 1, (self.width - len(footer)) // 2, 
-                              footer, curses.color_pair(4) | curses.A_DIM)
-        except curses.error:
-            pass
-        
-        self.stdscr.refresh()
+        safe_addstr(self.scr, self.h - 1, (self.w - 50) // 2, "Press Ctrl+C to cancel  |  Press 'v' to toggle view", curses.color_pair(4) | curses.A_DIM)
+        self.scr.refresh()
 
-def show_menu(stdscr):
-    hierarchy = extract_hierarchy()
-    menu = BuildMenu(stdscr, hierarchy)
-    result = menu.run()
-    return hierarchy, result
+# BUILD LOGIC
 
-def run_build(stdscr, args, hierarchy, options):
-    ui = BuildUI(stdscr, debug_mode=options['debug'])
-    
-    stdscr.nodelay(True)
-    
-    def keyboard_check():
-        ui.refresh()
+def run_build(scr, args, hierarchy, opts):
+    ui = BuildUI(scr, opts['debug'])
+    scr.nodelay(True)
     
     ui.log("Checking dependencies...")
-    ui.debug("Running dependency check...")
     check_dependencies()
-    ui.log("Dependencies OK", success=True)
+    ui.log("Dependencies OK", True)
     
-    if BUILD_DIR.exists():
-        shutil.rmtree(BUILD_DIR)
+    if BUILD_DIR.exists(): shutil.rmtree(BUILD_DIR)
     BUILD_DIR.mkdir()
-    ui.log("Build directory prepared", success=True)
+    ui.log("Build directory prepared", True)
     
-    selected_pages = options.get('selected_pages', [])
+    pages = opts.get('selected_pages', [])
+    by_ch = {}
+    for ci, ai in pages:
+        by_ch.setdefault(ci, []).append(ai)
     
-    selected_by_chapter = {}
-    for ch_idx, art_idx in selected_pages:
-        if ch_idx not in selected_by_chapter:
-            selected_by_chapter[ch_idx] = []
-        selected_by_chapter[ch_idx].append(art_idx)
+    chapters = [(i, hierarchy[i]) for i in sorted(by_ch.keys())]
+    ui.log(f"Building {len(pages)} pages from {len(chapters)} chapters", True)
     
-    selected_chapter_indices = sorted(selected_by_chapter.keys())
-    selected_chapters = [(i, hierarchy[i]) for i in selected_chapter_indices]
-    
-    total_selected_pages = len(selected_pages)
-    ui.log(f"Building {total_selected_pages} pages from {len(selected_chapters)} chapters", success=True)
-    
-    total_sections = 0
-    if options['frontmatter']:
-        total_sections += 3
-    for ch_idx, chapter in selected_chapters:
-        total_sections += 1
-        total_sections += len(selected_by_chapter[ch_idx])
-    
+    total = (3 if opts['frontmatter'] else 0) + sum(1 + len(by_ch[ci]) for ci, _ in chapters)
     ui.set_phase("Compiling Sections")
-    ui.set_progress(0, total_sections + 1)
+    ui.set_progress(0, total + 1)
     
-    page_map = {}
-    current_page = 1
-    pdf_files = []
-    progress = 0
+    page_map, current, pdfs, prog = {}, 1, [], 0
+    flags = opts.get('typst_flags', [])
     
-    if options['frontmatter']:
-        ui.set_task("Cover page")
-        ui.debug("Compiling cover target")
-        target = "cover"
-        output = BUILD_DIR / "00_cover.pdf"
-        typst_output = compile_target(target, output, extra_flags=options.get('typst_flags', []), keyboard_check_callback=keyboard_check)
-        ui.log_typst(typst_output)
-        pdf_files.append(output)
-        page_map["cover"] = current_page
-        page_count = get_pdf_page_count(output)
-        ui.debug(f"Cover: {page_count} pages")
-        current_page += page_count
-        progress += 1
-        ui.set_progress(progress, total_sections + 1)
-        ui.log("Cover page compiled", success=True)
+    if opts['frontmatter']:
+        for target, name, label in [("cover", "00_cover.pdf", "Cover"), ("preface", "01_preface.pdf", "Preface"), ("outline", "02_outline.pdf", "TOC")]:
+            ui.set_task(label)
+            out = BUILD_DIR / name
+            ui.log_typst(compile_target(target, out, extra_flags=flags, callback=ui.refresh))
+            pdfs.append(out); page_map[target] = current; current += get_pdf_page_count(out)
+            prog += 1; ui.set_progress(prog, total + 1)
+            ui.log(f"{label} compiled", True)
+    
+    for ci, ch in chapters:
+        ch_id = ch["pages"][0]["id"][:2]
+        ui.set_task(f"Chapter {ch_id}: {ch['title']}")
+        out = BUILD_DIR / f"10_chapter_{ch_id}_cover.pdf"
+        page_map[f"chapter-{ch_id}"] = current
+        ui.log_typst(compile_target(f"chapter-{ch_id}", out, page_offset=current, extra_flags=flags, callback=ui.refresh))
+        pdfs.append(out); current += get_pdf_page_count(out)
+        prog += 1; ui.set_progress(prog, total + 1)
         
-        ui.set_task("Preface")
-        ui.debug("Compiling preface target")
-        target = "preface"
-        output = BUILD_DIR / "01_preface.pdf"
-        typst_output = compile_target(target, output, extra_flags=options.get('typst_flags', []), keyboard_check_callback=keyboard_check)
-        ui.log_typst(typst_output)
-        pdf_files.append(output)
-        page_map["preface"] = current_page
-        page_count = get_pdf_page_count(output)
-        ui.debug(f"Preface: {page_count} pages")
-        current_page += page_count
-        progress += 1
-        ui.set_progress(progress, total_sections + 1)
-        ui.log("Preface compiled", success=True)
+        for ai in sorted(by_ch[ci]):
+            p = ch["pages"][ai]
+            ui.set_task(f"Section {p['id']}: {p['title']}")
+            out = BUILD_DIR / f"20_page_{p['id']}.pdf"
+            page_map[p["id"]] = current
+            ui.log_typst(compile_target(p["id"], out, page_offset=current, extra_flags=flags, callback=ui.refresh))
+            pdfs.append(out); current += get_pdf_page_count(out)
+            prog += 1; ui.set_progress(prog, total + 1)
         
-        ui.set_task("Table of Contents")
-        ui.debug("Compiling outline target (placeholder)")
-        target = "outline"
-        output = BUILD_DIR / "02_outline.pdf"
-        typst_output = compile_target(target, output, extra_flags=options.get('typst_flags', []), keyboard_check_callback=keyboard_check)
-        ui.log_typst(typst_output)
-        pdf_files.append(output)
-        page_map["outline"] = current_page
-        page_count = get_pdf_page_count(output)
-        ui.debug(f"TOC: {page_count} pages")
-        current_page += page_count
-        progress += 1
-        ui.set_progress(progress, total_sections + 1)
-        ui.log("TOC placeholder compiled", success=True)
+        ui.log(f"Chapter {ch_id} compiled", True)
     
-    for ch_idx, chapter in selected_chapters:
-        first_page = chapter["pages"][0]
-        chapter_id = first_page["id"][:2]
-        
-        ui.set_task(f"Chapter {chapter_id}: {chapter['title']}")
-        ui.debug(f"Compiling chapter-{chapter_id} at page {current_page}")
-        target = f"chapter-{chapter_id}"
-        output = BUILD_DIR / f"10_chapter_{chapter_id}_cover.pdf"
-        page_map[f"chapter-{chapter_id}"] = current_page
-        typst_output = compile_target(target, output, page_offset=current_page, extra_flags=options.get('typst_flags', []), keyboard_check_callback=keyboard_check)
-        ui.log_typst(typst_output)
-        pdf_files.append(output)
-        page_count = get_pdf_page_count(output)
-        ui.debug(f"Chapter {chapter_id} cover: {page_count} pages")
-        current_page += page_count
-        progress += 1
-        ui.set_progress(progress, total_sections + 1)
-        
-        for art_idx in sorted(selected_by_chapter[ch_idx]):
-            page = chapter["pages"][art_idx]
-            page_id = page["id"]
-            ui.set_task(f"Section {page_id}: {page['title']}")
-            ui.debug(f"Compiling {page_id} at page {current_page}")
-            target = page_id
-            output = BUILD_DIR / f"20_page_{page_id}.pdf"
-            page_map[page_id] = current_page
-            typst_output = compile_target(target, output, page_offset=current_page, extra_flags=options.get('typst_flags', []), keyboard_check_callback=keyboard_check)
-            ui.log_typst(typst_output)
-            pdf_files.append(output)
-            page_count = get_pdf_page_count(output)
-            ui.debug(f"Section {page_id}: {page_count} pages")
-            current_page += page_count
-            progress += 1
-            ui.set_progress(progress, total_sections + 1)
-        
-        ui.log(f"Chapter {chapter_id} compiled", success=True)
+    if opts['frontmatter']:
+        ui.set_task("Regenerating TOC")
+        out = BUILD_DIR / "02_outline.pdf"
+        ui.log_typst(compile_target("outline", out, page_offset=page_map["outline"], page_map=page_map, extra_flags=flags, callback=ui.refresh))
+        ui.log("TOC regenerated", True)
     
-    if options['frontmatter']:
-        ui.set_task("Regenerating TOC with page numbers")
-        ui.debug(f"Regenerating TOC with page_map: {len(page_map)} entries")
-        target = "outline"
-        output = BUILD_DIR / "02_outline.pdf"
-        typst_output = compile_target(target, output, page_offset=page_map["outline"], page_map=page_map, extra_flags=options.get('typst_flags', []), keyboard_check_callback=keyboard_check)
-        ui.log_typst(typst_output)
-        progress += 1
-        ui.set_progress(progress, total_sections + 1)
-        ui.log("TOC regenerated with page numbers", success=True)
-    
-    page_map_file = BUILD_DIR / "page_map.json"
-    with open(page_map_file, 'w') as f:
-        json.dump(page_map, f, indent=2)
-    ui.debug(f"Page map saved to {page_map_file}")
-    
-    ui.log(f"Total pages: {current_page - 1}", success=True)
+    ui.log(f"Total pages: {current - 1}", True)
     
     ui.set_phase("Merging PDFs")
-    ui.set_task(f"Merging {len(pdf_files)} files")
-    ui.debug(f"PDF files to merge: {[p.name for p in pdf_files]}")
-    
-    existing_files = [str(pdf) for pdf in pdf_files if pdf.exists()]
-    
-    if shutil.which("pdfunite"):
-        cmd = ["pdfunite"] + existing_files + [str(OUTPUT_FILE)]
-        ui.debug(f"Running: pdfunite with {len(existing_files)} files")
-        subprocess.run(cmd, check=True, capture_output=True)
-        ui.log("Merged with pdfunite", success=True)
-    elif shutil.which("gs"):
-        cmd = ["gs", "-dBATCH", "-dNOPAUSE", "-q", "-sDEVICE=pdfwrite",
-               f"-sOutputFile={OUTPUT_FILE}"] + existing_files
-        ui.debug("Running: ghostscript merge")
-        subprocess.run(cmd, check=True, capture_output=True)
-        ui.log("Merged with ghostscript", success=True)
+    method = merge_pdfs(pdfs, OUTPUT_FILE)
+    if method: ui.log(f"Merged with {method}", True)
     
     ui.set_phase("Adding Metadata")
-    ui.set_task("Creating bookmarks")
-    bookmarks_file = BUILD_DIR / "bookmarks.txt"
-    chapters_for_metadata = [chapter for _, chapter in selected_chapters]
-    create_pdf_metadata(chapters_for_metadata, page_map, bookmarks_file)
+    bm = BUILD_DIR / "bookmarks.txt"
+    create_pdf_metadata([ch for _, ch in chapters], page_map, bm)
+    apply_pdf_metadata(OUTPUT_FILE, bm, "Noteworthy Framework", "Sihoo Lee, Lee Hojun")
+    ui.log("PDF metadata applied", True)
     
-    ui.set_task("Applying PDF metadata")
-    title = "Noteworthy Framework"
-    author = "Sihoo Lee, Lee Hojun"
-    apply_pdf_metadata(OUTPUT_FILE, bookmarks_file, title, author)
-    ui.log("PDF metadata applied", success=True)
-    
-    ui.set_phase("Cleanup")
-    
-    if options['leave_individual']:
-        ui.set_task("Archiving individual PDFs")
+    if opts['leave_individual']:
         zip_build_directory(BUILD_DIR)
-        ui.log("Individual PDFs archived", success=True)
+        ui.log("Individual PDFs archived", True)
     
     if BUILD_DIR.exists():
         shutil.rmtree(BUILD_DIR)
-        ui.log("Build directory cleaned", success=True)
+        ui.log("Build directory cleaned", True)
     
     ui.set_phase("BUILD COMPLETE!")
-    ui.set_task(f"Output: {OUTPUT_FILE}")
-    ui.set_progress(total_sections + 1, total_sections + 1)
-    ui.log(f"Created {OUTPUT_FILE} ({current_page - 1} pages)", success=True)
+    ui.set_progress(total + 1, total + 1)
+    ui.log(f"Created {OUTPUT_FILE} ({current - 1} pages)", True)
     
-    stdscr.nodelay(False)
-    stdscr.clear()
-    
-    confetti = [
-        "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡀⠀⠀⠀⠀⠀⠀⠀",
-        "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡈⠀⡠⠀⠀⣤⡄⠀⠀",
-        "⠀⠀⠀⠀⠒⢀⣴⠟⠛⠓⠀⠀⠓⠀⠀⠀⢠⠉⠡⠀⠀",
-        "⠀⠀⠀⣴⡆⠘⠧⠶⠶⢦⠀⠀⠰⠇⠀⠀⣀⠀⠀⣀⠀",
-        "⠀⠀⠀⠀⠀⡠⠤⢀⣀⣼⠀⠀⣀⣀⡀⣦⠉⠳⠆⠋⠀",
-        "⠀⠀⠀⢀⠄⡁⠀⣠⠿⠃⢤⡀⢽⠈⠉⠁⣀⣀⠀⠀⠀",
-        "⠀⠀⠀⣾⠜⢐⠀⠁⠀⠀⠙⠻⣎⠀⠀⠀⠙⠉⠀⡀⢄",
-        "⠀⠀⠜⠋⣎⠀⠀⠠⠀⢀⣠⣤⣼⣦⣤⣤⣀⠀⠀⠐⠈",
-        "⠀⣌⠎⠘⢿⣦⡀⠀⠈⠙⠥⢀⣀⠄⠀⠈⠉⠃⠀⣴⡀",
-        "⢠⢿⣦⡀⠈⠻⣿⣦⣔⢀⠠⠂⠀⠀⠠⣾⠗⠀⠀⠈⠀",
-        "⣏⠀⠙⣿⣦⡂⠄⠋⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
-        "⠈⠓⠂⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
-    ]
-    
-    height, width = stdscr.getmaxyx()
-    confetti_width = 17
-    
-    start_y = max(0, (height - len(confetti) - 8) // 2)
-    confetti_x = (width - confetti_width) // 2
-    
-    for i, line in enumerate(confetti):
-        try:
-            stdscr.addstr(start_y + i, confetti_x, line, curses.color_pair(2))
-        except curses.error:
-            pass
-    
-    msg_y = start_y + len(confetti) + 2
-    success_msg = "BUILD SUCCEEDED!"
-    try:
-        stdscr.addstr(msg_y, (width - len(success_msg)) // 2, success_msg, 
-                     curses.color_pair(2) | curses.A_BOLD)
-    except curses.error:
-        pass
-    
-    output_msg = f"Created: {OUTPUT_FILE} ({current_page - 1} pages)"
-    try:
-        stdscr.addstr(msg_y + 2, (width - len(output_msg)) // 2, output_msg, 
-                     curses.color_pair(4))
-    except curses.error:
-        pass
-    
-    exit_msg = "Press any key to exit..."
-    try:
-        stdscr.addstr(msg_y + 4, (width - len(exit_msg)) // 2, exit_msg, 
-                     curses.color_pair(4) | curses.A_DIM)
-    except curses.error:
-        pass
-    
-    stdscr.refresh()
-    stdscr.getch()
-    
-    return current_page - 1, len(selected_chapters)
+    scr.nodelay(False)
+    show_success_screen(scr, current - 1)
 
-def run_app(stdscr, args):
-    curses.start_color()
-    curses.use_default_colors()
-    curses.init_pair(1, curses.COLOR_CYAN, -1)
-    curses.init_pair(4, curses.COLOR_WHITE, -1)
-    curses.init_pair(6, curses.COLOR_RED, -1)
-    curses.curs_set(0)
+# ENTRY POINTS
+
+def run_app(scr, args):
+    init_colors()
+    if not check_terminal_size(scr): return
     
-    if not check_terminal_size_loop(stdscr):
-        return
+    scr.clear()
+    h, w = scr.getmaxyx()
+    safe_addstr(scr, h // 2, (w - 11) // 2, "Indexing...", curses.color_pair(1) | curses.A_BOLD)
+    scr.refresh()
     
-    stdscr.clear()
-    height, width = stdscr.getmaxyx()
-    msg = "Indexing..."
-    stdscr.addstr(height // 2, (width - len(msg)) // 2, msg, curses.color_pair(1) | curses.A_BOLD)
-    stdscr.refresh()
+    hierarchy = extract_hierarchy()
+    menu = BuildMenu(scr, hierarchy)
+    opts = menu.run()
     
-    hierarchy, options = show_menu(stdscr)
-    
-    if options is None:
-        return
-    
-    if not options.get('selected_pages'):
-        show_error_screen(stdscr, "No pages selected")
+    if opts is None: return
+    if not opts.get('selected_pages'):
+        show_error_screen(scr, "No pages selected")
         return
     
     try:
-        run_build(stdscr, args, hierarchy, options)
+        run_build(scr, args, hierarchy, opts)
     except Exception as e:
-        show_error_screen(stdscr, e)
+        show_error_screen(scr, e)
 
 def main():
-    parser = argparse.ArgumentParser(description="Build Noteworthy framework documentation")
-    parser.add_argument(
-        "--leave-individual",
-        action="store_true",
-        help="Keep individual PDFs as a zip file instead of deleting them"
-    )
+    parser = argparse.ArgumentParser(description="Build Noteworthy documentation")
     args = parser.parse_args()
     
     try:
-        curses.wrapper(lambda stdscr: run_app(stdscr, args))
+        curses.wrapper(lambda scr: run_app(scr, args))
     except KeyboardInterrupt:
         print("\nBuild cancelled.")
-        if BUILD_DIR.exists():
-            shutil.rmtree(BUILD_DIR)
+        if BUILD_DIR.exists(): shutil.rmtree(BUILD_DIR)
         sys.exit(1)
     except Exception as e:
         print(f"\nBuild failed: {e}")
-        import traceback
-        traceback.print_exc()
-        if BUILD_DIR.exists():
-            shutil.rmtree(BUILD_DIR)
+        import traceback; traceback.print_exc()
+        if BUILD_DIR.exists(): shutil.rmtree(BUILD_DIR)
         sys.exit(1)
 
 if __name__ == "__main__":
