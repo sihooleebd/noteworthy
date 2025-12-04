@@ -26,6 +26,8 @@
 
 **Noteworthy** is not just a template—it's a comprehensive **framework** for building educational textbooks, lecture notes, and technical documentation with Typst. It provides a complete ecosystem of tools, themes, and components that work together seamlessly.
 
+An example project is available at : https://github.com/sihooleebd/math-noteworthy
+
 ### Framework Components
 
 - **Theme System**: 13+ pre-built color schemes with easy customization
