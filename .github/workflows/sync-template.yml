@@ -2,38 +2,47 @@ name: Sync Template Branch
 on:
   push:
     branches:
-      - master  # Triggers when you push to master
+      - master
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Fetch all history so we can access other branches
+          fetch-depth: 0
 
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Sync Master to Template (excluding content)
+      - name: Sync Master to Template
         run: |
-          # Fetch all branches
           git fetch origin
 
-          # Switch to the template branch (create it if it doesn't exist)
-          # Try to track remote template if it exists, otherwise create new local one
+          # Switch to template branch (create if not exists)
           git checkout -B template origin/template 2>/dev/null || git checkout -b template
+
+          # Prepare commit message based on master's latest commit
+          LAST_MSG=$(git log -1 --pretty=%s origin/master)
+          # Count commits on master that are not in template
+          COUNT=$(git rev-list --count HEAD..origin/master)
           
-          # Grab everything from origin/master
-          # Combine exclusions in one command: everything DOT, exclude content, exclude config
-          git checkout origin/master -- . ':!content' ':!templates/config/'
+          if [ "$COUNT" -gt 1 ]; then
+            EXTRA=$((COUNT - 1))
+            COMMIT_MSG="Synced from master: $LAST_MSG +$EXTRA"
+          else
+            COMMIT_MSG="Synced from master: $LAST_MSG"
+          fi
           
-          # Check if there are changes to commit
+          # Apply changes from master, excluding content and config
+          git checkout origin/master -- . ':!content' ':!templates/config/' ':!.gitignore'
+          
+          # Commit and push if there are changes
           if [[ -n $(git status -s) ]]; then
-            git commit -m "Sync from master"
+            git commit -m "$COMMIT_MSG"
             git push origin template
           else
             echo "No changes to sync."

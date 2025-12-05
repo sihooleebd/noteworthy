@@ -5,9 +5,13 @@
 ) = {
   // Get page map from input if available
   let page-map-str = sys.inputs.at("page-map", default: none)
+  let page-map-file = sys.inputs.at("page-map-file", default: none)
+  
   let page-map = if page-map-str != none {
     // Parse JSON using bytes
     json(bytes(page-map-str))
+  } else if page-map-file != none {
+    json(page-map-file)
   } else {
     (:)
   }

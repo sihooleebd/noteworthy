@@ -18,27 +18,30 @@ import urllib.request
 import tempfile
 from pathlib import Path
 
+import logging
+
 # =============================================================================
 # CONSTANTS
 # =============================================================================
 
 # Build Paths
-BUILD_DIR = Path("templates/build")
-OUTPUT_FILE = Path("output.pdf")
-RENDERER_FILE = "templates/parser.typ"
+BASE_DIR = Path(__file__).parent.resolve()
+BUILD_DIR = BASE_DIR / "templates/build"
+OUTPUT_FILE = BASE_DIR.parent / "output.pdf" # Output to the parent directory of noteworthy (project root)
+RENDERER_FILE = BASE_DIR / "templates/parser.typ"
 
 # System Config Paths
-SYSTEM_CONFIG_DIR = Path("templates/systemconfig")
+SYSTEM_CONFIG_DIR = BASE_DIR / "templates/systemconfig"
 SETTINGS_FILE = SYSTEM_CONFIG_DIR / "build_settings.json"
 INDEXIGNORE_FILE = SYSTEM_CONFIG_DIR / ".indexignore"
 
 # Config File Paths
-CONFIG_FILE = Path("templates/config/config.json")
-HIERARCHY_FILE = Path("templates/config/hierarchy.json")
-PREFACE_FILE = Path("templates/config/preface.typ")
-SNIPPETS_FILE = Path("templates/config/snippets.typ")
-SCHEMES_FILE = Path("templates/config/schemes.json")
-SETUP_FILE = Path("templates/setup.typ")
+CONFIG_FILE = BASE_DIR / "templates/config/config.json"
+HIERARCHY_FILE = BASE_DIR / "templates/config/hierarchy.json"
+PREFACE_FILE = BASE_DIR / "templates/config/preface.typ"
+SNIPPETS_FILE = BASE_DIR / "templates/config/snippets.typ"
+SCHEMES_FILE = BASE_DIR / "templates/config/schemes.json"
+SETUP_FILE = BASE_DIR / "templates/setup.typ"
 
 # Terminal Size Requirements
 MIN_TERM_HEIGHT = 20
@@ -65,6 +68,9 @@ def check_dependencies():
         sys.exit(1)
     if not shutil.which("pdfinfo"):
         print("Error: 'pdfinfo' not found. Install with: brew install poppler")
+        sys.exit(1)
+    if not (shutil.which("pdfunite") or shutil.which("gs")):
+        print("Error: Neither 'pdfunite' nor 'gs' (ghostscript) found. Install poppler-utils or ghostscript.")
         sys.exit(1)
 
 def get_pdf_page_count(pdf_path):
@@ -178,12 +184,30 @@ def add_single_file_to_hierarchy(page_id, title=""):
         return False
 
 def compile_target(target, output, page_offset=None, page_map=None, extra_flags=None, callback=None, log_callback=None):
-    cmd = ["typst", "compile", RENDERER_FILE, str(output), "--root", ".", "--input", f"target={target}"]
+    cmd = ["typst", "compile", str(RENDERER_FILE), str(output), "--root", str(BASE_DIR), "--input", f"target={target}"]
     if page_offset: cmd.extend(["--input", f"page-offset={page_offset}"])
-    if page_map: cmd.extend(["--input", f"page-map={json.dumps(page_map)}"])
+    if page_map:
+        # Write page map to file to avoid ARG_MAX issues
+        pm_file = BUILD_DIR / "page_map.json"
+        try:
+            pm_file.write_text(json.dumps(page_map))
+            logging.info(f"Wrote page_map to {pm_file} ({len(json.dumps(page_map))} bytes)")
+            # Pass path relative to project root, starting with /
+            rel_path = pm_file.relative_to(BASE_DIR)
+            cmd.extend(["--input", f"page-map-file=/{rel_path}"])
+        except Exception as e:
+            logging.error(f"Failed to write page_map file: {e}")
+            # Fallback to string (might crash if too long)
+            cmd.extend(["--input", f"page-map={json.dumps(page_map)}"])
+            
     if extra_flags: cmd.extend(extra_flags)
     
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    logging.info(f"Executing typst for {target}")
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except OSError as e:
+        logging.error(f"Popen failed for {target}: {e}")
+        raise e
     all_stderr = []
     
     # Make stderr non-blocking for real-time output
@@ -209,19 +233,30 @@ def compile_target(target, output, page_offset=None, page_map=None, extra_flags=
             log_callback(stderr)
     
     if proc.returncode != 0:
+        logging.error(f"Typst compilation failed for {target}. Return code: {proc.returncode}")
+        logging.error(f"Stderr: {''.join(all_stderr)}")
         raise subprocess.CalledProcessError(proc.returncode, cmd, output=stdout, stderr=''.join(all_stderr))
     return ''.join(all_stderr)
 
 def merge_pdfs(pdf_files, output):
     files = [str(p) for p in pdf_files if p.exists()]
+    logging.info(f"Merging {len(files)} files. First: {files[0] if files else 'None'}")
     if not files: return False
     
     if shutil.which("pdfunite"):
-        subprocess.run(["pdfunite"] + files + [str(output)], check=True, capture_output=True)
-        return "pdfunite"
+        logging.info("Using pdfunite")
+        try:
+            subprocess.run(["pdfunite"] + files + [str(output)], check=True, capture_output=True)
+            return "pdfunite"
+        except Exception as e:
+            logging.error(f"pdfunite failed: {e}")
     elif shutil.which("gs"):
-        subprocess.run(["gs", "-dBATCH", "-dNOPAUSE", "-q", "-sDEVICE=pdfwrite", f"-sOutputFile={output}"] + files, check=True, capture_output=True)
-        return "ghostscript"
+        logging.info("Using ghostscript")
+        try:
+            subprocess.run(["gs", "-dBATCH", "-dNOPAUSE", "-q", "-sDEVICE=pdfwrite", f"-sOutputFile={output}"] + files, check=True, capture_output=True)
+            return "ghostscript"
+        except Exception as e:
+            logging.error(f"ghostscript failed: {e}")
     return None
 
 def zip_build_directory(build_dir, output="build_pdfs.zip"):
@@ -447,11 +482,44 @@ class ListEditor(BaseEditor):
 # =============================================================================
 
 def copy_to_clipboard(text):
+    """Copy text to clipboard using available system tools (Cross-platform)"""
     try:
-        subprocess.run(["pbcopy"], input=text.encode('utf-8'), check=True)
+        # macOS
+        subprocess.run(["pbcopy"], input=text.encode('utf-8'), check=True, stderr=subprocess.DEVNULL)
         return True
     except:
-        return False
+        pass
+
+    try:
+        # Windows (clip.exe)
+        # 'clip' command reads from stdin
+        subprocess.run(["clip"], input=text.encode('utf-16le'), check=True, stderr=subprocess.DEVNULL)
+        return True
+    except:
+        pass
+        
+    try:
+        # Wayland (Linux)
+        subprocess.run(["wl-copy"], input=text.encode('utf-8'), check=True, stderr=subprocess.DEVNULL)
+        return True
+    except:
+        pass
+        
+    try:
+        # X11 (Linux - xclip)
+        subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode('utf-8'), check=True, stderr=subprocess.DEVNULL)
+        return True
+    except:
+        pass
+        
+    try:
+        # X11 (Linux - xsel)
+        subprocess.run(["xsel", "-b", "-i"], input=text.encode('utf-8'), check=True, stderr=subprocess.DEVNULL)
+        return True
+    except:
+        pass
+        
+    return False
 
 def show_error_screen(scr, error):
     import traceback
@@ -1694,7 +1762,49 @@ class BuildUI:
 # BUILD LOGIC
 # =============================================================================
 
+def auto_fix_config():
+    """Automatically detect chapter naming convention from content folder"""
+    content_dir = BASE_DIR / "content"
+    if not content_dir.exists(): return
+
+    found_prefix = None
+    for p in content_dir.iterdir():
+        if p.is_dir() and " " in p.name:
+            # Look for pattern "name XX"
+            parts = p.name.rsplit(" ", 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                found_prefix = parts[0]
+                # Convert "chapter" -> "Chapter", "problem" -> "Problem"
+                # Preserve casing if it looks intentional, otherwise Title Case
+                if found_prefix.islower(): found_prefix = found_prefix.title()
+                break
+    
+    if not found_prefix: return
+
+    try:
+        if CONFIG_FILE.exists():
+            config = json.loads(CONFIG_FILE.read_text())
+            current = config.get("chapter-name", "")
+            
+            # If mismatch (case-insensitive), update it
+            if current.lower() != found_prefix.lower():
+                logging.info(f"Config mismatch detected. Updating chapter-name: '{current}' -> '{found_prefix}'")
+                config["chapter-name"] = found_prefix
+                CONFIG_FILE.write_text(json.dumps(config, indent=4))
+    except Exception as e:
+        logging.error(f"Failed to auto-fix config: {e}")
+
 def run_build(scr, args, hierarchy, opts):
+    if opts['debug']:
+        # Enable file logging if Debug Mode was toggled in TUI
+        root = logging.getLogger()
+        for handler in root.handlers[:]:
+            root.removeHandler(handler)
+        logging.basicConfig(filename='build_debug.log', level=logging.DEBUG, format='%(asctime)s - %(message)s')
+        logging.info("Debug mode enabled via TUI")
+
+    logging.info("Starting run_build")
+    auto_fix_config() # Run auto-fix before build
     ui = BuildUI(scr, opts['debug'])
     scr.keypad(True)   # Enable keypad for special keys
     scr.nodelay(False) # Disable nodelay
@@ -1761,8 +1871,18 @@ def run_build(scr, args, hierarchy, opts):
     ui.log(f"Total pages: {current - 1}", True)
     
     ui.set_phase("Merging PDFs")
+    logging.info(f"Merging {len(pdfs)} PDFs to {OUTPUT_FILE}")
     method = merge_pdfs(pdfs, OUTPUT_FILE)
-    if method: ui.log(f"Merged with {method}", True)
+    logging.info(f"Merge method: {method}, Success: {bool(method)}")
+    
+    if not method or not OUTPUT_FILE.exists():
+        ui.log("Merge failed!", False)
+        ui.set_phase("Failed")
+        scr.nodelay(False)
+        show_error_screen(scr, "Failed to merge PDFs. Individual files left in " + str(BUILD_DIR))
+        return
+
+    ui.log(f"Merged with {method}", True)
     
     ui.set_phase("Adding Metadata")
     bm = BUILD_DIR / "bookmarks.txt"
@@ -1774,7 +1894,7 @@ def run_build(scr, args, hierarchy, opts):
         zip_build_directory(BUILD_DIR)
         ui.log("Individual PDFs archived", True)
     
-    if BUILD_DIR.exists():
+    if OUTPUT_FILE.exists() and BUILD_DIR.exists():
         shutil.rmtree(BUILD_DIR)
         ui.log("Build directory cleaned", True)
     
@@ -2322,6 +2442,9 @@ def run_app(scr, args):
 def main():
     parser = argparse.ArgumentParser(description="Build Noteworthy documentation")
     args = parser.parse_args()
+    
+    # Initialize with NullHandler to suppress logs until configured
+    logging.basicConfig(level=logging.CRITICAL)
     
     try:
         curses.wrapper(lambda scr: run_app(scr, args))
