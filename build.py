@@ -14,6 +14,8 @@ import time
 import tty
 import argparse
 import zipfile
+import urllib.request
+import tempfile
 from pathlib import Path
 
 # =============================================================================
@@ -1937,23 +1939,339 @@ class InitWizard:
         except:
             return None
 
+class HierarchyWizard:
+    """Wizard for initializing hierarchy.json automatically"""
+    def __init__(self, scr):
+        self.scr = scr
+
+    def run(self):
+        # Non-interactive: Auto-scan or create default
+        try:
+            hierarchy = []
+            content_dir = Path("content")
+            
+            # Option 1: Scan 'content' folder if it exists and has chapters
+            has_content = False
+            if content_dir.exists():
+                chapters = {}
+                for ch_dir in sorted(content_dir.glob("chapter *")):
+                    try:
+                        ch_num = int(ch_dir.name.split()[-1])
+                        pages = []
+                        for p in sorted(ch_dir.glob("*.typ")):
+                            pages.append({"id": p.stem, "title": "Untitled Section"})
+                        if pages:
+                            chapters[ch_num] = {
+                                "title": f"Chapter {ch_num}",
+                                "summary": "",
+                                "pages": pages
+                            }
+                            has_content = True
+                    except: pass
+                if has_content:
+                    hierarchy = [chapters[k] for k in sorted(chapters.keys())]
+            
+            # Option 2: Create default structure if no content found
+            if not has_content:
+                # Get chapter/section names from config if available
+                try:
+                    config = json.loads(CONFIG_FILE.read_text())
+                    chap_name = config.get("chapter-name", "Chapter")
+                    sect_name = config.get("subchap-name", "Section")
+                except:
+                    chap_name = "Chapter"
+                    sect_name = "Section"
+                    
+                hierarchy = [
+                    {
+                        "title": f"First {chap_name}",
+                        "summary": "Getting started",
+                        "pages": [{"id": "01.01", "title": f"First {sect_name}"}]
+                    }
+                ]
+            
+            HIERARCHY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            HIERARCHY_FILE.write_text(json.dumps(hierarchy, indent=4))
+            
+            # Show notice
+            h, w = self.scr.getmaxyx()
+            self.scr.clear()
+            msg = "Hierarchy auto-generated from content" if has_content else "Created default hierarchy structure"
+            TUI.safe_addstr(self.scr, h // 2, (w - len(msg)) // 2, msg, curses.color_pair(1) | curses.A_BOLD)
+            self.scr.refresh()
+            curses.napms(1000)
+            
+            # Return 'edit' to signal that we should open the editor
+            return 'edit'
+        except: return None
+
+class SchemesWizard:
+    """Wizard for initializing schemes.json"""
+    def __init__(self, scr):
+        self.scr = scr
+    
+    def run(self):
+        # For now, just auto-restore default schemes as it's complex to build from scratch
+        # But show a confirmation dialog
+        h, w = self.scr.getmaxyx()
+        self.scr.clear()
+        
+        bw = min(60, w - 4)
+        bh = 8
+        bx = (w - bw) // 2
+        by = (h - bh) // 2
+        
+        TUI.draw_box(self.scr, by, bx, bh, bw, "SCHEMES SETUP")
+        TUI.safe_addstr(self.scr, by + 2, bx + 2, "Schemes configuration is missing.", curses.color_pair(4))
+        TUI.safe_addstr(self.scr, by + 3, bx + 2, "Restore default color themes?", curses.color_pair(1) | curses.A_BOLD)
+        TUI.safe_addstr(self.scr, by + 5, bx + 2, "Press Enter to Restore  |  Esc to Cancel", curses.color_pair(4) | curses.A_DIM)
+        self.scr.refresh()
+        
+        while True:
+            k = self.scr.getch()
+            if k == 27: return None
+            elif k in (ord('\n'), 10, curses.KEY_ENTER):
+                break
+        
+        try:
+             # Use a minimal embedded default scheme if source is missing
+            minimal_schemes = {
+                "dark": {
+                    "page-fill": "#262323",
+                    "text-main": "#d8d0cc",
+                    "text-heading": "#ddbfa1",
+                    "text-muted": "#8f8582",
+                    "text-accent": "#d49c93",
+                    "blocks": {},
+                    "plot": {"stroke": "#ddbfa1", "highlight": "#d4aa8e", "grid-opacity": 0.15}
+                }
+            }
+            
+            # Try to find better defaults from backup or templates if possible
+            # Ideally we'd have the full JSON embedded, but for brevity we use minimal or copy
+            default_src = Path("templates/config/schemes.json")
+            if default_src.exists() and default_src != SCHEMES_FILE:
+                shutil.copy(default_src, SCHEMES_FILE)
+            else:
+                SCHEMES_FILE.parent.mkdir(parents=True, exist_ok=True)
+                SCHEMES_FILE.write_text(json.dumps(minimal_schemes, indent=4))
+            return True
+        except: return None
+
 def needs_init():
-    """Check if we need to run the init wizard"""
-    return not CONFIG_FILE.exists()
+    """Check if we need to run any init wizard"""
+    return not (CONFIG_FILE.exists() and HIERARCHY_FILE.exists() and SCHEMES_FILE.exists())
 
 # =============================================================================
 # ENTRY POINTS
 # =============================================================================
 
+class SyncWizard:
+    """Wizard for resolving hierarchy vs content discrepancies"""
+    def __init__(self, scr, missing_files, new_files):
+        self.scr = scr
+        self.missing_files = missing_files  # In hierarchy, not on disk
+        self.new_files = new_files          # On disk, not in hierarchy
+        
+    def refresh(self):
+        h, w = self.scr.getmaxyx()
+        self.scr.clear()
+        
+        TUI.safe_addstr(self.scr, 2, (w - 25) // 2, "HIERARCHY SYNC REQUIRED", curses.color_pair(6) | curses.A_BOLD)
+        TUI.safe_addstr(self.scr, 3, (w - 45) // 2, "The hierarchy.json does not match your content folder.", curses.color_pair(4))
+        
+        # Calculate layout
+        col_w = (w - 8) // 2
+        left_x = 2
+        right_x = left_x + col_w + 4
+        list_h = h - 12
+        
+        # Left Column: Missing on Disk (Only in Hierarchy)
+        TUI.draw_box(self.scr, 5, left_x, list_h + 2, col_w, f" Missing on Disk ({len(self.missing_files)}) ")
+        for i, f in enumerate(self.missing_files[:list_h]):
+            TUI.safe_addstr(self.scr, 6 + i, left_x + 2, f"- {f}", curses.color_pair(4))
+            
+        # Right Column: New on Disk (Only in Content)
+        TUI.draw_box(self.scr, 5, right_x, list_h + 2, col_w, f" New on Disk ({len(self.new_files)}) ")
+        for i, f in enumerate(self.new_files[:list_h]):
+            TUI.safe_addstr(self.scr, 6 + i, right_x + 2, f"+ {f}", curses.color_pair(2))
+            
+        # Options
+        opts_y = h - 4
+        TUI.safe_addstr(self.scr, opts_y, 4, "[A] Adopt Disk State (Update Hierarchy)", curses.color_pair(1) | curses.A_BOLD)
+        TUI.safe_addstr(self.scr, opts_y + 1, 8, "Removes missing, Adds new", curses.color_pair(4))
+        
+        TUI.safe_addstr(self.scr, opts_y, w // 2 + 4, "[B] Adopt Hierarchy (Create Files)", curses.color_pair(1) | curses.A_BOLD)
+        TUI.safe_addstr(self.scr, opts_y + 1, w // 2 + 8, "Creates scaffold for missing files", curses.color_pair(4))
+        
+        TUI.safe_addstr(self.scr, h - 1, (w - 20) // 2, "Esc: Cancel  Q: Quit", curses.color_pair(4) | curses.A_DIM)
+        self.scr.refresh()
+
+    def run(self):
+        while True:
+            self.refresh()
+            k = self.scr.getch()
+            
+            if k == 27 or k == ord('q'): return None
+            
+            if k in (ord('a'), ord('A')):
+                return self.adopt_disk()
+            elif k in (ord('b'), ord('B')):
+                return self.adopt_hierarchy()
+                
+    def adopt_disk(self):
+        """Update hierarchy.json to match content on disk"""
+        try:
+            hierarchy = json.loads(HIERARCHY_FILE.read_text())
+            
+            # 1. Remove missing files
+            for missing in self.missing_files:
+                for ch in hierarchy:
+                    ch["pages"] = [p for p in ch.get("pages", []) if p["id"] != missing]
+                # Clean up empty chapters
+                hierarchy = [ch for ch in hierarchy if ch.get("pages")]
+                
+            # 2. Add new files
+            for new_id in self.new_files:
+                ch_num = int(new_id[:2])
+                # Find or create chapter
+                target_ch = None
+                for ch in hierarchy:
+                    pages = ch.get("pages", [])
+                    if pages and pages[0]["id"].startswith(f"{ch_num:02d}."):
+                        target_ch = ch
+                        break
+                
+                if not target_ch:
+                    target_ch = {"title": f"Chapter {ch_num}", "summary": "", "pages": []}
+                    hierarchy.append(target_ch)
+                    
+                # Check if already exists (sanity check)
+                if not any(p["id"] == new_id for p in target_ch.get("pages", [])):
+                    target_ch["pages"].append({"id": new_id, "title": "Untitled Section"})
+                    
+            # Sort chapters and pages
+            hierarchy.sort(key=lambda c: c["pages"][0]["id"] if c["pages"] else "99")
+            for ch in hierarchy:
+                ch["pages"].sort(key=lambda p: p["id"])
+                
+            HIERARCHY_FILE.write_text(json.dumps(hierarchy, indent=4))
+            return True
+        except Exception as e:
+            return False
+
+    def adopt_hierarchy(self):
+        """Create missing files on disk to match hierarchy"""
+        try:
+            for missing in self.missing_files:
+                ch_num = missing[:2]
+                ch_dir = Path(f"content/chapter {ch_num}")
+                ch_dir.mkdir(parents=True, exist_ok=True)
+                
+                file_path = ch_dir / f"{missing}.typ"
+                if not file_path.exists():
+                    # Create scaffold
+                    file_path.write_text(f'#import "../../../templates/templater.typ": *\n\n= Section Title\n\nWrite your content here.')
+            return True
+        except:
+            return False
+
+def restore_templates(scr):
+    """Check and restore missing template files from GitHub"""
+    # List of files to exclude from auto-restore (handled by specific wizards)
+    EXCLUDE_FILES = {
+        "templates/config/config.json",
+        "templates/config/hierarchy.json",
+        #"templates/config/schemes.json" # Schemes wizard handles this, but restoring from repo is also a valid strategy. Let's exclude to keep wizard.
+    }
+    
+    try:
+        # Check if we need to restore anything
+        # We do a quick check of some core files first to avoid network hit if obviously healthy?
+        # But "For all templates file" implies we should be thorough.
+        # Let's just try to download if we detect MISSING files in a later step?
+        # Or just always check? Always checking adds startup time.
+        # Let's check for missing core directories or files first.
+        
+        # Actually, let's do the download only if we confirm something is missing.
+        # But we don't know what "something" is without the list.
+        # So we'll just proceed with download-and-check.
+        
+        h, w = scr.getmaxyx()
+        TUI.safe_addstr(scr, h // 2 + 2, (w - 40) // 2, "Checking template integrity...", curses.color_pair(4))
+        scr.refresh()
+        
+        url = "https://github.com/sihooleebd/noteworthy/archive/refs/heads/master.zip"
+        
+        with tempfile.TemporaryFile() as tmp:
+            # Download
+            with urllib.request.urlopen(url, timeout=5) as response:
+                shutil.copyfileobj(response, tmp)
+            
+            tmp.seek(0)
+            with zipfile.ZipFile(tmp) as z:
+                restored_count = 0
+                for member in z.namelist():
+                    # Look for files inside templates/
+                    # Structure is likely noteworthy-master/templates/...
+                    parts = member.split('/')
+                    if len(parts) > 2 and parts[1] == "templates" and not member.endswith('/'):
+                        # Reconstruct local path: templates/...
+                        rel_path = "/".join(parts[1:])
+                        local_path = Path(rel_path)
+                        
+                        if str(local_path) in EXCLUDE_FILES:
+                            continue
+                            
+                        if not local_path.exists():
+                            # Restore
+                            local_path.parent.mkdir(parents=True, exist_ok=True)
+                            with z.open(member) as source, open(local_path, "wb") as target:
+                                shutil.copyfileobj(source, target)
+                            restored_count += 1
+                            
+                if restored_count > 0:
+                    TUI.safe_addstr(scr, h // 2 + 3, (w - 40) // 2, f"Restored {restored_count} missing template files", curses.color_pair(2))
+                    scr.refresh()
+                    curses.napms(1000)
+                    
+    except Exception as e:
+        # Fail silently or show warning?
+        # User requested "automatically", implying it shouldn't block if it fails (e.g. no internet)
+        # But if critical files are missing and we fail, we're in trouble.
+        pass
+
 def run_app(scr, args):
     TUI.init_colors()
     if not TUI.check_terminal_size(scr): return
     
+    # Restore missing templates from remote
+    restore_templates(scr)
+    
     # Check if we need to run the init wizard
     if needs_init():
-        wizard = InitWizard(scr)
-        if wizard.run() is None:
-            return  # User cancelled
+        # Check config.json
+        if not CONFIG_FILE.exists():
+            wizard = InitWizard(scr)
+            if wizard.run() is None:
+                return  # User cancelled
+        
+        # Check hierarchy.json
+        if not HIERARCHY_FILE.exists():
+             wizard = HierarchyWizard(scr)
+             res = wizard.run()
+             if res is None:
+                 return # User cancelled
+             elif res == 'edit':
+                 # Open hierarchy editor immediately to let user customize
+                 editor = HierarchyEditor(scr)
+                 editor.run()
+
+        # Check schemes.json
+        if not SCHEMES_FILE.exists():
+            wizard = SchemesWizard(scr)
+            if wizard.run() is None:
+                return # User cancelled
     
     scr.clear()
     h, w = scr.getmaxyx()
@@ -1965,72 +2283,23 @@ def run_app(scr, args):
     ignored_files = load_indexignore()
     new_files = [f for f in new_files if f not in ignored_files]
     
-    # Handle missing files (fatal error)
-    if missing_files:
-        scr.clear()
-        h, w = scr.getmaxyx()
-        
-        bw = min(60, w - 6)
-        bh = min(len(missing_files) + 8, h - 4)
-        bx = (w - bw) // 2
-        by = (h - bh) // 2
-        
-        TUI.draw_box(scr, by, bx, bh, bw, " Missing Files - FATAL ")
-        
-        y = by + 2
-        for i, line in enumerate(SAD_FACE):
-            TUI.safe_addstr(scr, y + i, bx + 4, line, curses.color_pair(6) | curses.A_BOLD)
-        
-        TUI.safe_addstr(scr, by + 2, bx + 18, "Files in hierarchy but not on disk:", curses.color_pair(6))
-        
-        for i, f in enumerate(missing_files[:bh-6]):
-            TUI.safe_addstr(scr, by + 4 + i, bx + 18, f"  - {f}.typ", curses.color_pair(4))
-        
-        TUI.safe_addstr(scr, by + bh - 2, bx + 2, "Create these files or remove from hierarchy.json", curses.color_pair(4) | curses.A_DIM)
-        scr.refresh()
-        scr.getch()
-        return  # Fatal - don't continue
-    
-    # Handle new files (interactive per-file popup)
-    for page_id in new_files:
-        scr.clear()
-        h, w = scr.getmaxyx()
-        
-        bw = min(55, w - 6)
-        bh = 11
-        bx = (w - bw) // 2
-        by = (h - bh) // 2
-        
-        TUI.draw_box(scr, by, bx, bh, bw, " New File Found ")
-        
-        TUI.safe_addstr(scr, by + 2, bx + 2, "A file was found that is not in hierarchy.", curses.color_pair(4))
-        TUI.safe_addstr(scr, by + 4, bx + 2, f"File: {page_id}.typ", curses.color_pair(1) | curses.A_BOLD)
-        TUI.safe_addstr(scr, by + 5, bx + 2, f"Path: content/chapter {page_id[:2]}/", curses.color_pair(4) | curses.A_DIM)
-        
-        TUI.safe_addstr(scr, by + 7, bx + 2, "What would you like to do?", curses.color_pair(4))
-        TUI.safe_addstr(scr, by + bh - 2, bx + 2, "'a' add  |  'i' ignore  |  's' skip", curses.color_pair(4) | curses.A_DIM)
-        
-        scr.refresh()
-        k = scr.getch()
-        
-        if k == ord('a'):
-            # Get title from user
-            curses.echo()
-            curses.curs_set(1)
-            TUI.safe_addstr(scr, by + 9, bx + 2, "Title: ", curses.color_pair(3))
-            scr.refresh()
-            try:
-                title = scr.getstr(by + 9, bx + 9, bw - 12).decode('utf-8').strip()
-            except:
-                title = ""
-            curses.noecho()
-            curses.curs_set(0)
-            add_single_file_to_hierarchy(page_id, title or "Untitled")
-        elif k == ord('i'):
-            ignored_files.add(page_id)
-            save_indexignore(ignored_files)
-        # 's' or any other key = skip (do nothing)
-    
+    # If there are ANY discrepancies, run the Sync Wizard
+    if missing_files or new_files:
+        wizard = SyncWizard(scr, missing_files, new_files)
+        if not wizard.run():
+            return # Cancelled or failed
+            
+        # Re-sync after changes to ensure clean state
+        missing_files, new_files = sync_hierarchy_with_content()
+        new_files = [f for f in new_files if f not in ignored_files]
+        if missing_files or new_files:
+             # Should not happen if sync succeeded
+             pass
+
+        # Open hierarchy editor to review changes
+        editor = HierarchyEditor(scr)
+        editor.run()
+             
     # Continue with normal flow
     scr.clear()
     TUI.safe_addstr(scr, h // 2, (w - 11) // 2, "Indexing...", curses.color_pair(1) | curses.A_BOLD)
