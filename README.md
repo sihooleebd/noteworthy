@@ -26,9 +26,7 @@
 > We recommend using `template` branch for using it unless you need demo contents.
 > Look at `Quick Start` section for additional information.
 
-## What is Noteworthy?
-
-**Noteworthy** is not just a template—it's a comprehensive **framework** for building educational textbooks, lecture notes, and technical documentation with Typst. It provides a complete ecosystem of tools, themes, and components that work together seamlessly.
+Say hi to **Noteworthy**, an academic parser and framework for creating massive and complex documents in one go. It can be used for building educational textbooks, lecture notes, and technical documentation with Typst. It provides a complete ecosystem of tools, themes, and components that work together seamlessly.
 
 An example project is available at https://github.com/sihooleebd/math-noteworthy. 
 
@@ -72,32 +70,21 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
 ### Installation
 
 ```bash
-git clone https://github.com/sihooleebd/noteworthy.git
-cd noteworthy
+mkdir project
+cd project
+mkdir content
+curl -O https://raw.githubusercontent.com/sihooleebd/noteworthy/master/noteworthy.py
 ```
 
-If you want only the templates without demo contents (Recommended),
-```bash
-git clone -b template https://github.com/sihooleebd/noteworthy.git
-cd noteworthy
-```
+### Quickstart
 
-### Initialization
-
-For first-time setup, delete `templates/config/config.json` and run the build script. The setup wizard will guide you through configuration:
+Add the neccesary content for your project and run the build script. The setup wizard will guide you through configuration:
 
 ```bash
-rm templates/config/config.json
-python3 build.py
+python3 noteworthy.py
 ```
 
-### Build Your Document
-
-The build system features an interactive TUI (Text User Interface):
-
-```bash
-python3 build.py
-```
+The noteworthy system guides you through the initialization, the configuration, and the build. Upon first run, the template will load the necessary template files. 
 
 **TUI Features:**
 - **Chapter Selection**: Toggle individual chapters/sections to compile
@@ -115,6 +102,7 @@ python3 build.py
   - Preface Editor - Preface content
 - **Controls**: Arrow keys to navigate, Space to toggle, Enter to build, `q` to quit
 - **Build Progress**: Real-time compilation status with Typst log toggle (`v`)
+- **Template Integrity Check**: Verify that the template files are not corrupted and auto fix
 
 ### Single File Compilation
 
@@ -122,37 +110,6 @@ python3 build.py
 # Compile specific section
 typst compile templates/parser.typ --input target=01.01 section.pdf
 ```
-
-## Document Structure
-
-This repository includes comprehensive examples of all framework features:
-
-```
-noteworthy/
-├── build.py                  # Build system with TUI
-├── content/                  # Your content files
-│   ├── chapter 01/
-│   │   ├── 01.01.typ
-│   │   └── 01.02.typ
-│   └── ...
-└── templates/                # Framework core
-    ├── config/               # Configuration files
-    │   ├── config.json       # Main settings
-    │   ├── hierarchy.json    # Document structure
-    │   ├── schemes.json      # Color themes
-    │   ├── preface.typ       # Preface content
-    │   └── snippets.typ      # Custom macros
-    ├── parser.typ            # Document orchestration
-    ├── templater.typ         # Component exports
-    ├── setup.typ             # Configuration loader
-    ├── default-schemes.typ   # Theme definitions
-    ├── covers/               # Cover page generators
-    ├── layouts/              # Content blocks & outline
-    └── plots/                # Plotting modules
-```
-
-
-The [content/](content/) directory contains working examples for every feature.
 
 ## Contributing
 
