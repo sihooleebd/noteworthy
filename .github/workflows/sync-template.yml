@@ -2,7 +2,7 @@ name: Sync Template Branch
 on:
   push:
     branches:
-      - main  # Triggers when you push to main
+      - master  # Triggers when you push to master
 
 jobs:
   sync:
@@ -18,21 +18,22 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Sync Main to Template (excluding content)
+      - name: Sync Master to Template (excluding content)
         run: |
           # Fetch all branches
           git fetch origin
 
           # Switch to the template branch (create it if it doesn't exist)
+          # Try to track remote template if it exists, otherwise create new local one
           git checkout -B template origin/template 2>/dev/null || git checkout -b template
           
-          # Grab everything from origin/main
-          # Combine exclusions in one command
-          git checkout origin/main -- . ':!content' ':!templates/config/'
+          # Grab everything from origin/master
+          # Combine exclusions in one command: everything DOT, exclude content, exclude config
+          git checkout origin/master -- . ':!content' ':!templates/config/'
           
           # Check if there are changes to commit
           if [[ -n $(git status -s) ]]; then
-            git commit -m "Sync from main"
+            git commit -m "Sync from master"
             git push origin template
           else
             echo "No changes to sync."
