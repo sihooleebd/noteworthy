@@ -34,8 +34,9 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
 - **Content Block Library**: Pre-styled components for definitions, theorems, examples, proofs, and solutions
 - **Plotting Engine**: Advanced 2D/3D plotting, vector diagrams, and geometric constructions
 - **Document Structure**: Automated table of contents, chapter covers, and page headers
-- **Configuration Layer**: JSON-based `config/config.json` for complete control
+- **Configuration Layer**: JSON-based settings in `templates/config/`
 - **Build System**: Incremental compilation with automatic PDF merging
+- **Interactive Editors**: TUI-based editors for config, hierarchy, schemes, and snippets
 
 ## Key Features
 
@@ -51,15 +52,18 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
 ### Prerequisites
 
 - **Typst** (v0.12.0+): [Install Typst](https://github.com/typst/typst#installation)
-- **Python 3** with **tqdm**: `pip3 install tqdm` (for progress bars during build)
+- **Python 3**: Required for the build system
 - **Poppler** (provides `pdfinfo` for page counting):
   - macOS: `brew install poppler`
   - Linux: `apt-get install poppler-utils`
+  - Windows: Download from [poppler releases](https://github.com/oschwartz10612/poppler-windows/releases) and add to PATH
 - **PDF Tool** (for merging and metadata):
-  - **Option 1** (recommended): `brew install pdftk-java` (macOS) or `apt-get install pdftk` (Linux)
-  - **Option 2** (fallback): Ghostscript is usually pre-installed on macOS/Linux
+  - macOS: `brew install pdftk-java`
+  - Linux: `apt-get install pdftk`
+  - Windows: Download from [pdftk releases](https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/)
+  - *Fallback*: Ghostscript (usually pre-installed on macOS/Linux, [download for Windows](https://ghostscript.com/releases/gsdnld.html))
   
-> **Note**: `pdftk-java` is required for adding PDF metadata (title, author) and clickable bookmarks/outline that appear in the PDF viewer sidebar for easy navigation.
+> **Note**: `pdftk` is required for adding PDF metadata (title, author) and clickable bookmarks/outline that appear in the PDF viewer sidebar for easy navigation.
 
 ### Installation
 
@@ -68,12 +72,20 @@ git clone https://github.com/yourusername/noteworthy.git
 cd noteworthy
 ```
 
+### Initialization
+
+For first-time setup, delete `templates/config/config.json` and run the build script. The setup wizard will guide you through configuration:
+
+```bash
+rm templates/config/config.json
+python3 build.py
+```
+
 ### Build Your Document
 
 The build system features an interactive TUI (Text User Interface):
 
 ```bash
-# Launch interactive build menu
 python3 build.py
 ```
 
@@ -84,22 +96,21 @@ python3 build.py
   - `f` - Include/exclude frontmatter (cover, preface, outline)
   - `l` - Keep individual PDFs after merge
   - `c` - Configure custom Typst flags (e.g., `--font-path`)
+  - `e` - Open configuration editors
+- **Editor Menu** (`e` key):
+  - Config Editor - Document settings (title, authors, theme, etc.)
+  - Hierarchy Editor - Chapter/page structure with add/delete
+  - Scheme Editor - Color themes with create/delete
+  - Snippets Editor - Custom macros
+  - Preface Editor - Preface content
 - **Controls**: Arrow keys to navigate, Space to toggle, Enter to build, `q` to quit
 - **Build Progress**: Real-time compilation status with Typst log toggle (`v`)
-
-```bash
-# CLI options (bypass TUI)
-python3 build.py --leave-individual
-```
 
 ### Single File Compilation
 
 ```bash
-# Compile entire document
-typst compile main.typ output.pdf
-
 # Compile specific section
-typst compile renderer.typ --input target=01.01 section.pdf
+typst compile templates/parser.typ --input target=01.01 section.pdf
 ```
 
 ## Document Structure
@@ -108,46 +119,28 @@ This repository includes comprehensive examples of all framework features:
 
 ```
 noteworthy/
-├── config/                 # Configuration files
-│   ├── config.json         # Main settings (title, theme, hierarchy, etc.)
-│   ├── preface.typ         # Preface content
-│   └── snippets.typ        # Custom macros and shortcuts
-├── build.py                # Build system
-├── content/                # Example content
-│   ├── chapter 01/         # Core Components
-│   │   ├── 01.01.typ       # Content Blocks (definition, theorem, proof, etc.)
-│   │   └── 01.02.typ       # Layout Elements (equations, solutions)
-│   ├── chapter 02/         # Plotting & Geometry
-│   │   ├── 02.01.typ       # Basic Plots (rect-plot, polar-plot)
-│   │   ├── 02.02.typ       # Geometry (points, polygons)
-│   │   ├── 02.03.typ       # Vectors (components, addition, projection)
-│   │   └── 02.04.typ       # 3D Space Plots
-│   └── chapter 03/         # Data & Visualization
-│       ├── 03.01.typ       # Function Graphs
-│       ├── 03.02.typ       # Combinatorics Diagrams
-│       └── 03.03.typ       # Tables
-└── templates/              # Framework core
-    ├── parser.typ          # Document orchestration
-    ├── templater.typ       # Component exports
-    ├── setup.typ           # Configuration loader
-    ├── default-schemes.typ # Theme definitions
-    ├── covers/             # Cover page generators
-    ├── layouts/            # Content blocks & outline
-    └── plots/              # Plotting modules
+├── build.py                  # Build system with TUI
+├── content/                  # Your content files
+│   ├── chapter 01/
+│   │   ├── 01.01.typ
+│   │   └── 01.02.typ
+│   └── ...
+└── templates/                # Framework core
+    ├── config/               # Configuration files
+    │   ├── config.json       # Main settings
+    │   ├── hierarchy.json    # Document structure
+    │   ├── schemes.json      # Color themes
+    │   ├── preface.typ       # Preface content
+    │   └── snippets.typ      # Custom macros
+    ├── parser.typ            # Document orchestration
+    ├── templater.typ         # Component exports
+    ├── setup.typ             # Configuration loader
+    ├── default-schemes.typ   # Theme definitions
+    ├── covers/               # Cover page generators
+    ├── layouts/              # Content blocks & outline
+    └── plots/                # Plotting modules
 ```
 
-## Documentation
-
-Complete documentation is available in the [Wiki](../../wiki):
-
-- [Getting Started](../../wiki/Getting-Started) - Installation and quick start
-- [Configuration](../../wiki/Configuration) - Configure your document
-- [Content Blocks](../../wiki/Content-Blocks) - Available content blocks
-- [Plotting Reference](../../wiki/Plotting-Reference) - Complete plotting API
-- [Themes](../../wiki/Themes) - Theme customization
-- [Build System](../../wiki/Build-System) - Build script usage
-- [Advanced Usage](../../wiki/Advanced-Usage) - Extending the framework
-- [Troubleshooting](../../wiki/Troubleshooting) - Common issues
 
 The [content/](content/) directory contains working examples for every feature.
 
