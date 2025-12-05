@@ -22,6 +22,10 @@
 [![Typst](https://img.shields.io/badge/Typst-0.12%2B-239DAD?logo=typst)](https://typst.app/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+> **RECOMMENDATION** |
+> We recommend using `template` branch for using it unless you need demo contents.
+> Look at `Quick Start` section for additional information.
+
 ## What is Noteworthy?
 
 **Noteworthy** is not just a template—it's a comprehensive **framework** for building educational textbooks, lecture notes, and technical documentation with Typst. It provides a complete ecosystem of tools, themes, and components that work together seamlessly.
