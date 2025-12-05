@@ -20,13 +20,15 @@ jobs:
 
       - name: Sync Main to Template (excluding content)
         run: |
+          # Fetch all branches
+          git fetch origin
+
           # Switch to the template branch (create it if it doesn't exist)
-          git checkout template 2>/dev/null || git checkout -b template
+          git checkout -B template origin/template 2>/dev/null || git checkout -b template
           
-          # Grab everything from main, BUT exclude the 'content' folder
-          # The ':!content' syntax tells git "everything except this path"
-          git checkout main -- . ':!content'
-          git checkout main -- . ':!templates/config/'
+          # Grab everything from origin/main
+          # Combine exclusions in one command
+          git checkout origin/main -- . ':!content' ':!templates/config/'
           
           # Check if there are changes to commit
           if [[ -n $(git status -s) ]]; then
