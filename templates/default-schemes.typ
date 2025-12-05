@@ -1,5 +1,5 @@
 // Load color schemes from JSON
-#let schemes-data = json("../config/schemes.json")
+#let schemes-data = json("config/schemes.json")
 
 // Helper to convert hex string to rgb color
 #let hex-to-rgb(hex) = {

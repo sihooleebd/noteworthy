@@ -20,7 +20,8 @@
     header: none,
     footer: none,
   )[
-    #[#metadata((number, title)) #label("chapter-" + chapter-id)]
+    #metadata((number, title)) <chapter-cover>
+    [] #label("chapter-" + chapter-id)
     #line(length: 100%, stroke: 1pt + theme.text-muted)
 
     #v(2cm)

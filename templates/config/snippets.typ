@@ -3,7 +3,6 @@
 #let qed = [$therefore$ Q.E.D.]
 #let sht = [show that]
 #let Sht = [Show that]
-
 #let sr = $attach(, t: 2)$
 #let cb = $attach(, t: 3)$
 #let sq(k) = $sqrt(#k)$
@@ -11,7 +10,6 @@
 #let invs = $attach(, t: -1)$
 #let comp = $attach(, t: c)$
 #let xy = $x y$
-
 #let bmat(..cols) = $mat(..cols, delim: "[")$
 #let Bmat(..cols) = $mat(..cols, delim: "{")$
 #let vmat(..cols) = $mat(..cols, delim: "|")$

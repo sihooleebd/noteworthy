@@ -3,7 +3,7 @@
 // =====================
 
 // Load configuration from JSON
-#let config = json("../config/config.json")
+#let config = json("config/config.json")
 
 // Export configuration variables
 #let title = config.title
@@ -25,7 +25,7 @@
 #let box-inset = eval(config.box-inset)
 #let render-sample-count = config.render-sample-count
 #let display-mode = config.display-mode
-#let hierarchy = json("../config/hierarchy.json")
+#let hierarchy = json("config/hierarchy.json")
 
 // Load schemes
 #import "./default-schemes.typ": *
@@ -50,4 +50,4 @@
 #let active-theme = colorschemes.at(lower(display-mode), default: scheme-dark)
 
 // Import snippets
-#import "../config/snippets.typ": *
+#import "config/snippets.typ": *
