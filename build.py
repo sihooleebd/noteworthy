@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Noteworthy Build System - Interactive TUI for building Typst documents"""
 
 import copy
 import curses
 import fcntl
+import gc
 import json
 import os
 import shutil
 import subprocess
 import sys
 import termios
+import threading
 import time
 import tty
 import argparse
@@ -24,7 +25,11 @@ from pathlib import Path
 BUILD_DIR = Path("templates/build")
 OUTPUT_FILE = Path("output.pdf")
 RENDERER_FILE = "templates/parser.typ"
-SETTINGS_FILE = Path(".build_settings.json")
+
+# System Config Paths
+SYSTEM_CONFIG_DIR = Path("templates/systemconfig")
+SETTINGS_FILE = SYSTEM_CONFIG_DIR / "build_settings.json"
+INDEXIGNORE_FILE = SYSTEM_CONFIG_DIR / ".indexignore"
 
 # Config File Paths
 CONFIG_FILE = Path("templates/config/config.json")
@@ -33,6 +38,7 @@ PREFACE_FILE = Path("templates/config/preface.typ")
 SNIPPETS_FILE = Path("templates/config/snippets.typ")
 SCHEMES_FILE = Path("templates/config/schemes.json")
 SETUP_FILE = Path("templates/setup.typ")
+CONTENT_DIR = Path("content")
 
 # Terminal Size Requirements
 MIN_TERM_HEIGHT = 20
@@ -85,6 +91,7 @@ def extract_hierarchy():
 
 def load_settings():
     try:
+        SYSTEM_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         if SETTINGS_FILE.exists():
             return json.loads(SETTINGS_FILE.read_text())
     except: pass
@@ -92,8 +99,134 @@ def load_settings():
 
 def save_settings(settings):
     try:
+        SYSTEM_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
     except: pass
+
+def load_indexignore():
+    """Load ignored file patterns from .indexignore (one per line)."""
+    try:
+        if INDEXIGNORE_FILE.exists():
+            lines = INDEXIGNORE_FILE.read_text().strip().split('\n')
+            return set(l.strip() for l in lines if l.strip() and not l.startswith('#'))
+    except: pass
+    return set()
+
+def save_indexignore(ignored):
+    """Save ignored file patterns to .indexignore."""
+    try:
+        SYSTEM_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        content = "# Files to ignore during hierarchy sync\n# One file ID per line (e.g., 01.03)\n\n"
+        content += '\n'.join(sorted(ignored))
+        INDEXIGNORE_FILE.write_text(content)
+    except: pass
+
+def sync_hierarchy_with_content():
+    """
+    Scan content directory and compare with hierarchy.json.
+    Returns (missing_files, new_files) where:
+    - missing_files: list of page IDs in hierarchy but not on disk
+    - new_files: list of page IDs found on disk but not in hierarchy
+    Does NOT auto-add files - caller must decide.
+    """
+    hierarchy = json.loads(HIERARCHY_FILE.read_text())
+    
+    # Build set of page IDs from hierarchy
+    hierarchy_ids = set()
+    for ch in hierarchy:
+        for page in ch.get("pages", []):
+            hierarchy_ids.add(page["id"])
+    
+    # Scan content directory for .typ files
+    disk_ids = set()
+    if CONTENT_DIR.exists():
+        for chapter_dir in sorted(CONTENT_DIR.iterdir()):
+            if chapter_dir.is_dir() and chapter_dir.name.startswith("chapter"):
+                for typ_file in sorted(chapter_dir.glob("*.typ")):
+                    page_id = typ_file.stem
+                    disk_ids.add(page_id)
+    
+    missing_files = sorted(hierarchy_ids - disk_ids)
+    new_files = sorted(disk_ids - hierarchy_ids)
+    
+    return missing_files, new_files
+
+def add_files_to_hierarchy(page_ids):
+    """Add the given page IDs to hierarchy.json with blank titles."""
+    hierarchy = json.loads(HIERARCHY_FILE.read_text())
+    
+    # Group by chapter prefix
+    by_chapter = {}
+    for page_id in page_ids:
+        ch_prefix = page_id.split(".")[0]
+        by_chapter.setdefault(ch_prefix, []).append(page_id)
+    
+    for ch_prefix, ids in by_chapter.items():
+        # Find or create chapter
+        target_ch = None
+        for ch in hierarchy:
+            if ch.get("pages") and ch["pages"][0]["id"].startswith(ch_prefix + "."):
+                target_ch = ch
+                break
+        
+        if target_ch is None:
+            ch_num = int(ch_prefix)
+            target_ch = {"title": "", "summary": "", "pages": []}
+            insert_idx = 0
+            for i, ch in enumerate(hierarchy):
+                if ch.get("pages"):
+                    existing_prefix = int(ch["pages"][0]["id"].split(".")[0])
+                    if existing_prefix < ch_num:
+                        insert_idx = i + 1
+            hierarchy.insert(insert_idx, target_ch)
+        
+        for page_id in sorted(ids):
+            if not any(p["id"] == page_id for p in target_ch["pages"]):
+                target_ch["pages"].append({"id": page_id, "title": ""})
+        
+        target_ch["pages"].sort(key=lambda p: p["id"])
+    
+    HIERARCHY_FILE.write_text(json.dumps(hierarchy, indent=4))
+
+def add_single_file_to_hierarchy(page_id, title):
+    """Add a single page ID to hierarchy.json with the given title."""
+    try:
+        hierarchy = json.loads(HIERARCHY_FILE.read_text())
+        ch_prefix = page_id.split(".")[0]
+        
+        # Find existing chapter with matching prefix
+        target_ch = None
+        for ch in hierarchy:
+            if ch.get("pages"):
+                for p in ch["pages"]:
+                    if p["id"].startswith(ch_prefix + "."):
+                        target_ch = ch
+                        break
+                if target_ch:
+                    break
+        
+        if target_ch is None:
+            # Create new chapter
+            ch_num = int(ch_prefix)
+            target_ch = {"title": "", "summary": "", "pages": []}
+            insert_idx = len(hierarchy)
+            for i, ch in enumerate(hierarchy):
+                if ch.get("pages"):
+                    existing_prefix = int(ch["pages"][0]["id"].split(".")[0])
+                    if existing_prefix > ch_num:
+                        insert_idx = i
+                        break
+            hierarchy.insert(insert_idx, target_ch)
+        
+        if not any(p["id"] == page_id for p in target_ch["pages"]):
+            target_ch["pages"].append({"id": page_id, "title": title})
+            target_ch["pages"].sort(key=lambda p: p["id"])
+        
+        HIERARCHY_FILE.write_text(json.dumps(hierarchy, indent=4))
+    except Exception:
+        pass  # Silently fail rather than crash
+
+
 
 def compile_target(target, output, page_offset=None, page_map=None, extra_flags=None, callback=None, log_callback=None):
     cmd = ["typst", "compile", RENDERER_FILE, str(output), "--root", ".", "--input", f"target={target}"]
@@ -104,31 +237,38 @@ def compile_target(target, output, page_offset=None, page_map=None, extra_flags=
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     all_stderr = []
     
-    # Make stderr non-blocking for real-time output
-    fd = proc.stderr.fileno()
-    fl = fcntl.fcntl(fd, fcntl.F_GETFL)
-    fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-    
-    while proc.poll() is None:
-        if callback: callback()
-        try:
-            chunk = proc.stderr.read(4096)
-            if chunk:
-                all_stderr.append(chunk)
-                if log_callback: log_callback(chunk)
-        except: pass
-        time.sleep(0.05)
-    
-    # Get any remaining output
-    stdout, stderr = proc.communicate()
-    if stderr:
-        all_stderr.append(stderr)
-        if log_callback:
-            log_callback(stderr)
-    
-    if proc.returncode != 0:
-        raise subprocess.CalledProcessError(proc.returncode, cmd, output=stdout, stderr=''.join(all_stderr))
-    return ''.join(all_stderr)
+    try:
+        # Make stderr non-blocking for real-time output
+        fd = proc.stderr.fileno()
+        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+        
+        while proc.poll() is None:
+            if callback: callback()
+            try:
+                chunk = proc.stderr.read(4096)
+                if chunk:
+                    all_stderr.append(chunk)
+                    if log_callback: log_callback(chunk)
+            except: pass
+            time.sleep(0.05)
+        
+        # Get any remaining output
+        stdout, stderr = proc.communicate()
+        if stderr:
+            all_stderr.append(stderr)
+            if log_callback:
+                log_callback(stderr)
+        
+        if proc.returncode != 0:
+            raise subprocess.CalledProcessError(proc.returncode, cmd, output=stdout, stderr=''.join(all_stderr))
+        return ''.join(all_stderr)
+    finally:
+        # Explicit cleanup
+        if proc.stdout: proc.stdout.close()
+        if proc.stderr: proc.stderr.close()
+        del all_stderr
+        gc.collect()
 
 def merge_pdfs(pdf_files, output):
     files = [str(p) for p in pdf_files if p.exists()]
@@ -207,14 +347,13 @@ def init_colors():
     curses.curs_set(0)
 
 def disable_flow_control():
-    """Disable XON/XOFF flow control to allow Ctrl+S/Ctrl+Q"""
     try:
         fd = sys.stdin.fileno()
         attrs = termios.tcgetattr(fd)
-        attrs[0] &= ~(termios.IXON | termios.IXOFF)  # Disable XON/XOFF
+        attrs[0] &= ~(termios.IXON | termios.IXOFF)
         termios.tcsetattr(fd, termios.TCSANOW, attrs)
     except:
-        pass  # Ignore errors if not a TTY
+        pass
 
 def safe_addstr(scr, y, x, text, attr=0):
     try:
@@ -225,7 +364,6 @@ def safe_addstr(scr, y, x, text, attr=0):
         pass
 
 def prompt_save(scr):
-    """Show save confirmation prompt, returns 'y', 'n', or 'c'"""
     h, w = scr.getmaxyx()
     safe_addstr(scr, h - 1, 2, "Save? (y/n/c): ", curses.color_pair(3) | curses.A_BOLD)
     scr.refresh()
@@ -233,7 +371,6 @@ def prompt_save(scr):
     return chr(c) if c in (ord('y'), ord('n'), ord('c')) else 'c'
 
 def show_saved(scr):
-    """Show 'Saved!' message briefly"""
     h, w = scr.getmaxyx()
     safe_addstr(scr, h - 1, 2, "Saved!", curses.color_pair(2) | curses.A_BOLD)
     scr.refresh()
@@ -428,7 +565,8 @@ class BuildMenu:
                     cb = "[✓]" if self.ch_selected(ci) else "[~]" if self.ch_partial(ci) else "[ ]"
                     cc = 2 if self.ch_selected(ci) else 3 if self.ch_partial(ci) else 4
                     safe_addstr(self.scr, y, bx + 4, cb, curses.color_pair(cc))
-                    safe_addstr(self.scr, y, bx + 7, f" Ch {ch['pages'][0]['id'][:2]}: {ch['title']}"[:bw-12], curses.color_pair(1))
+                    ch_num = ch['pages'][0]['id'][:2] if ch.get('pages') else f"{ci+1:02d}"
+                    safe_addstr(self.scr, y, bx + 7, f" Ch {ch_num}: {ch['title']}"[:bw-12], curses.color_pair(1))
                 else:
                     p = self.hierarchy[ci]["pages"][ai]
                     sel = self.selected.get((ci, ai), False)
@@ -559,7 +697,6 @@ class BuildMenu:
 # =============================================================================
 
 def extract_themes():
-    """Extract theme names from schemes.json"""
     try:
         schemes = json.loads(SCHEMES_FILE.read_text())
         return list(schemes.keys())
@@ -567,7 +704,6 @@ def extract_themes():
         return ["dark", "light", "rose-pine", "nord", "dracula", "gruvbox"]
 
 def hex_to_curses_color(hex_color):
-    """Convert hex color to curses color pair index (rough approximation)"""
     if not hex_color or not hex_color.startswith('#'): return 4
     try:
         r = int(hex_color[1:3], 16)
@@ -584,7 +720,6 @@ def hex_to_curses_color(hex_color):
         return 4
 
 def show_editor_menu(scr):
-    """Show menu to select which editor to open, returns immediately after editor closes"""
     init_colors()
     disable_flow_control()  # Allow Ctrl+S to work in editors
     cursor = 0
@@ -594,6 +729,7 @@ def show_editor_menu(scr):
         ("3", "Scheme Editor", "Color themes"),
         ("4", "Preface Editor", "Preface content"),
         ("5", "Snippets Editor", "Custom macros"),
+        ("6", "Indexignore Editor", "Ignored files"),
     ]
     
     while True:
@@ -627,17 +763,17 @@ def show_editor_menu(scr):
             return
         elif k in (curses.KEY_UP, ord('k')): cursor = max(0, cursor - 1)
         elif k in (curses.KEY_DOWN, ord('j')): cursor = min(len(options) - 1, cursor + 1)
-        elif k in (ord('\n'), curses.KEY_ENTER, 10) or (ord('1') <= k <= ord('5')):
-            idx = k - ord('1') if ord('1') <= k <= ord('5') else cursor
+        elif k in (ord('\n'), curses.KEY_ENTER, 10) or (ord('1') <= k <= ord('6')):
+            idx = k - ord('1') if ord('1') <= k <= ord('6') else cursor
             if idx == 0: ConfigEditor(scr).run()
             elif idx == 1: HierarchyEditor(scr).run()
             elif idx == 2: SchemeEditor(scr).run()
             elif idx == 3: TextEditor(scr, PREFACE_FILE, "Preface Editor").run()
             elif idx == 4: SnippetsEditor(scr).run()
+            elif idx == 5: IndexignoreEditor(scr).run()
 
 
 class TextEditor:
-    """Nano-like text editor with soft wrapping"""
     def __init__(self, scr, filepath=None, title="Editor", initial_text=None):
         self.scr = scr
         self.filepath = filepath
@@ -656,7 +792,6 @@ class TextEditor:
         init_colors()
         
     def _get_visual_lines(self, width):
-        """Convert logical lines to visual lines based on width"""
         visual_lines = []
         for i, line in enumerate(self.lines):
             if not line:
@@ -870,7 +1005,6 @@ class TextEditor:
 
 
 class ConfigEditor:
-    """Field-based config editor with popup editing"""
     def __init__(self, scr):
         self.scr = scr
         self.config = json.loads(CONFIG_FILE.read_text())
@@ -1000,8 +1134,102 @@ class ConfigEditor:
             self.refresh()
 
 
+class IndexignoreEditor:
+    """Simple editor for .indexignore file - list of ignored file IDs."""
+    def __init__(self, scr):
+        self.scr = scr
+        self.items = sorted(load_indexignore())
+        self.cursor = 0
+        self.scroll = 0
+        self.modified = False
+        init_colors()
+    
+    def save(self):
+        save_indexignore(set(self.items))
+        self.modified = False
+        return True
+    
+    def refresh(self):
+        h, w = self.scr.getmaxyx()
+        self.scr.clear()
+        
+        bw = min(50, w - 4)
+        bh = min(h - 6, 20)
+        bx = (w - bw) // 2
+        by = (h - bh) // 2
+        
+        draw_box(self.scr, by, bx, bh, bw, " Indexignore Editor ")
+        
+        safe_addstr(self.scr, by + 1, bx + 2, f"Ignored files: {len(self.items)}", curses.color_pair(4) | curses.A_DIM)
+        
+        visible = bh - 5
+        if self.cursor < self.scroll:
+            self.scroll = self.cursor
+        elif self.cursor >= self.scroll + visible:
+            self.scroll = self.cursor - visible + 1
+        
+        if not self.items:
+            safe_addstr(self.scr, by + 3, bx + 4, "(no ignored files)", curses.color_pair(4) | curses.A_DIM)
+        else:
+            for i in range(visible):
+                idx = self.scroll + i
+                if idx >= len(self.items):
+                    break
+                y = by + 3 + i
+                item = self.items[idx]
+                if idx == self.cursor:
+                    safe_addstr(self.scr, y, bx + 2, ">", curses.color_pair(3) | curses.A_BOLD)
+                    safe_addstr(self.scr, y, bx + 4, item, curses.color_pair(1) | curses.A_BOLD)
+                else:
+                    safe_addstr(self.scr, y, bx + 4, item, curses.color_pair(4))
+        
+        footer = "a:Add  d:Delete  s:Save  q:Quit"
+        safe_addstr(self.scr, by + bh - 1, bx + (bw - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
+        
+        self.scr.refresh()
+    
+    def run(self):
+        while True:
+            self.refresh()
+            k = self.scr.getch()
+            
+            if k in (ord('q'), 27):
+                if self.modified:
+                    # Ask to save
+                    pass  # For simplicity, just exit
+                return
+            elif k in (curses.KEY_UP, ord('k')) and self.items:
+                self.cursor = max(0, self.cursor - 1)
+            elif k in (curses.KEY_DOWN, ord('j')) and self.items:
+                self.cursor = min(len(self.items) - 1, self.cursor + 1)
+            elif k == ord('a'):
+                # Add new item
+                curses.echo()
+                curses.curs_set(1)
+                h, w = self.scr.getmaxyx()
+                self.scr.addstr(h - 2, 2, "Enter file ID to ignore: ")
+                self.scr.clrtoeol()
+                self.scr.refresh()
+                try:
+                    new_id = self.scr.getstr(h - 2, 27, 20).decode('utf-8').strip()
+                    if new_id and new_id not in self.items:
+                        self.items.append(new_id)
+                        self.items.sort()
+                        self.modified = True
+                except:
+                    pass
+                curses.noecho()
+                curses.curs_set(0)
+            elif k == ord('d') and self.items:
+                del self.items[self.cursor]
+                self.cursor = min(self.cursor, len(self.items) - 1) if self.items else 0
+                self.modified = True
+            elif k == ord('s'):
+                self.save()
+                show_saved(self.scr)
+
+
 class HierarchyEditor:
-    """Structured hierarchy editor with popup editing"""
     def __init__(self, scr):
         self.scr = scr
         self.hierarchy = json.loads(HIERARCHY_FILE.read_text())
@@ -1065,6 +1293,13 @@ class HierarchyEditor:
         self.hierarchy[ci]["pages"].append(new_page)
         self.modified = True
         self._build_items()
+        
+        # Create actual .typ file on disk
+        chapter_dir = CONTENT_DIR / f"chapter {ch_prefix}"
+        chapter_dir.mkdir(parents=True, exist_ok=True)
+        typ_file = chapter_dir / f"{new_id}.typ"
+        if not typ_file.exists():
+            typ_file.write_text(f'// Section {new_id}\n\n#import "/templates/setup.typ": *\n\n')
     
     def _delete_current(self):
         t, ci, pi, _ = self.items[self.cursor]
@@ -1168,7 +1403,6 @@ class HierarchyEditor:
 
 
 class SchemeEditor:
-    """Color scheme editor with popup editing"""
     def __init__(self, scr):
         self.scr = scr
         self.schemes = json.loads(SCHEMES_FILE.read_text())
@@ -1226,7 +1460,6 @@ class SchemeEditor:
         self.modified = True
     
     def _get_label(self, key):
-        """Get display label for a color key"""
         if key.startswith("block."):
             parts = key.split(".")
             return f"{parts[1]}.{parts[2]}"
@@ -1361,7 +1594,6 @@ class SchemeEditor:
 
 
 class SnippetsEditor:
-    """Two-column snippet editor with name on left, definition on right"""
     def __init__(self, scr):
         self.scr = scr
         self.cursor, self.scroll, self.modified = 0, 0, False
@@ -1369,19 +1601,16 @@ class SnippetsEditor:
         init_colors()
     
     def _load_snippets(self):
-        """Parse snippets.typ file into list of (name, definition) tuples"""
         self.snippets = []
         try:
             content = SNIPPETS_FILE.read_text()
             for line in content.split('\n'):
                 line = line.strip()
                 if line.startswith('#let ') and '=' in line:
-                    # Parse: #let name = definition
-                    rest = line[5:]  # Remove '#let '
+                    rest = line[5:]
                     eq_pos = rest.find('=')
                     if eq_pos != -1:
                         name = rest[:eq_pos].strip()
-                        # Handle function definitions like sq(k)
                         if '(' in name:
                             name = name[:name.find('(') + 1] + name[name.find('(') + 1:name.find(')') + 1]
                         definition = rest[eq_pos + 1:].strip()
@@ -1392,7 +1621,6 @@ class SnippetsEditor:
             self.snippets = [["example", "[example text]"]]
     
     def _save_snippets(self):
-        """Write snippets back to file"""
         lines = []
         for name, definition in self.snippets:
             lines.append(f"#let {name} = {definition}")
@@ -1550,10 +1778,9 @@ class BuildUI:
     def set_progress(self, p, t): self.progress, self.total = p, t; self.refresh()
     
     def check_input(self):
-        """Check for user input during build."""
         try:
             k = self.scr.getch()
-            if k == -1:  # No key pressed (timeout)
+            if k == -1:
                 return
             if k == ord('v'):
                 self.view = "typst" if self.view == "normal" else "normal"
@@ -1610,17 +1837,38 @@ class BuildUI:
 
 def run_build(scr, args, hierarchy, opts):
     ui = BuildUI(scr, opts['debug'])
-    scr.keypad(True)   # Enable keypad for special keys
-    scr.nodelay(False) # Disable nodelay
-    scr.timeout(0)     # timeout(0) = non-blocking getch, returns -1 immediately if no key
+    scr.keypad(True)
+    scr.nodelay(False)
+    scr.timeout(0)
     
-    ui.log("Checking dependencies...")
+    # Thread-safe lock for UI updates
+    ui_lock = threading.Lock()
+    progress_counter = [0]  # Use list for mutable reference in closures
+    
+    def safe_log(msg, ok=False):
+        with ui_lock:
+            ui.log(msg, ok)
+    
+    def safe_log_typst(out):
+        with ui_lock:
+            ui.log_typst(out)
+    
+    def safe_refresh():
+        with ui_lock:
+            ui.refresh()
+    
+    def increment_progress(total):
+        with ui_lock:
+            progress_counter[0] += 1
+            ui.set_progress(progress_counter[0], total)
+    
+    safe_log("Checking dependencies...")
     check_dependencies()
-    ui.log("Dependencies OK", True)
+    safe_log("Dependencies OK", True)
     
     if BUILD_DIR.exists(): shutil.rmtree(BUILD_DIR)
     BUILD_DIR.mkdir()
-    ui.log("Build directory prepared", True)
+    safe_log("Build directory prepared", True)
     
     pages = opts.get('selected_pages', [])
     by_ch = {}
@@ -1628,73 +1876,154 @@ def run_build(scr, args, hierarchy, opts):
         by_ch.setdefault(ci, []).append(ai)
     
     chapters = [(i, hierarchy[i]) for i in sorted(by_ch.keys())]
-    ui.log(f"Building {len(pages)} pages from {len(chapters)} chapters", True)
+    safe_log(f"Building {len(pages)} pages from {len(chapters)} chapters", True)
+    
+    # Determine thread count (use CPU count, but cap at 4 to avoid memory issues)
+    max_workers = min(4, os.cpu_count() or 2)
+    safe_log(f"Using {max_workers} parallel workers", True)
     
     total = (3 if opts['frontmatter'] else 0) + sum(1 + len(by_ch[ci]) for ci, _ in chapters)
     ui.set_phase("Compiling Sections")
     ui.set_progress(0, total + 1)
     
-    page_map, current, pdfs, prog = {}, 1, [], 0
+    page_map, current, pdfs = {}, 1, []
     flags = opts.get('typst_flags', [])
+    # Import for parallel compilation
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     
+    def compile_simple(target, output, extra_flags):
+        compile_target(target, output, extra_flags=extra_flags)
+        return (target, output, get_pdf_page_count(output))
+    
+    # Phase 1: Frontmatter in parallel (cover, preface don't need page offsets; TOC is regenerated later)
     if opts['frontmatter']:
-        for target, name, label in [("cover", "00_cover.pdf", "Cover"), ("preface", "01_preface.pdf", "Preface"), ("outline", "02_outline.pdf", "TOC")]:
-            ui.set_task(label)
-            out = BUILD_DIR / name
-            compile_target(target, out, extra_flags=flags, callback=ui.refresh, log_callback=ui.log_typst)
-            pdfs.append(out); page_map[target] = current; current += get_pdf_page_count(out)
-            prog += 1; ui.set_progress(prog, total + 1)
-            ui.log(f"{label} compiled", True)
+        with ui_lock:
+            ui.set_task("Compiling frontmatter in parallel...")
+        
+        frontmatter_tasks = [
+            ("cover", BUILD_DIR / "00_cover.pdf", "Cover"),
+            ("preface", BUILD_DIR / "01_preface.pdf", "Preface"),
+            ("outline", BUILD_DIR / "02_outline.pdf", "TOC"),
+        ]
+        
+        frontmatter_results = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(compile_simple, t, o, flags): t for t, o, _ in frontmatter_tasks}
+            for future in as_completed(futures):
+                target = futures[future]
+                try:
+                    t, out, page_count = future.result()
+                    frontmatter_results[t] = (out, page_count)
+                    increment_progress(total + 1)
+                except Exception as e:
+                    safe_log(f"Error compiling {target}: {e}")
+                    raise
+        
+        # Add frontmatter to pdfs in correct order and calculate page offsets
+        for target, out, label in frontmatter_tasks:
+            if target in frontmatter_results:
+                output, page_count = frontmatter_results[target]
+                pdfs.append(output)
+                page_map[target] = current
+                current += page_count
+                safe_log(f"{label} compiled", True)
     
+    # Phase 2: Compile all chapter covers in parallel, then content pages sequentially per chapter
+    # First, compile all chapter covers in parallel
+    chapter_covers = []
     for ci, ch in chapters:
         ch_id = ch["pages"][0]["id"][:2]
-        ui.set_task(f"Chapter {ch_id}: {ch['title']}")
         out = BUILD_DIR / f"10_chapter_{ch_id}_cover.pdf"
-        page_map[f"chapter-{ch_id}"] = current
-        compile_target(f"chapter-{ch_id}", out, page_offset=current, extra_flags=flags, callback=ui.refresh, log_callback=ui.log_typst)
-        pdfs.append(out); current += get_pdf_page_count(out)
-        prog += 1; ui.set_progress(prog, total + 1)
+        chapter_covers.append((f"chapter-{ch_id}", out, ch_id, ci))
+    
+    if chapter_covers:
+        with ui_lock:
+            ui.set_task(f"Compiling {len(chapter_covers)} chapter covers in parallel...")
         
+        cover_results = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(compile_simple, t, o, flags): t for t, o, _, _ in chapter_covers}
+            for future in as_completed(futures):
+                target = futures[future]
+                try:
+                    t, out, page_count = future.result()
+                    cover_results[t] = (out, page_count)
+                except Exception as e:
+                    safe_log(f"Error compiling {target}: {e}")
+                    raise
+        
+        safe_log(f"Chapter covers compiled in parallel", True)
+    
+    # Now process each chapter: add cover to pdfs, then compile content pages sequentially
+    for ci, ch in chapters:
+        ch_id = ch["pages"][0]["id"][:2]
+        cover_target = f"chapter-{ch_id}"
+        cover_out = BUILD_DIR / f"10_chapter_{ch_id}_cover.pdf"
+        
+        # Add chapter cover (already compiled)
+        if cover_target in cover_results:
+            output, page_count = cover_results[cover_target]
+            page_map[cover_target] = current
+            pdfs.append(output)
+            current += page_count
+            increment_progress(total + 1)
+        
+        # Compile content pages sequentially (required for correct page offsets)
         for ai in sorted(by_ch[ci]):
             p = ch["pages"][ai]
-            ui.set_task(f"Section {p['id']}: {p['title']}")
+            with ui_lock:
+                ui.set_task(f"Section {p['id']}: {p['title']}")
             out = BUILD_DIR / f"20_page_{p['id']}.pdf"
             page_map[p["id"]] = current
-            compile_target(p["id"], out, page_offset=current, extra_flags=flags, callback=ui.refresh, log_callback=ui.log_typst)
-            pdfs.append(out); current += get_pdf_page_count(out)
-            prog += 1; ui.set_progress(prog, total + 1)
+            compile_target(p["id"], out, page_offset=current, extra_flags=flags, callback=safe_refresh, log_callback=safe_log_typst)
+            pdfs.append(out)
+            current += get_pdf_page_count(out)
+            increment_progress(total + 1)
         
-        ui.log(f"Chapter {ch_id} compiled", True)
+        safe_log(f"Chapter {ch_id} compiled", True)
+        
+        # Cleanup after each chapter
+        gc.collect()
     
+    # Phase 3: Regenerate TOC with final page map
     if opts['frontmatter']:
-        ui.set_task("Regenerating TOC")
+        with ui_lock:
+            ui.set_task("Regenerating TOC")
         out = BUILD_DIR / "02_outline.pdf"
-        compile_target("outline", out, page_offset=page_map["outline"], page_map=page_map, extra_flags=flags, callback=ui.refresh, log_callback=ui.log_typst)
-        ui.log("TOC regenerated", True)
+        compile_target("outline", out, page_offset=page_map["outline"], page_map=page_map, extra_flags=flags, callback=safe_refresh, log_callback=safe_log_typst)
+        safe_log("TOC regenerated", True)
     
-    ui.log(f"Total pages: {current - 1}", True)
+    safe_log(f"Total pages: {current - 1}", True)
     
+    # Phase 4: Merge and metadata
     ui.set_phase("Merging PDFs")
     method = merge_pdfs(pdfs, OUTPUT_FILE)
-    if method: ui.log(f"Merged with {method}", True)
+    if method: safe_log(f"Merged with {method}", True)
+    
+    # Cleanup pdfs list
+    pdfs.clear()
+    gc.collect()
     
     ui.set_phase("Adding Metadata")
     bm = BUILD_DIR / "bookmarks.txt"
     create_pdf_metadata([ch for _, ch in chapters], page_map, bm)
     apply_pdf_metadata(OUTPUT_FILE, bm, "Noteworthy Framework", "Sihoo Lee, Lee Hojun")
-    ui.log("PDF metadata applied", True)
+    safe_log("PDF metadata applied", True)
     
     if opts['leave_individual']:
         zip_build_directory(BUILD_DIR)
-        ui.log("Individual PDFs archived", True)
+        safe_log("Individual PDFs archived", True)
     
     if BUILD_DIR.exists():
         shutil.rmtree(BUILD_DIR)
-        ui.log("Build directory cleaned", True)
+        safe_log("Build directory cleaned", True)
     
     ui.set_phase("BUILD COMPLETE!")
     ui.set_progress(total + 1, total + 1)
-    ui.log(f"Created {OUTPUT_FILE} ({current - 1} pages)", True)
+    safe_log(f"Created {OUTPUT_FILE} ({current - 1} pages)", True)
+    
+    # Final cleanup
+    gc.collect()
     
     scr.nodelay(False)
     show_success_screen(scr, current - 1, ui.has_warnings, ui.typst_logs)
@@ -1704,7 +2033,6 @@ def run_build(scr, args, hierarchy, opts):
 # =============================================================================
 
 class InitWizard:
-    """First-time setup wizard for config.json"""
     def __init__(self, scr):
         self.scr = scr
         self.config = {
@@ -1854,7 +2182,6 @@ class InitWizard:
             return None
 
 def needs_init():
-    """Check if we need to run the init wizard"""
     return not CONFIG_FILE.exists()
 
 # =============================================================================
@@ -1870,6 +2197,112 @@ def run_app(scr, args):
         wizard = InitWizard(scr)
         if wizard.run() is None:
             return  # User cancelled
+    
+    scr.clear()
+    h, w = scr.getmaxyx()
+    safe_addstr(scr, h // 2, (w - 24) // 2, "Syncing content files...", curses.color_pair(1) | curses.A_BOLD)
+    scr.refresh()
+    
+    # Sync hierarchy with content directory
+    try:
+        missing_files, new_files = sync_hierarchy_with_content()
+    except Exception as e:
+        show_error_screen(scr, f"Error syncing hierarchy: {e}")
+        return
+    
+    # Load ignored files from .indexignore
+    ignored_files = load_indexignore()
+    new_files = [f for f in new_files if f not in ignored_files]
+    
+    # FATAL ERROR if files are missing from content
+    if missing_files:
+        scr.clear()
+        h, w = scr.getmaxyx()
+        
+        # Draw sad face
+        face = SAD_FACE
+        face_start_y = max(2, (h - len(face) - 12) // 2)
+        face_x = (w - len(face[0])) // 2
+        for i, line in enumerate(face):
+            safe_addstr(scr, face_start_y + i, face_x, line, curses.color_pair(6) | curses.A_BOLD)
+        
+        # Error message
+        msg_y = face_start_y + len(face) + 2
+        safe_addstr(scr, msg_y, (w - 12) // 2, "BUILD FAILED", curses.color_pair(6) | curses.A_BOLD)
+        
+        error_msg = "Files in hierarchy.json are missing from content/"
+        safe_addstr(scr, msg_y + 2, (w - len(error_msg)) // 2, error_msg, curses.color_pair(6))
+        
+        # List missing files
+        list_y = msg_y + 4
+        max_show = min(len(missing_files), h - list_y - 4)
+        for i, page_id in enumerate(missing_files[:max_show]):
+            path = f"content/chapter {page_id[:2]}/{page_id}.typ"
+            safe_addstr(scr, list_y + i, (w - len(path) - 4) // 2, f"• {path}", curses.color_pair(6))
+        if len(missing_files) > max_show:
+            safe_addstr(scr, list_y + max_show, (w - 20) // 2, f"... and {len(missing_files) - max_show} more", curses.color_pair(6) | curses.A_DIM)
+        
+        safe_addstr(scr, h - 2, (w - 30) // 2, "Press any key to exit...", curses.color_pair(4) | curses.A_DIM)
+        scr.refresh()
+        scr.getch()
+        return  # Exit program
+    
+    # Handle new files one at a time
+    for page_id in new_files:
+        scr.clear()
+        h, w = scr.getmaxyx()
+        
+        bw = min(55, w - 6)
+        bh = 11
+        bx = (w - bw) // 2
+        by = (h - bh) // 2
+        
+        draw_box(scr, by, bx, bh, bw, " New File Found ")
+        
+        # Explanation
+        safe_addstr(scr, by + 2, bx + 2, "A file was found that is not in hierarchy.", curses.color_pair(4))
+        
+        safe_addstr(scr, by + 4, bx + 2, f"File: {page_id}.typ", curses.color_pair(1) | curses.A_BOLD)
+        safe_addstr(scr, by + 5, bx + 2, f"Path: content/chapter {page_id[:2]}/", curses.color_pair(4) | curses.A_DIM)
+        
+        safe_addstr(scr, by + 7, bx + 2, "What would you like to do?", curses.color_pair(4))
+        safe_addstr(scr, by + bh - 2, bx + 2, "'a' add  |  'i' ignore  |  's' skip", curses.color_pair(4) | curses.A_DIM)
+        
+        scr.refresh()
+        k = scr.getch()
+        
+        if k == ord('a'):
+            # Prompt for title
+            curses.echo()
+            curses.curs_set(1)
+            
+            scr.clear()
+            h, w = scr.getmaxyx()
+            
+            draw_box(scr, by, bx, bh, bw, f" Add {page_id} ")
+            safe_addstr(scr, by + 2, bx + 2, "Enter title:", curses.color_pair(4))
+            safe_addstr(scr, by + 4, bx + 2, "> ", curses.color_pair(3) | curses.A_BOLD)
+            scr.refresh()
+            
+            try:
+                title = scr.getstr(by + 4, bx + 4, bw - 8).decode('utf-8').strip()
+            except:
+                title = ""
+            
+            curses.noecho()
+            curses.curs_set(0)
+            
+            if not title:
+                title = page_id  # Default to page ID if blank
+            
+            # Add single file to hierarchy with the title
+            add_single_file_to_hierarchy(page_id, title)
+            
+        elif k == ord('i'):
+            # Add to .indexignore
+            ignored_files.add(page_id)
+            save_indexignore(ignored_files)
+        # 's' or any other key = skip (just continue to next file)
     
     scr.clear()
     h, w = scr.getmaxyx()
