@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-"""Noteworthy Build System - Interactive TUI for building Typst documents"""
-
 import copy
 import curses
 import fcntl
