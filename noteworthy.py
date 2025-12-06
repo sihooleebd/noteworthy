@@ -2134,7 +2134,9 @@ class InitWizard:
             "box-inset": "15pt",
             "render-sample-count": 5000,
             "render-implicit-count": 100,
-            "display-mode": "rose-pine"
+            "display-mode": "rose-pine",
+            "pad-chapter-id": True,
+            "pad-page-id": True,
         }
         self.steps = [
             ("title", "Document Title", "Enter the main title of your document:", "str"),
