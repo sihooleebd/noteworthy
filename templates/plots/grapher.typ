@@ -26,7 +26,7 @@
   type: "y=x",
   domain: auto,
   y-domain: (-5, 5),
-  samples: auto, // Use auto to select appropriate default based on type
+  samples: render-sample-count,
   label: none,
   style: (:),
 ) = {
@@ -35,30 +35,21 @@
   } else {
     black
   }
-  
+
   let base-color = if "stroke" in style { style.stroke } else { highlight-col }
   let final-style = (stroke: base-color) + style
-  
-  // Select appropriate sample count based on plot type
-  let actual-samples = if samples != auto {
-    samples
-  } else if type == "implicit" {
-    render-implicit-count
-  } else {
-    render-sample-count
-  }
-  
+
   let common-args = (
-    samples: actual-samples,
+    samples: samples,
     style: final-style,
   )
-  
+
   if label != none {
     // Wrap label in theme's text color
     let colored-label = text(fill: theme.plot.stroke, label)
     common-args.insert("label", colored-label)
   }
-  
+
   if type == "y=x" {
     // Standard Function: y = f(x)
     let x-dom = if domain == auto { (-5, 5) } else { domain }
@@ -86,18 +77,21 @@
   } else if type == "implicit" {
     // Implicit Equation: f(x, y) = 0
     let x-dom = if domain == auto { (-5, 5) } else { domain }
-    
+
+    // Use implicit count if samples is still default
+    let effective-samples = if samples == render-sample-count { render-implicit-count } else { samples }
+
     plot.add-contour(
       x-domain: x-dom,
       y-domain: y-domain,
-      x-samples: actual-samples,
-      y-samples: actual-samples,
+      x-samples: effective-samples,
+      y-samples: effective-samples,
       z: 0,
       fill: false,
       style: final-style,
       func,
     )
-    
+
     if label != none {
       plot.annotate({
         import cetz.draw: *
