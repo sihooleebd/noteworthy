@@ -99,9 +99,25 @@ def get_formatted_name(path_str, hierarchy, config=None):
     ch_width = len(str(total_chapters))
     pg_width = len(str(total_pages)) if total_pages > 0 else 2
     
-    # Pad indices (1-based for display)
-    ch_disp = str(ci + 1).zfill(ch_width)
-    pg_disp = str(pi + 1).zfill(pg_width)
+    # helper to check for explicit number
+    def get_num(idx, item):
+        return str(item.get("number", idx + 1))
+
+    # Get numbers
+    ch_item = hierarchy[ci] if ci < len(hierarchy) else {}
+    ch_num_str = get_num(ci, ch_item)
+    
+    pg_item = {}
+    if ci < len(hierarchy) and pi < len(hierarchy[ci].get("pages", [])):
+        pg_item = hierarchy[ci]["pages"][pi]
+    pg_num_str = get_num(pi, pg_item)
+    
+    # Pad indices (1-based for display) - Only pad if it looks like a standard index (digit)
+    # If user provided explicit "8", we pad it if wanted. If they provided "14a", we don't.
+    # standard behavior: if it's digit, pad.
+    
+    ch_disp = ch_num_str.zfill(ch_width) if ch_num_str.isdigit() else ch_num_str
+    pg_disp = pg_num_str.zfill(pg_width) if pg_num_str.isdigit() else pg_num_str
     
     label = config.get("subchap-name", "Section")
     return f"{label} {ch_disp}.{pg_disp}"
@@ -320,9 +336,35 @@ def create_pdf_metadata(chapters, page_map, output_file):
             bookmarks.extend([f"BookmarkBegin", f"BookmarkTitle: {title}", f"BookmarkLevel: 1", f"BookmarkPageNumber: {page_map[key]}"])
     
     for ci, ch in chapters:
-        ch_id = str(ci + 1)
-        if f"chapter-{ch_id}" in page_map:
-            bookmarks.extend([f"BookmarkBegin", f"BookmarkTitle: {ch['title']}", f"BookmarkLevel: 1", f"BookmarkPageNumber: {page_map[f'chapter-{ch_id}']}"])
+        ch_id = str(ch.get("number", ci + 1))
+        if f"chapter-{ci}" in page_map: # Typst uses index-based labels for internal referencing usually, or we need to align with parser.typ
+             # parser.typ logic: label("chapter-" + str(i + 1)) -> This is actually HARDCODED to index+1 in parser.typ right now.
+             # I need to sync this. If I change parser.typ to use "number", I must change this too.
+             # Wait, parser.typ: #label("chapter-" + str(i + 1)) is used.
+             # So the keys in page_map will be "chapter-1", "chapter-2" (Indices+1).
+             # REGARLESS of what text is displayed.
+             # So for Mapping, we stick to Indices for keys, but Titles for display.
+             pass 
+        
+        # Actually, let's keep keys as indices for stability, just change display titles?
+        # The user wants "Add unconditional chapter numbers".
+        # If I change the label in parser.typ, I break this.
+        # Let's see parser.typ at line 56: #label("chapter-" + str(i + 1))
+        # This means the anchor is strictly index-based. Good.
+        # So page_map keys are safe.
+        
+        # Display Title:
+        # We need the prefix. "Chapter 8: Title"
+        # formatted id
+        ch_disp = str(ch.get("number", ci + 1))
+        ch_full_title = f"{ch['title']}" 
+        # Actually, standard bookmarks usually just have the title, or "Chapter X: Title".
+        # Existing code: f"BookmarkTitle: {ch['title']}" -> Just "First Chapter".
+        # Let's keep it as Title. The Number is usually part of the Section header on the page.
+        
+        if f"chapter-{ci+1}" in page_map:
+             bookmarks.extend([f"BookmarkBegin", f"BookmarkTitle: {ch['title']}", f"BookmarkLevel: 1", f"BookmarkPageNumber: {page_map[f'chapter-{ci+1}']}"])
+             
         for ai, p in enumerate(ch["pages"]):
             key = f"{ci}/{ai}"
             if key in page_map:
@@ -745,13 +787,15 @@ class BuildMenu:
                     cb = "[✓]" if self.ch_selected(ci) else "[~]" if self.ch_partial(ci) else "[ ]"
                     cc = 2 if self.ch_selected(ci) else 3 if self.ch_partial(ci) else 4
                     TUI.safe_addstr(self.scr, y, bx + 4, cb, curses.color_pair(cc))
-                    ch_num = str(ci + 1)
+                    TUI.safe_addstr(self.scr, y, bx + 4, cb, curses.color_pair(cc))
+                    ch_num = str(ch.get("number", ci + 1))
                     TUI.safe_addstr(self.scr, y, bx + 7, f" Ch {ch_num}: {ch['title']}"[:bw-12], curses.color_pair(1))
                 else:
                     p = self.hierarchy[ci]["pages"][ai]
                     sel = self.selected.get((ci, ai), False)
+                    p_num = str(p.get("number", ai + 1))
                     TUI.safe_addstr(self.scr, y, bx + 6, "[✓]" if sel else "[ ]", curses.color_pair(2 if sel else 4))
-                    TUI.safe_addstr(self.scr, y, bx + 9, f" {str(ai+1)}: {p['title']}"[:bw-14], curses.color_pair(4))
+                    TUI.safe_addstr(self.scr, y, bx + 9, f" {p_num}: {p['title']}"[:bw-14], curses.color_pair(4))
         
         def opts(sy, bx, bw):
             for i, (lbl, val, key) in enumerate([
@@ -1390,24 +1434,44 @@ class HierarchyEditor(ListEditor):
         self.items = []
         for ci, ch in enumerate(self.hierarchy):
             self.items.append(("ch_title", ci, None, ch))
+            self.items.append(("ch_number", ci, None, ch))
             self.items.append(("ch_summary", ci, None, ch))
             for pi, p in enumerate(ch.get("pages", [])):
                 self.items.append(("pg_title", ci, pi, p))
+                self.items.append(("pg_number", ci, pi, p))
             self.items.append(("add_page", ci, None, None))
         self.items.append(("add_chapter", None, None, None))
     
     def _get_value(self, item):
         t, ci, pi, _ = item
         if t == "ch_title": return self.hierarchy[ci]["title"]
+        elif t == "ch_number": return self.hierarchy[ci].get("number", "")
         elif t == "ch_summary": return self.hierarchy[ci]["summary"]
         elif t == "pg_title": return self.hierarchy[ci]["pages"][pi]["title"]
+        elif t == "pg_number": return self.hierarchy[ci]["pages"][pi].get("number", "")
         return ""
     
     def _set_value(self, val):
         t, ci, pi, _ = self.items[self.cursor]
-        if t == "ch_title": self.hierarchy[ci]["title"] = val
+        val = val.strip()
+        
+        # Handle number fields
+        if t in ("ch_number", "pg_number"):
+            if not val: # Empty string -> remove explicit number
+                if t == "ch_number": self.hierarchy[ci].pop("number", None)
+                else: self.hierarchy[ci]["pages"][pi].pop("number", None)
+            else:
+                # Try to convert to int if possible, else keep as string
+                try: real_val = int(val)
+                except: real_val = val
+                
+                if t == "ch_number": self.hierarchy[ci]["number"] = real_val
+                else: self.hierarchy[ci]["pages"][pi]["number"] = real_val
+                
+        elif t == "ch_title": self.hierarchy[ci]["title"] = val
         elif t == "ch_summary": self.hierarchy[ci]["summary"] = val
         elif t == "pg_title": self.hierarchy[ci]["pages"][pi]["title"] = val
+        
         self.modified = True; self._build_items()
     
     def _add_chapter(self):
@@ -1427,13 +1491,13 @@ class HierarchyEditor(ListEditor):
     
     def _delete_current(self):
         t, ci, pi, _ = self.items[self.cursor]
-        if t in ("ch_title", "ch_summary"):
+        if t in ("ch_title", "ch_summary", "ch_number"):
             if len(self.hierarchy) > 1:
                 del self.hierarchy[ci]
                 self.modified = True
                 self._build_items()
                 self.cursor = min(self.cursor, len(self.items) - 1)
-        elif t in ("pg_id", "pg_title"):
+        elif t in ("pg_id", "pg_title", "pg_number"):
             del self.hierarchy[ci]["pages"][pi]
             self.modified = True
             self._build_items()
@@ -1452,21 +1516,47 @@ class HierarchyEditor(ListEditor):
         if t == "ch_title":
             # Inline formatting
             ch_count = len(self.hierarchy)
-            width = 3 if ch_count >= 100 else 2
-            ch_num = str(ci + 1)
-            if self.config.get("pad-chapter-id", True):
-                ch_num = ch_num.zfill(width)
+            width_digits = 3 if ch_count >= 100 else 2
+            
+            # Use explicit number if available, else index
+            explicit_num = self.hierarchy[ci].get("number")
+            ch_num = str(explicit_num) if explicit_num is not None else str(ci + 1)
+            
+            if self.config.get("pad-chapter-id", True) and explicit_num is None:
+                ch_num = ch_num.zfill(width_digits)
+                
             label = self.config.get("chapter-name", "Chapter")
-            # Truncate label if too long
             label = (label[:6] + "..") if len(label) > 8 else label
-            TUI.safe_addstr(self.scr, y, x + 4, f"{label} {ch_num} Title:", curses.color_pair(1) | curses.A_BOLD)
-            TUI.safe_addstr(self.scr, y, x + 18, str(self._get_value(item))[:width-22], curses.color_pair(4))
+            
+            # Dynamic offset to prevent overlap
+            prefix = f"{label} {ch_num} Title:"
+            TUI.safe_addstr(self.scr, y, x + 4, prefix, curses.color_pair(1) | curses.A_BOLD)
+            
+            # Ensure value doesn't overwrite prefix
+            val_x = x + 4 + len(prefix) + 1
+            if val_x < x + 18: val_x = x + 18 # Minimum offset
+            
+            TUI.safe_addstr(self.scr, y, val_x, str(self._get_value(item))[:width-(val_x-x)-4], curses.color_pair(4))
+            
+        elif t == "ch_number":
+            TUI.safe_addstr(self.scr, y, x + 6, "Number:", curses.color_pair(4))
+            val = str(self._get_value(item))
+            if not val: val = "(auto)"
+            TUI.safe_addstr(self.scr, y, x + 18, val, curses.color_pair(4) | curses.A_DIM)
+            
         elif t == "ch_summary":
             TUI.safe_addstr(self.scr, y, x + 6, "Summary:", curses.color_pair(4))
             TUI.safe_addstr(self.scr, y, x + 18, str(self._get_value(item))[:width-22], curses.color_pair(4))
+            
         elif t == "pg_title":
             TUI.safe_addstr(self.scr, y, x + 6, "Title:", curses.color_pair(4))
             TUI.safe_addstr(self.scr, y, x + 18, str(self._get_value(item))[:width-22], curses.color_pair(4))
+            
+        elif t == "pg_number":
+            TUI.safe_addstr(self.scr, y, x + 8, "Number:", curses.color_pair(4))
+            val = str(self._get_value(item))
+            if not val: val = "(auto)"
+            TUI.safe_addstr(self.scr, y, x + 18, val, curses.color_pair(4) | curses.A_DIM)
         elif t == "add_page":
             TUI.safe_addstr(self.scr, y, x + 6, "+ Add page to this chapter...", curses.color_pair(3 if selected else 4) | curses.A_DIM)
         elif t == "add_chapter":
@@ -1484,7 +1574,7 @@ class HierarchyEditor(ListEditor):
             if t == "add_chapter": self._add_chapter()
             elif t == "add_page": self._add_page(ci)
             else:
-                curr_val = self.hierarchy[ci].get("summary", "") if t == "ch_summary" else self._get_value(item)
+                curr_val = str(self._get_value(item))
                 new_val = TextEditor(self.scr, initial_text=curr_val, title="Edit Value").run()
                 if new_val is not None: self._set_value(new_val)
             return True
@@ -2776,7 +2866,7 @@ class MainMenu:
             elif k in (curses.KEY_ENTER, 10):
                 return self.options[self.selected][1].lower()
 
-def run_app(scr, args):
+def _run_app_internal(scr, args):
     TUI.init_colors()
     if not TUI.check_terminal_size(scr): return
     
@@ -2875,6 +2965,14 @@ def run_app(scr, args):
                     scr.nodelay(False)
                     continue
                 show_error_screen(scr, e)
+
+def run_app(scr, args):
+    try:
+        _run_app_internal(scr, args)
+    except Exception as e:
+        scr.timeout(-1) # Blocking
+        scr.nodelay(False)
+        show_error_screen(scr, e)
 
 def main():
     parser = argparse.ArgumentParser(description="Build Noteworthy documentation")
