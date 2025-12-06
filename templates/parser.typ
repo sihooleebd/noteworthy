@@ -10,7 +10,7 @@
 }
 
 #if target == none or target == "cover" {
-  if display-cover {
+  if display-cover or target == "cover" {
     cover(
       title: title,
       subtitle: subtitle,
@@ -25,7 +25,7 @@
 }
 
 #if target == none or target == "outline" {
-  if display-outline {
+  if display-outline or target == "outline" {
     outline()
   }
 }
@@ -36,7 +36,7 @@
   let total-pages = chapter.pages.len()
 
   if target == none or target == "chapter-" + chapter-idx {
-    if display-chap-cover {
+    if display-chap-cover or target != none {
       chapter-cover(
         number: chapter-name + " " + chapter-display-id,
         title: chapter.title,

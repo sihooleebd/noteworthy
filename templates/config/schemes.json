@@ -1,5 +1,5 @@
 {
-    "dark": {
+    "noteworthy-dark": {
         "page-fill": "#262323",
         "text-main": "#d8d0cc",
         "text-heading": "#ddbfa1",
@@ -117,7 +117,7 @@
             "grid-opacity": 0.15
         }
     },
-    "light": {
+    "noteworthy-light": {
         "page-fill": "#fcf6e3",
         "text-main": "#4a4545",
         "text-heading": "#8f6f5e",
@@ -174,65 +174,6 @@
             "stroke": "#8f6f5e",
             "highlight": "#31748f",
             "grid-opacity": 0.15
-        }
-    },
-    "print": {
-        "page-fill": "#ffffff",
-        "text-main": "#2b2525",
-        "text-heading": "#6b4e3d",
-        "text-muted": "#757575",
-        "text-accent": "#a85b5b",
-        "blocks": {
-            "definition": {
-                "fill": "#f4f7f4",
-                "stroke": "#7a8c72",
-                "title": "Definition"
-            },
-            "equation": {
-                "fill": "#fbfaf7",
-                "stroke": "#a8956b",
-                "title": "Equation"
-            },
-            "example": {
-                "fill": "#fbf6f5",
-                "stroke": "#b58272",
-                "title": "Example"
-            },
-            "solution": {
-                "fill": "#f8f6f8",
-                "stroke": "#8f7e8f",
-                "title": "Solution"
-            },
-            "proof": {
-                "fill": "#f5f5f5",
-                "stroke": "#8a7a75",
-                "title": "Proof"
-            },
-            "note": {
-                "fill": "#fdf5f6",
-                "stroke": "#c47c83",
-                "title": "Note"
-            },
-            "notation": {
-                "fill": "#f2f6f7",
-                "stroke": "#6d8287",
-                "title": "Notation"
-            },
-            "analysis": {
-                "fill": "#f2f7fa",
-                "stroke": "#6b8ba3",
-                "title": "Analysis"
-            },
-            "theorem": {
-                "fill": "#fdfcf5",
-                "stroke": "#b89c56",
-                "title": "Theorem"
-            }
-        },
-        "plot": {
-            "stroke": "#2b2525",
-            "highlight": "#31748f",
-            "grid-opacity": 0.1
         }
     },
     "nord": {
