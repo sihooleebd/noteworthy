@@ -80,7 +80,6 @@ def load_config_safe():
 
 
 def get_formatted_name(path_str, hierarchy, config=None):
-    """Get fully formatted name like 'Problem 01.01' (index-based)"""
     if config is None: config = load_config_safe()
     
     path = Path(path_str)
@@ -170,7 +169,6 @@ def save_settings(settings):
     except: pass
 
 def load_indexignore():
-    """Load set of ignored file IDs from .indexignore"""
     try:
         if INDEXIGNORE_FILE.exists():
             lines = INDEXIGNORE_FILE.read_text().strip().split('\n')
@@ -179,7 +177,6 @@ def load_indexignore():
     return set()
 
 def save_indexignore(ignored_set):
-    """Save set of ignored file IDs to .indexignore"""
     try:
         SYSTEM_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         content = "# Files to ignore during hierarchy sync\n# One file ID per line (e.g., 01.03)\n\n"
@@ -188,7 +185,6 @@ def save_indexignore(ignored_set):
     except: pass
 
 def sync_hierarchy_with_content():
-    """Compare hierarchy.json with actual content files (index-based)."""
     hierarchy = json.loads(HIERARCHY_FILE.read_text())
     
     missing_files = []
@@ -406,7 +402,6 @@ def apply_pdf_metadata(pdf, bookmarks_file, title, author):
 # =============================================================================
 
 class TUI:
-    """Shared TUI helper functions"""
     @staticmethod
     def init_colors():
         curses.start_color()
@@ -418,7 +413,6 @@ class TUI:
 
     @staticmethod
     def disable_flow_control():
-        """Disable XON/XOFF flow control to allow Ctrl+S/Ctrl+Q"""
         try:
             fd = sys.stdin.fileno()
             attrs = termios.tcgetattr(fd)
@@ -452,7 +446,6 @@ class TUI:
 
     @staticmethod
     def prompt_save(scr):
-        """Show save confirmation prompt, returns 'y', 'n', or 'c'"""
         h_raw, w_raw = scr.getmaxyx()
         h, w = h_raw - 2, w_raw - 2
         TUI.safe_addstr(scr, h - 1, 2, "Save? (y/n/c): ", curses.color_pair(3) | curses.A_BOLD)
@@ -462,7 +455,6 @@ class TUI:
 
     @staticmethod
     def show_saved(scr):
-        """Show 'Saved!' message briefly"""
         h_raw, w_raw = scr.getmaxyx()
         h, w = h_raw - 2, w_raw - 2
         TUI.safe_addstr(scr, h - 1, 2, "Saved!", curses.color_pair(2) | curses.A_BOLD)
@@ -496,7 +488,6 @@ class TUI:
 # =============================================================================
 
 class BaseEditor:
-    """Base class for full-screen editors"""
     def __init__(self, scr, title="Editor"):
         self.scr = scr
         self.title = title
@@ -523,7 +514,6 @@ class BaseEditor:
     def _handle_input(self, k): pass
 
 class ListEditor(BaseEditor):
-    """Base class for list-based editors"""
     def __init__(self, scr, title="List Editor"):
         super().__init__(scr, title)
         self.items = []
@@ -584,7 +574,6 @@ class ListEditor(BaseEditor):
 # =============================================================================
 
 def copy_to_clipboard(text):
-    """Copy text to clipboard using available system tools (Cross-platform)"""
     try:
         # macOS
         subprocess.run(["pbcopy"], input=text.encode('utf-8'), check=True, stderr=subprocess.DEVNULL)
@@ -789,13 +778,19 @@ class BuildMenu:
                     TUI.safe_addstr(self.scr, y, bx + 4, cb, curses.color_pair(cc))
                     TUI.safe_addstr(self.scr, y, bx + 4, cb, curses.color_pair(cc))
                     ch_num = str(ch.get("number", ci + 1))
-                    TUI.safe_addstr(self.scr, y, bx + 7, f" Ch {ch_num}: {ch['title']}"[:bw-12], curses.color_pair(1))
+                    if cur:
+                         TUI.safe_addstr(self.scr, y, bx + 7, f" Ch {ch_num}: {ch['title']}"[:bw-12], curses.color_pair(1) | curses.A_BOLD)
+                    else:
+                         TUI.safe_addstr(self.scr, y, bx + 7, f" Ch {ch_num}: {ch['title']}"[:bw-12], curses.color_pair(1))
                 else:
                     p = self.hierarchy[ci]["pages"][ai]
                     sel = self.selected.get((ci, ai), False)
                     p_num = str(p.get("number", ai + 1))
                     TUI.safe_addstr(self.scr, y, bx + 6, "[✓]" if sel else "[ ]", curses.color_pair(2 if sel else 4))
-                    TUI.safe_addstr(self.scr, y, bx + 9, f" {p_num}: {p['title']}"[:bw-14], curses.color_pair(4))
+                    if cur:
+                         TUI.safe_addstr(self.scr, y, bx + 9, f" {p_num}: {p['title']}"[:bw-14], curses.color_pair(4) | curses.A_BOLD)
+                    else:
+                         TUI.safe_addstr(self.scr, y, bx + 9, f" {p_num}: {p['title']}"[:bw-14], curses.color_pair(4))
         
         def opts(sy, bx, bw):
             for i, (lbl, val, key) in enumerate([
@@ -924,15 +919,13 @@ class BuildMenu:
 # =============================================================================
 
 def extract_themes():
-    """Extract theme names from schemes.json"""
     try:
         schemes = json.loads(SCHEMES_FILE.read_text())
         return list(schemes.keys())
     except:
-        return ["dark", "light", "rose-pine", "nord", "dracula", "gruvbox"]
+        return ["noteworthy-dark", "noteworthy-light", "rose-pine", "nord", "dracula", "gruvbox"]
 
 def hex_to_curses_color(hex_color):
-    """Convert hex color to curses color pair index (rough approximation)"""
     if not hex_color or not hex_color.startswith('#'): return 4
     try:
         r = int(hex_color[1:3], 16)
@@ -949,7 +942,6 @@ def hex_to_curses_color(hex_color):
         return 4
 
 def show_editor_menu(scr):
-    """Show menu to select which editor to open, returns immediately after editor closes"""
     TUI.init_colors()
     TUI.disable_flow_control()  # Allow Ctrl+S to work in editors
     cursor = 0
@@ -1047,7 +1039,6 @@ def show_editor_menu(scr):
 
 
 def show_keybindings_menu(scr):
-    """Display keybindings help screen"""
     TUI.init_colors()
     
     sections = [
@@ -1103,7 +1094,6 @@ def show_keybindings_menu(scr):
 
 
 class TextEditor(BaseEditor):
-    """Full-screen text editor with soft-wrapping"""
     def __init__(self, scr, filepath=None, initial_text=None, title="Text Editor"):
         super().__init__(scr, title)
         self.filepath = Path(filepath) if filepath else None
@@ -1277,7 +1267,6 @@ class TextEditor(BaseEditor):
 
 
 class ConfigEditor(ListEditor):
-    """Field-based config editor"""
     def __init__(self, scr):
         super().__init__(scr, "CONFIG EDITOR")
         self.config = json.loads(CONFIG_FILE.read_text())
@@ -1333,6 +1322,7 @@ class ConfigEditor(ListEditor):
 
         self.items = self.fields
         self.box_title = "Settings"
+        self.box_width = 70
 
     def get_display(self, key):
         v = self.config.get(key)
@@ -1349,19 +1339,57 @@ class ConfigEditor(ListEditor):
 
     def _draw_item(self, y, x, item, width, selected):
         key, label, ftype = item[0], item[1], item[2]
+        left_w = 22
         
         if selected: TUI.safe_addstr(self.scr, y, x + 2, ">", curses.color_pair(3) | curses.A_BOLD)
-        TUI.safe_addstr(self.scr, y, x + 4, f"{label}:", curses.color_pair(4))
+        TUI.safe_addstr(self.scr, y, x + 4, label[:left_w - 6], curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
         
-        val_x = x + 22
+        # Separator is drawn by refresh(), we just draw content relative to it
+        val_x = x + left_w + 2
         val = self.get_display(key)
         if ftype == "bool":
             c = curses.color_pair(2) if self.config.get(key) else curses.color_pair(6)
             TUI.safe_addstr(self.scr, y, val_x, val, c | curses.A_BOLD)
         elif ftype == "choice":
-            TUI.safe_addstr(self.scr, y, val_x, val[:width-26], curses.color_pair(5) | curses.A_BOLD)
+            TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(5) | curses.A_BOLD)
         else:
-            TUI.safe_addstr(self.scr, y, val_x, val[:width-26], curses.color_pair(4))
+            TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
+
+    def refresh(self):
+        h, w = self.scr.getmaxyx()
+        self.scr.clear()
+        
+        list_h = min(len(self.items) + 2, h - 8)
+        total_h = 2 + list_h + 2
+        start_y = max(1, (h - total_h) // 2)
+        
+        title_str = f"{self.title}{' *' if self.modified else ''}"
+        TUI.safe_addstr(self.scr, start_y, (w - len(title_str)) // 2, title_str, curses.color_pair(1) | curses.A_BOLD)
+        
+        bw = min(self.box_width, w - 4)
+        bx = (w - bw) // 2
+        left_w = 22
+        
+        TUI.draw_box(self.scr, start_y + 2, bx, list_h, bw, self.box_title)
+        
+        TUI.safe_addstr(self.scr, start_y + 3, bx + 4, "Setting", curses.color_pair(1) | curses.A_BOLD)
+        TUI.safe_addstr(self.scr, start_y + 3, bx + left_w + 2, "Value", curses.color_pair(1) | curses.A_BOLD)
+        
+        for i in range(1, list_h - 1):
+            TUI.safe_addstr(self.scr, start_y + 2 + i, bx + left_w, "│", curses.color_pair(4) | curses.A_DIM)
+            
+        vis = list_h - 3
+        if self.cursor < self.scroll: self.scroll = self.cursor
+        elif self.cursor >= self.scroll + vis: self.scroll = self.cursor - vis + 1
+        
+        for i in range(vis):
+            idx = self.scroll + i
+            if idx >= len(self.items): break
+            y = start_y + 4 + i
+            self._draw_item(y, bx, self.items[idx], bw, idx == self.cursor)
+            
+        self._draw_footer(h, w)
+        self.scr.refresh()
 
     def _draw_footer(self, h, w):
         footer = "Enter/Space: Edit  Esc: Save & Exit"
@@ -1421,7 +1449,6 @@ class ConfigEditor(ListEditor):
 
 
 class HierarchyEditor(ListEditor):
-    """Structured hierarchy editor"""
     def __init__(self, scr):
         super().__init__(scr, "HIERARCHY EDITOR")
         self.hierarchy = json.loads(HIERARCHY_FILE.read_text())
@@ -1509,16 +1536,54 @@ class HierarchyEditor(ListEditor):
             self.modified = False; return True
         except: return False
 
+    def refresh(self):
+        h, w = self.scr.getmaxyx()
+        self.scr.clear()
+        
+        list_h = min(len(self.items) + 2, h - 8)
+        total_h = 2 + list_h + 2
+        start_y = max(1, (h - total_h) // 2)
+        
+        title_str = f"{self.title}{' *' if self.modified else ''}"
+        TUI.safe_addstr(self.scr, start_y, (w - len(title_str)) // 2, title_str, curses.color_pair(1) | curses.A_BOLD)
+        
+        bw = min(self.box_width, w - 4)
+        bx = (w - bw) // 2
+        left_w = 30 # Slightly wider than others to accommodate indentation
+        
+        TUI.draw_box(self.scr, start_y + 2, bx, list_h, bw, self.box_title)
+        
+        TUI.safe_addstr(self.scr, start_y + 3, bx + 4, "Item", curses.color_pair(1) | curses.A_BOLD)
+        TUI.safe_addstr(self.scr, start_y + 3, bx + left_w + 2, "Value", curses.color_pair(1) | curses.A_BOLD)
+        
+        for i in range(1, list_h - 1):
+            TUI.safe_addstr(self.scr, start_y + 2 + i, bx + left_w, "│", curses.color_pair(4) | curses.A_DIM)
+            
+        vis = list_h - 3
+        if self.cursor < self.scroll: self.scroll = self.cursor
+        elif self.cursor >= self.scroll + vis: self.scroll = self.cursor - vis + 1
+        
+        for i in range(vis):
+            idx = self.scroll + i
+            if idx >= len(self.items): break
+            y = start_y + 4 + i
+            self._draw_item(y, bx, self.items[idx], bw, idx == self.cursor)
+            
+        self._draw_footer(h, w)
+        self.scr.refresh()
+
     def _draw_item(self, y, x, item, width, selected):
         t, ci, pi, _ = item
+        left_w = 30
+        
         if selected: TUI.safe_addstr(self.scr, y, x + 2, ">", curses.color_pair(3) | curses.A_BOLD)
         
+        val_x = x + left_w + 2
+        
         if t == "ch_title":
-            # Inline formatting
+            # Chapter row
             ch_count = len(self.hierarchy)
             width_digits = 3 if ch_count >= 100 else 2
-            
-            # Use explicit number if available, else index
             explicit_num = self.hierarchy[ci].get("number")
             ch_num = str(explicit_num) if explicit_num is not None else str(ci + 1)
             
@@ -1526,41 +1591,43 @@ class HierarchyEditor(ListEditor):
                 ch_num = ch_num.zfill(width_digits)
                 
             label = self.config.get("chapter-name", "Chapter")
-            label = (label[:6] + "..") if len(label) > 8 else label
+            label_disp = f"{label} {ch_num}"
             
-            # Dynamic offset to prevent overlap
-            prefix = f"{label} {ch_num} Title:"
-            TUI.safe_addstr(self.scr, y, x + 4, prefix, curses.color_pair(1) | curses.A_BOLD)
+            # Draw label in left col
+            TUI.safe_addstr(self.scr, y, x + 4, label_disp[:left_w-6], curses.color_pair(5 if selected else 1) | (curses.A_BOLD if selected else 0))
             
-            # Ensure value doesn't overwrite prefix
-            val_x = x + 4 + len(prefix) + 1
-            if val_x < x + 18: val_x = x + 18 # Minimum offset
-            
-            TUI.safe_addstr(self.scr, y, val_x, str(self._get_value(item))[:width-(val_x-x)-4], curses.color_pair(4))
+            # Draw title in right col
+            val = str(self._get_value(item))
+            TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
             
         elif t == "ch_number":
-            TUI.safe_addstr(self.scr, y, x + 6, "Number:", curses.color_pair(4))
+            TUI.safe_addstr(self.scr, y, x + 6, "Number", curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
             val = str(self._get_value(item))
             if not val: val = "(auto)"
-            TUI.safe_addstr(self.scr, y, x + 18, val, curses.color_pair(4) | curses.A_DIM)
+            TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else curses.A_DIM))
             
         elif t == "ch_summary":
-            TUI.safe_addstr(self.scr, y, x + 6, "Summary:", curses.color_pair(4))
-            TUI.safe_addstr(self.scr, y, x + 18, str(self._get_value(item))[:width-22], curses.color_pair(4))
+            TUI.safe_addstr(self.scr, y, x + 6, "Summary", curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
+            val = str(self._get_value(item))
+            TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
             
         elif t == "pg_title":
-            TUI.safe_addstr(self.scr, y, x + 6, "Title:", curses.color_pair(4))
-            TUI.safe_addstr(self.scr, y, x + 18, str(self._get_value(item))[:width-22], curses.color_pair(4))
+            # Page Title
+            TUI.safe_addstr(self.scr, y, x + 6, "Page Title", curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
+            val = str(self._get_value(item))
+            TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
             
         elif t == "pg_number":
-            TUI.safe_addstr(self.scr, y, x + 8, "Number:", curses.color_pair(4))
+            TUI.safe_addstr(self.scr, y, x + 8, "Page Num", curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
             val = str(self._get_value(item))
             if not val: val = "(auto)"
-            TUI.safe_addstr(self.scr, y, x + 18, val, curses.color_pair(4) | curses.A_DIM)
+            TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else curses.A_DIM))
+            
         elif t == "add_page":
-            TUI.safe_addstr(self.scr, y, x + 6, "+ Add page to this chapter...", curses.color_pair(3 if selected else 4) | curses.A_DIM)
+            TUI.safe_addstr(self.scr, y, x + 6, "+ Add page...", curses.color_pair(3 if selected else 4) | (curses.A_BOLD if selected else curses.A_DIM))
+            
         elif t == "add_chapter":
-            TUI.safe_addstr(self.scr, y, x + 4, "+ Add new chapter...", curses.color_pair(3 if selected else 4) | curses.A_DIM)
+            TUI.safe_addstr(self.scr, y, x + 4, "+ Add chapter...", curses.color_pair(3 if selected else 4) | (curses.A_BOLD if selected else curses.A_DIM))
 
     def _draw_footer(self, h, w):
         footer = "Enter: Edit  d: Delete  Esc: Save & Exit"
@@ -1587,7 +1654,6 @@ class HierarchyEditor(ListEditor):
 
 
 class SchemeEditor(ListEditor):
-    """Color scheme editor"""
     def __init__(self, scr):
         super().__init__(scr, "SCHEME EDITOR")
         self.schemes = json.loads(SCHEMES_FILE.read_text())
@@ -1721,12 +1787,12 @@ class SchemeEditor(ListEditor):
         if selected: TUI.safe_addstr(self.scr, y, x + 2, ">", curses.color_pair(3) | curses.A_BOLD)
         
         label = self._get_label(key)
-        TUI.safe_addstr(self.scr, y, x + 4, label[:left_w - 6], curses.color_pair(5 if selected else 4))
+        TUI.safe_addstr(self.scr, y, x + 4, label[:left_w - 6], curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
         
         hex_val = self._get_value(key)
         color = hex_to_curses_color(hex_val)
         TUI.safe_addstr(self.scr, y, x + left_w + 2, "██", curses.color_pair(color))
-        TUI.safe_addstr(self.scr, y, x + left_w + 5, hex_val[:width - left_w - 8], curses.color_pair(4))
+        TUI.safe_addstr(self.scr, y, x + left_w + 5, hex_val[:width - left_w - 8], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
 
     def _draw_footer(self, h, w):
         footer = "n: New  d: Delete  Enter: Edit  Esc: Save & Exit"
@@ -1758,7 +1824,6 @@ class SchemeEditor(ListEditor):
 
 
 class SnippetsEditor(ListEditor):
-    """Two-column snippet editor"""
     def __init__(self, scr):
         super().__init__(scr, "SNIPPETS EDITOR")
         self._load_snippets()
@@ -1800,15 +1865,15 @@ class SnippetsEditor(ListEditor):
 
     def _draw_item(self, y, x, item, width, selected):
         name, definition = item
-        left_w = 20
+        left_w = 22
         
         if selected: TUI.safe_addstr(self.scr, y, x + 2, ">", curses.color_pair(3) | curses.A_BOLD)
         
         if name == "+ Add new snippet...":
-            TUI.safe_addstr(self.scr, y, x + 4, name, curses.color_pair(3 if selected else 4) | curses.A_DIM)
+            TUI.safe_addstr(self.scr, y, x + 4, name, curses.color_pair(3 if selected else 4) | (curses.A_BOLD if selected else curses.A_DIM))
         else:
-            TUI.safe_addstr(self.scr, y, x + 4, name[:left_w - 6], curses.color_pair(5 if selected else 4))
-            TUI.safe_addstr(self.scr, y, x + left_w + 2, definition[:width - left_w - 6], curses.color_pair(4))
+            TUI.safe_addstr(self.scr, y, x + 4, name[:left_w - 6], curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
+            TUI.safe_addstr(self.scr, y, x + left_w + 2, definition[:width - left_w - 6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
 
     def refresh(self):
         # Override refresh to add headers
@@ -1824,7 +1889,7 @@ class SnippetsEditor(ListEditor):
         
         bw = min(self.box_width, w - 4)
         bx = (w - bw) // 2
-        left_w = 20
+        left_w = 22
         
         TUI.draw_box(self.scr, start_y + 2, bx, list_h, bw, self.box_title)
         
@@ -1896,20 +1961,27 @@ class SnippetsEditor(ListEditor):
 
 
 class IndexignoreEditor(ListEditor):
-    """Simple editor for .indexignore file - list of ignored file IDs."""
     def __init__(self, scr):
         super().__init__(scr, "INDEXIGNORE EDITOR")
         self.ignored = sorted(load_indexignore())
-        self.items = self.ignored if self.ignored else []
+        self._update_items()
         self.box_title = "Ignored Files"
         self.box_width = 50
     
+    def _update_items(self):
+        self.items = self.ignored + ["+ Add new ignore pattern..."]
+
     def save(self):
         save_indexignore(set(self.ignored))
         self.modified = False
         return True
     
     def _draw_item(self, y, x, item, width, selected):
+        if item == "+ Add new ignore pattern...":
+            TUI.safe_addstr(self.scr, y, x + 4, item, curses.color_pair(3 if selected else 4) | curses.A_DIM)
+            if selected: TUI.safe_addstr(self.scr, y, x + 2, ">", curses.color_pair(3) | curses.A_BOLD)
+            return
+
         if selected:
             TUI.safe_addstr(self.scr, y, x + 2, ">", curses.color_pair(3) | curses.A_BOLD)
             TUI.safe_addstr(self.scr, y, x + 4, item, curses.color_pair(1) | curses.A_BOLD)
@@ -1932,14 +2004,16 @@ class IndexignoreEditor(ListEditor):
         if self.cursor < self.scroll: self.scroll = self.cursor
         elif self.cursor >= self.scroll + visible: self.scroll = self.cursor - visible + 1
         
-        if not self.ignored:
-            TUI.safe_addstr(self.scr, by + 3, bx + 4, "(no ignored files)", curses.color_pair(4) | curses.A_DIM)
-        else:
-            for i in range(visible):
-                idx = self.scroll + i
-                if idx >= len(self.ignored): break
-                y = by + 3 + i
-                self._draw_item(y, bx, self.ignored[idx], bw, idx == self.cursor)
+        if len(self.items) == 1: # Only add button
+             # Draw just the button, maybe a message?
+             # actually the loop below handles it fine
+             pass
+
+        for i in range(visible):
+            idx = self.scroll + i
+            if idx >= len(self.items): break
+            y = by + 3 + i
+            self._draw_item(y, bx, self.items[idx], bw, idx == self.cursor)
         
         self._draw_footer(h, w)
         self.scr.refresh()
@@ -1948,37 +2022,45 @@ class IndexignoreEditor(ListEditor):
         footer = "a: Add  d: Delete  Esc: Save & Exit"
         TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
     
+    def _add_new(self):
+        curses.echo()
+        curses.curs_set(1)
+        h, w = self.scr.getmaxyx()
+        self.scr.addstr(h - 2, 2, "Enter file ID to ignore: ")
+        self.scr.clrtoeol()
+        self.scr.refresh()
+        try:
+            new_id = self.scr.getstr(h - 2, 27, 20).decode('utf-8').strip()
+            if new_id and new_id not in self.ignored:
+                self.ignored.append(new_id)
+                self.ignored.sort()
+                self._update_items()
+                self.modified = True
+        except: pass
+        curses.noecho()
+        curses.curs_set(0)
+
     def _handle_input(self, k):
-        if k in (curses.KEY_UP, ord('k')) and self.ignored:
+        if k in (curses.KEY_UP, ord('k')):
             self.cursor = max(0, self.cursor - 1)
             return True
-        elif k in (curses.KEY_DOWN, ord('j')) and self.ignored:
-            self.cursor = min(len(self.ignored) - 1, self.cursor + 1)
+        elif k in (curses.KEY_DOWN, ord('j')):
+            self.cursor = min(len(self.items) - 1, self.cursor + 1)
             return True
         elif k == ord('a'):
-            # Add new item
-            curses.echo()
-            curses.curs_set(1)
-            h, w = self.scr.getmaxyx()
-            self.scr.addstr(h - 2, 2, "Enter file ID to ignore: ")
-            self.scr.clrtoeol()
-            self.scr.refresh()
-            try:
-                new_id = self.scr.getstr(h - 2, 27, 20).decode('utf-8').strip()
-                if new_id and new_id not in self.ignored:
-                    self.ignored.append(new_id)
-                    self.ignored.sort()
-                    self.items = self.ignored
-                    self.modified = True
-            except: pass
-            curses.noecho()
-            curses.curs_set(0)
+            self._add_new()
             return True
-        elif k == ord('d') and self.ignored:
-            del self.ignored[self.cursor]
-            self.items = self.ignored
-            self.cursor = min(self.cursor, len(self.ignored) - 1) if self.ignored else 0
-            self.modified = True
+        elif k in (ord('\n'), 10):
+            if self.items[self.cursor] == "+ Add new ignore pattern...":
+                self._add_new()
+            return True
+        elif k == ord('d') and self.items[self.cursor] != "+ Add new ignore pattern...":
+            # Don't delete the button
+            if self.cursor < len(self.ignored):
+                del self.ignored[self.cursor]
+                self._update_items()
+                self.cursor = min(self.cursor, len(self.items) - 1)
+                self.modified = True
             return True
         return False
 
@@ -2010,7 +2092,6 @@ class BuildUI:
     def set_progress(self, p, t): self.progress, self.total = p, t; self.refresh()
     
     def check_input(self):
-        """Check for user input during build."""
         try:
             k = self.scr.getch()
             if k == -1: return True
@@ -2070,7 +2151,6 @@ class BuildUI:
 # =============================================================================
 
 def auto_fix_config():
-    """No longer needed - folder structure is now purely numeric."""
     pass
 
 def run_build(scr, args, hierarchy, opts):
@@ -2084,6 +2164,7 @@ def run_build(scr, args, hierarchy, opts):
 
     logging.info("Starting run_build")
     auto_fix_config() # Run auto-fix before build
+    config = load_config_safe()
     ui = BuildUI(scr, opts['debug'])
     scr.keypad(True)   # Enable keypad for special keys
     scr.nodelay(False) # Disable nodelay
@@ -2113,7 +2194,12 @@ def run_build(scr, args, hierarchy, opts):
     flags = opts.get('typst_flags', [])
     
     if opts['frontmatter']:
-        for target, name, label in [("cover", "00_cover.pdf", "Cover"), ("preface", "01_preface.pdf", "Preface"), ("outline", "02_outline.pdf", "TOC")]:
+        targets = []
+        if config.get("display-cover", True): targets.append(("cover", "00_cover.pdf", "Cover"))
+        targets.append(("preface", "01_preface.pdf", "Preface"))
+        if config.get("display-outline", True): targets.append(("outline", "02_outline.pdf", "TOC"))
+
+        for target, name, label in targets:
             ui.set_task(label)
             out = BUILD_DIR / name
             compile_target(target, out, extra_flags=flags, callback=ui.refresh, log_callback=ui.log_typst)
@@ -2124,10 +2210,13 @@ def run_build(scr, args, hierarchy, opts):
     for ci, ch in chapters:
         ch_id = str(ci + 1)
         ui.set_task(f"Chapter {ch_id}: {ch['title']}")
-        out = BUILD_DIR / f"10_chapter_{ci}_cover.pdf"
-        page_map[f"chapter-{ch_id}"] = current
-        compile_target(f"chapter-{ci}", out, page_offset=current, extra_flags=flags, callback=ui.refresh, log_callback=ui.log_typst)
-        pdfs.append(out); current += get_pdf_page_count(out)
+        
+        if config.get("display-chap-cover", True):
+            out = BUILD_DIR / f"10_chapter_{ci}_cover.pdf"
+            page_map[f"chapter-{ch_id}"] = current
+            compile_target(f"chapter-{ci}", out, page_offset=current, extra_flags=flags, callback=ui.refresh, log_callback=ui.log_typst)
+            pdfs.append(out); current += get_pdf_page_count(out)
+        
         prog += 1; ui.set_progress(prog, total + 1)
         
         for ai in sorted(by_ch[ci]):
@@ -2142,10 +2231,10 @@ def run_build(scr, args, hierarchy, opts):
         
         ui.log(f"Chapter {ch_id} compiled", True)
     
-    if opts['frontmatter']:
+    if opts['frontmatter'] and config.get("display-outline", True):
         ui.set_task("Regenerating TOC")
         out = BUILD_DIR / "02_outline.pdf"
-        compile_target("outline", out, page_offset=page_map["outline"], page_map=page_map, extra_flags=flags, callback=ui.refresh, log_callback=ui.log_typst)
+        compile_target("outline", out, page_offset=page_map.get("outline", 0), page_map=page_map, extra_flags=flags, callback=ui.refresh, log_callback=ui.log_typst)
         ui.log("TOC regenerated", True)
     
     ui.log(f"Total pages: {current - 1}", True)
@@ -2193,16 +2282,10 @@ def run_build(scr, args, hierarchy, opts):
 # =============================================================================
 
 class InitWizard:
-    """First-time setup wizard for config.json"""
     def __init__(self, scr):
         self.scr = scr
         
-        themes = ["rose-pine", "dark", "light", "nord", "dracula", "gruvbox", "catppuccin-mocha", "catppuccin-latte", "solarized-dark", "solarized-light", "tokyo-night", "everforest", "moonlight", "print"] # Fallback
-        if SCHEMES_FILE.exists():
-             try:
-                 schemes = json.loads(SCHEMES_FILE.read_text())
-                 if schemes: themes = list(schemes.keys())
-             except: pass
+        themes = extract_themes()
 
         self.config = {
             "title": "",
@@ -2440,7 +2523,6 @@ class InitWizard:
             return None
 
 class HierarchyWizard:
-    """Wizard for initializing hierarchy.json automatically"""
     def __init__(self, scr):
         self.scr = scr
 
@@ -2515,7 +2597,6 @@ class HierarchyWizard:
         except: return None
 
 class SchemesWizard:
-    """Wizard for initializing schemes.json"""
     def __init__(self, scr):
         self.scr = scr
     
@@ -2546,7 +2627,7 @@ class SchemesWizard:
         try:
              # Use a minimal embedded default scheme if source is missing
             minimal_schemes = {
-                "dark": {
+                "noteworthy-dark": {
                     "page-fill": "#262323",
                     "text-main": "#d8d0cc",
                     "text-heading": "#ddbfa1",
@@ -2569,7 +2650,6 @@ class SchemesWizard:
         except: return None
 
 def needs_init():
-    """Check if we need to run any init wizard"""
     return not (CONFIG_FILE.exists() and HIERARCHY_FILE.exists() and SCHEMES_FILE.exists())
 
 # =============================================================================
@@ -2577,7 +2657,6 @@ def needs_init():
 # =============================================================================
 
 class SyncWizard:
-    """Wizard for resolving hierarchy vs content discrepancies"""
     def __init__(self, scr, missing_files, new_files):
         self.scr = scr
         self.missing_files = missing_files
@@ -2641,7 +2720,6 @@ class SyncWizard:
                 return self.delete_extra()
                 
     def adopt_disk(self):
-        """Update hierarchy.json to match content on disk (index-based)"""
         try:
             # Scan content/0, content/1...
             new_hierarchy = []
@@ -2682,7 +2760,6 @@ class SyncWizard:
             return False
 
     def adopt_hierarchy(self):
-        """Create missing files on disk to match hierarchy (index-based)"""
         try:
             for missing in self.missing_files:
                 path = Path(missing)
@@ -2695,7 +2772,6 @@ class SyncWizard:
             return False
 
     def delete_extra(self):
-        """Delete extra files on disk"""
         try:
             for f in self.new_files:
                 path = Path(f)
@@ -2710,7 +2786,6 @@ class SyncWizard:
             return False
 
 def restore_templates(scr):
-    """Check and restore missing template files from GitHub"""
     # List of files to exclude from auto-restore (handled by specific wizards)
     EXCLUDE_FILES = {
         "templates/config/config.json",

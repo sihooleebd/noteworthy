@@ -34,9 +34,8 @@
 #import "./default-schemes.typ": *
 
 #let colorschemes = (
-  dark: scheme-dark,
-  light: scheme-light,
-  print: scheme-print,
+  noteworthy-dark: scheme-noteworthy-dark,
+  noteworthy-light: scheme-noteworthy-light,
   rose-pine: scheme-rose-pine,
   nord: scheme-nord,
   dracula: scheme-dracula,
@@ -50,7 +49,7 @@
   moonlight: scheme-moonlight,
 )
 
-#let active-theme = colorschemes.at(lower(display-mode), default: scheme-dark)
+#let active-theme = colorschemes.at(lower(display-mode), default: scheme-noteworthy-dark)
 
 // Import snippets
 #import "config/snippets.typ": *

@@ -35,10 +35,9 @@
 }
 
 // Build all schemes from JSON
-#let scheme-dark = build-scheme(schemes-data.dark)
+#let scheme-noteworthy-dark = build-scheme(schemes-data.at("noteworthy-dark"))
 #let scheme-rose-pine = build-scheme(schemes-data.rose-pine)
-#let scheme-light = build-scheme(schemes-data.light)
-#let scheme-print = build-scheme(schemes-data.print)
+#let scheme-noteworthy-light = build-scheme(schemes-data.at("noteworthy-light"))
 #let scheme-nord = build-scheme(schemes-data.nord)
 #let scheme-dracula = build-scheme(schemes-data.dracula)
 #let scheme-gruvbox = build-scheme(schemes-data.gruvbox)
