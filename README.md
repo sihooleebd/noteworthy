@@ -92,7 +92,7 @@ python3 noteworthy.py
 The noteworthy system guides you through the initialization, the configuration, and the build. Upon first run, the template will load the necessary template files. 
 
 <p align="center">
-  <img src="images/wizard_demo.gif" width="70%" alt="Setup Wizard Demo"/>
+  <img src="images/wizard_demo.gif?v=2" width="70%" alt="Setup Wizard Demo"/>
 </p>
 
 **TUI Features:**
