@@ -36,6 +36,24 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
   <img src="images/example-04.png" width="45%" alt="Another Content Page"/>
 </p>
 
+### Themes
+
+<p align="center">
+  <img src="images/themes/catppuccin-latte.png" width="30%" alt="Catppuccin Latte"/>
+  <img src="images/themes/catppuccin-mocha.png" width="30%" alt="Catppuccin Mocha"/>
+  <img src="images/themes/dracula.png" width="30%" alt="Dracula"/>
+  <img src="images/themes/everforest.png" width="30%" alt="Everforest"/>
+  <img src="images/themes/gruvbox.png" width="30%" alt="Gruvbox"/>
+  <img src="images/themes/moonlight.png" width="30%" alt="Moonlight"/>
+  <img src="images/themes/nord.png" width="30%" alt="Nord"/>
+  <img src="images/themes/noteworthy-dark.png" width="30%" alt="Noteworthy Dark"/>
+  <img src="images/themes/noteworthy-light.png" width="30%" alt="Noteworthy Light"/>
+  <img src="images/themes/rose-pine.png" width="30%" alt="Rose Pine"/>
+  <img src="images/themes/solarized-dark.png" width="30%" alt="Solarized Dark"/>
+  <img src="images/themes/solarized-light.png" width="30%" alt="Solarized Light"/>
+  <img src="images/themes/tokyo-night.png" width="30%" alt="Tokyo Night"/>
+</p>
+
 ### Framework Components
 
 - **Theme System**: 13+ pre-built color schemes with easy customization

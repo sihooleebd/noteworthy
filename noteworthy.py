@@ -454,6 +454,15 @@ class TUI:
         return chr(c) if c in (ord('y'), ord('n'), ord('c')) else 'c'
 
     @staticmethod
+    def prompt_confirm(scr, message="Are you sure? (y/n): "):
+        h_raw, w_raw = scr.getmaxyx()
+        h, w = h_raw - 2, w_raw - 2
+        TUI.safe_addstr(scr, h - 1, 2, message, curses.color_pair(3) | curses.A_BOLD)
+        scr.refresh()
+        c = scr.getch()
+        return c in (ord('y'), ord('Y'))
+
+    @staticmethod
     def show_saved(scr):
         h_raw, w_raw = scr.getmaxyx()
         h, w = h_raw - 2, w_raw - 2
@@ -1647,7 +1656,13 @@ class HierarchyEditor(ListEditor):
             return True
         elif k == ord('d'):
             item = self.items[self.cursor]; t = item[0]
-            if t not in ("add_chapter", "add_page"): self._delete_current()
+            if t not in ("add_chapter", "add_page"):
+                msg = "Delete item?"
+                if t.startswith("ch_"): msg = "Delete ENTIRE Chapter? (y/n): "
+                elif t.startswith("pg_"): msg = "Delete Page? (y/n): "
+                
+                if TUI.prompt_confirm(self.scr, msg):
+                    self._delete_current()
             return True
         
         return False
@@ -1818,7 +1833,10 @@ class SchemeEditor(ListEditor):
                 self._build_items()
             return True
         elif k == ord('n'): self._create_new_scheme(); return True
-        elif k == ord('d'): self._delete_current_scheme(); return True
+        elif k == ord('d'):
+            if TUI.prompt_confirm(self.scr, "Delete scheme? (y/n): "):
+                self._delete_current_scheme()
+            return True
         
         return False
 
@@ -1951,7 +1969,8 @@ class SnippetsEditor(ListEditor):
             self._update_items()
             return True
         elif k == ord('d') and self.cursor < len(self.snippets) and self.snippets:
-            del self.snippets[self.cursor]
+            if TUI.prompt_confirm(self.scr, "Delete snippet? (y/n): "):
+                del self.snippets[self.cursor]
             if self.cursor >= len(self.snippets): self.cursor = max(0, len(self.snippets) - 1)
             self.modified = True
             self._update_items()
@@ -2057,7 +2076,8 @@ class IndexignoreEditor(ListEditor):
         elif k == ord('d') and self.items[self.cursor] != "+ Add new ignore pattern...":
             # Don't delete the button
             if self.cursor < len(self.ignored):
-                del self.ignored[self.cursor]
+                if TUI.prompt_confirm(self.scr, "Delete pattern? (y/n): "):
+                    del self.ignored[self.cursor]
                 self._update_items()
                 self.cursor = min(self.cursor, len(self.items) - 1)
                 self.modified = True
