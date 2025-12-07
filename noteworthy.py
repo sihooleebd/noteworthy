@@ -73,6 +73,12 @@ def load_config_safe():
     except: pass
     return {}
 
+def save_config(config):
+    try:
+        CONFIG_FILE.write_text(json.dumps(config, indent=4))
+        return True
+    except: return False
+
 
 
 
@@ -401,6 +407,65 @@ def apply_pdf_metadata(pdf, bookmarks_file, title, author):
 # TUI HELPERS
 # =============================================================================
 
+class LineEditor:
+    def __init__(self, scr, title="Edit", initial_value=""):
+        self.scr = scr
+        self.title = title
+        self.value = initial_value
+        
+    def run(self):
+        h_raw, w_raw = self.scr.getmaxyx()
+        
+        # Calculate box dimensions
+        box_h = 7
+        box_w = max(50, len(self.title) + 10, len(self.value) + 10)
+        box_y = (h_raw - box_h) // 2
+        box_x = (w_raw - box_w) // 2
+        
+        curses.curs_set(1)
+        
+        while True:
+            # Draw
+            TUI.draw_box(self.scr, box_y, box_x, box_h, box_w, self.title)
+            
+            # Draw Instructions
+            TUI.safe_addstr(self.scr, box_y + 4, box_x + 2, "Enter: Confirm  Esc: Cancel", curses.color_pair(4) | curses.A_DIM)
+            
+            # Draw Input Field
+            input_y = box_y + 2
+            input_x = box_x + 2
+            max_len = box_w - 4
+            
+            # Draw current value with cursor
+            disp_val = self.value
+            # Simple scrolling if too long (show end)
+            if len(disp_val) >= max_len:
+                disp_val = disp_val[-(max_len-1):]
+            
+            # Clear input line area
+            # We can't easily clear just that area with safe_addstr, so just overwrite with spaces
+            TUI.safe_addstr(self.scr, input_y, input_x, " " * max_len, curses.color_pair(4))
+            TUI.safe_addstr(self.scr, input_y, input_x, disp_val, curses.color_pair(1) | curses.A_BOLD)
+            
+            # Move cursor
+            # TUI.safe_addstr adds 1 to coordinates, so we match that for move
+            real_y = input_y + 1
+            real_x = input_x + 1 + len(disp_val)
+            self.scr.move(real_y, real_x)
+            
+            k = self.scr.getch()
+            
+            if k == 27: # Esc
+                curses.curs_set(0)
+                return None
+            elif k in (ord('\n'), 10, curses.KEY_ENTER):
+                curses.curs_set(0)
+                return self.value
+            elif k in (curses.KEY_BACKSPACE, 127, 8):
+                self.value = self.value[:-1]
+            elif 32 <= k <= 126: # Printable chars
+                self.value += chr(k)
+
 class TUI:
     @staticmethod
     def init_colors():
@@ -409,6 +474,12 @@ class TUI:
         for i, color in enumerate([curses.COLOR_CYAN, curses.COLOR_GREEN, curses.COLOR_YELLOW, 
                                    curses.COLOR_WHITE, curses.COLOR_MAGENTA, curses.COLOR_RED], 1):
             curses.init_pair(i, color, -1)
+        
+        # Initialize xterm colors 16-255 if supported
+        if curses.COLORS >= 256:
+            for i in range(16, 256):
+                curses.init_pair(i, i, -1)
+        
         curses.curs_set(0)
 
     @staticmethod
@@ -456,11 +527,33 @@ class TUI:
     @staticmethod
     def prompt_confirm(scr, message="Are you sure? (y/n): "):
         h_raw, w_raw = scr.getmaxyx()
-        h, w = h_raw - 2, w_raw - 2
-        TUI.safe_addstr(scr, h - 1, 2, message, curses.color_pair(3) | curses.A_BOLD)
+        
+        # Calculate box dimensions
+        box_h = 7
+        box_w = max(40, len(message) + 8)
+        box_y = (h_raw - box_h) // 2
+        box_x = (w_raw - box_w) // 2
+        
+        # Draw box
+        TUI.draw_box(scr, box_y, box_x, box_h, box_w, "CONFIRM")
+        
+        # Draw message
+        msg_y = box_y + 2
+        msg_x = box_x + (box_w - len(message)) // 2
+        TUI.safe_addstr(scr, msg_y, msg_x, message, curses.color_pair(3) | curses.A_BOLD)
+        
+        # Draw hint
+        hint = "[y] Yes    [n] No"
+        hint_y = box_y + 4
+        hint_x = box_x + (box_w - len(hint)) // 2
+        TUI.safe_addstr(scr, hint_y, hint_x, hint, curses.color_pair(4))
+        
         scr.refresh()
-        c = scr.getch()
-        return c in (ord('y'), ord('Y'))
+        
+        while True:
+            c = scr.getch()
+            if c in (ord('y'), ord('Y')): return True
+            if c in (ord('n'), ord('N'), 27): return False # 27 is Esc
 
     @staticmethod
     def show_saved(scr):
@@ -940,13 +1033,41 @@ def hex_to_curses_color(hex_color):
         r = int(hex_color[1:3], 16)
         g = int(hex_color[3:5], 16)
         b = int(hex_color[5:7], 16)
-        lum = (0.299 * r + 0.587 * g + 0.114 * b)
-        if lum > 180: return 4
-        if r > g and r > b: return 6
-        if g > r and g > b: return 2
-        if b > r and b > g: return 1
-        if r > 150 and g > 100: return 3
-        return 5
+        
+        # If terminal doesn't support 256 colors, use fallback
+        if curses.COLORS < 256:
+            lum = (0.299 * r + 0.587 * g + 0.114 * b)
+            if lum > 180: return 4
+            if r > g and r > b: return 6
+            if g > r and g > b: return 2
+            if b > r and b > g: return 1
+            if r > 150 and g > 100: return 3
+            return 5
+            
+        # Euclidean distance matching to standard xterm-256 palette
+        best_idx = 16
+        best_dist = 1000000
+        
+        # 16-231: 6x6x6 Color Cube
+        levels = [0, 95, 135, 175, 215, 255]
+        for ri, rv in enumerate(levels):
+            for gi, gv in enumerate(levels):
+                for bi, bv in enumerate(levels):
+                    idx = 16 + 36 * ri + 6 * gi + bi
+                    dist = (r - rv)**2 + (g - gv)**2 + (b - bv)**2
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_idx = idx
+                        
+        # 232-255: Grayscale Ramp
+        for i in range(24):
+            val = 8 + 10 * i
+            dist = (r - val)**2 + (g - val)**2 + (b - val)**2
+            if dist < best_dist:
+                best_dist = dist
+                best_idx = 232 + i
+                
+        return best_idx
     except:
         return 4
 
@@ -1290,7 +1411,7 @@ class ConfigEditor(ListEditor):
             "affiliation": ("Affiliation", "str"),
             "font": ("Body Font", "str"),
             "title-font": ("Title Font", "str"),
-            "display-mode": ("Theme", "choice", themes),
+            # "display-mode" removed, now in Scheme Manager
             "show-solution": ("Show Solutions", "bool"),
             "display-cover": ("Display Cover", "bool"),
             "display-outline": ("Display Outline", "bool"),
@@ -1319,7 +1440,7 @@ class ConfigEditor(ListEditor):
         
         # 2. Add any other fields found in config.json
         for key, val in self.config.items():
-            if key not in processed_keys:
+            if key not in processed_keys and key != "display-mode":
                 # Infer type
                 if isinstance(val, bool): ftype = "bool"
                 elif isinstance(val, int): ftype = "int"
@@ -1422,7 +1543,7 @@ class ConfigEditor(ListEditor):
                 if isinstance(curr_val, list): curr_str = ", ".join(str(x) for x in curr_val)
                 else: curr_str = str(curr_val) if curr_val is not None else ""
                 
-                new_val = TextEditor(self.scr, initial_text=curr_str, title=f"Edit {f[1]}").run()
+                new_val = LineEditor(self.scr, initial_value=curr_str, title=f"Edit {f[1]}").run()
                 
                 if new_val is not None:
                     if ftype == "int":
@@ -1651,7 +1772,7 @@ class HierarchyEditor(ListEditor):
             elif t == "add_page": self._add_page(ci)
             else:
                 curr_val = str(self._get_value(item))
-                new_val = TextEditor(self.scr, initial_text=curr_val, title="Edit Value").run()
+                new_val = LineEditor(self.scr, initial_value=curr_val, title="Edit Value").run()
                 if new_val is not None: self._set_value(new_val)
             return True
         elif k == ord('d'):
@@ -1668,58 +1789,55 @@ class HierarchyEditor(ListEditor):
         return False
 
 
-class SchemeEditor(ListEditor):
-    def __init__(self, scr):
-        super().__init__(scr, "SCHEME EDITOR")
-        self.schemes = json.loads(SCHEMES_FILE.read_text())
-        self.theme_names = list(self.schemes.keys())
-        self.current_theme = 0
+class ThemeDetailEditor(ListEditor):
+    def __init__(self, scr, schemes, theme_name):
+        super().__init__(scr, f"THEME: {theme_name}")
+        self.schemes = schemes
+        self.theme_name = theme_name
+        self.theme = self.schemes[self.theme_name]
         self._build_items()
-        self.box_title = "Colors"
+        self.box_title = "Properties"
         self.box_width = 70
     
     def _build_items(self):
-        theme = self.schemes[self.theme_names[self.current_theme]]
         self.items = []
         # Page colors
         for key in ["page-fill", "text-main", "text-heading", "text-muted", "text-accent"]:
-            self.items.append((key, theme.get(key, "")))
+            self.items.append((key, self.theme.get(key, "")))
         # Block colors
-        for block, data in theme.get("blocks", {}).items():
+        for block, data in self.theme.get("blocks", {}).items():
             self.items.append((f"block.{block}.fill", data.get("fill", "")))
             self.items.append((f"block.{block}.stroke", data.get("stroke", "")))
         # Plot colors
-        plot = theme.get("plot", {})
+        plot = self.theme.get("plot", {})
         for key in ["stroke", "highlight", "grid-opacity"]:
             self.items.append((f"plot.{key}", str(plot.get(key, ""))))
-    
+
     def _get_value(self, key):
-        theme = self.schemes[self.theme_names[self.current_theme]]
         if key.startswith("block."):
             parts = key.split(".")
-            return theme.get("blocks", {}).get(parts[1], {}).get(parts[2], "")
+            return self.theme.get("blocks", {}).get(parts[1], {}).get(parts[2], "")
         elif key.startswith("plot."):
             parts = key.split(".")
-            return str(theme.get("plot", {}).get(parts[1], ""))
-        return theme.get(key, "")
-    
+            return str(self.theme.get("plot", {}).get(parts[1], ""))
+        return self.theme.get(key, "")
+
     def _set_value(self, key, val):
-        theme = self.schemes[self.theme_names[self.current_theme]]
         if key.startswith("block."):
             parts = key.split(".")
-            if "blocks" not in theme: theme["blocks"] = {}
-            if parts[1] not in theme["blocks"]: theme["blocks"][parts[1]] = {}
-            theme["blocks"][parts[1]][parts[2]] = val
+            if "blocks" not in self.theme: self.theme["blocks"] = {}
+            if parts[1] not in self.theme["blocks"]: self.theme["blocks"][parts[1]] = {}
+            self.theme["blocks"][parts[1]][parts[2]] = val
         elif key.startswith("plot."):
             parts = key.split(".")
-            if "plot" not in theme: theme["plot"] = {}
+            if "plot" not in self.theme: self.theme["plot"] = {}
             if parts[1] == "grid-opacity":
-                try: theme["plot"][parts[1]] = float(val)
-                except: theme["plot"][parts[1]] = val
+                try: self.theme["plot"][parts[1]] = float(val)
+                except: self.theme["plot"][parts[1]] = val
             else:
-                theme["plot"][parts[1]] = val
+                self.theme["plot"][parts[1]] = val
         else:
-            theme[key] = val
+            self.theme[key] = val
         self.modified = True
     
     def _get_label(self, key):
@@ -1730,33 +1848,8 @@ class SchemeEditor(ListEditor):
             parts = key.split(".")
             return f"plot.{parts[1]}"
         return key
-    
-    def save(self):
-        try:
-            SCHEMES_FILE.write_text(json.dumps(self.schemes, indent=4))
-            self.modified = False; return True
-        except: return False
-    
-    def _create_new_scheme(self):
-        name = TextEditor(self.scr, initial_text="new-scheme", title="New Scheme Name").run()
-        if name and name not in self.schemes:
-            current = self.schemes[self.theme_names[self.current_theme]]
-            self.schemes[name] = copy.deepcopy(current)
-            self.theme_names = list(self.schemes.keys())
-            self.current_theme = self.theme_names.index(name)
-            self._build_items()
-            self.modified = True
-    
-    def _delete_current_scheme(self):
-        if len(self.theme_names) > 1:
-            del self.schemes[self.theme_names[self.current_theme]]
-            self.theme_names = list(self.schemes.keys())
-            self.current_theme = min(self.current_theme, len(self.theme_names) - 1)
-            self._build_items()
-            self.modified = True
 
     def refresh(self):
-        # Override refresh to add theme selector and headers
         h, w = self.scr.getmaxyx()
         self.scr.clear()
         
@@ -1767,20 +1860,17 @@ class SchemeEditor(ListEditor):
         title_str = f"{self.title}{' *' if self.modified else ''}"
         TUI.safe_addstr(self.scr, start_y, (w - len(title_str)) // 2, title_str, curses.color_pair(1) | curses.A_BOLD)
         
-        theme_text = f"< {self.theme_names[self.current_theme]} >"
-        TUI.safe_addstr(self.scr, start_y + 1, (w - len(theme_text)) // 2, theme_text, curses.color_pair(5) | curses.A_BOLD)
-        
         bw = min(self.box_width, w - 4)
         bx = (w - bw) // 2
         left_w = 22
         
-        TUI.draw_box(self.scr, start_y + 3, bx, list_h, bw, self.box_title)
+        TUI.draw_box(self.scr, start_y + 2, bx, list_h, bw, self.box_title)
         
-        TUI.safe_addstr(self.scr, start_y + 4, bx + 4, "Property", curses.color_pair(1) | curses.A_BOLD)
-        TUI.safe_addstr(self.scr, start_y + 4, bx + left_w + 2, "Color", curses.color_pair(1) | curses.A_BOLD)
+        TUI.safe_addstr(self.scr, start_y + 3, bx + 4, "Property", curses.color_pair(1) | curses.A_BOLD)
+        TUI.safe_addstr(self.scr, start_y + 3, bx + left_w + 2, "Color", curses.color_pair(1) | curses.A_BOLD)
         
         for i in range(1, list_h - 1):
-            TUI.safe_addstr(self.scr, start_y + 3 + i, bx + left_w, "│", curses.color_pair(4) | curses.A_DIM)
+            TUI.safe_addstr(self.scr, start_y + 2 + i, bx + left_w, "│", curses.color_pair(4) | curses.A_DIM)
         
         vis = list_h - 3
         if self.cursor < self.scroll: self.scroll = self.cursor
@@ -1789,7 +1879,7 @@ class SchemeEditor(ListEditor):
         for i in range(vis):
             idx = self.scroll + i
             if idx >= len(self.items): break
-            y = start_y + 5 + i
+            y = start_y + 4 + i
             self._draw_item(y, bx, self.items[idx], bw, idx == self.cursor)
             
         self._draw_footer(h, w)
@@ -1810,32 +1900,152 @@ class SchemeEditor(ListEditor):
         TUI.safe_addstr(self.scr, y, x + left_w + 5, hex_val[:width - left_w - 8], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
 
     def _draw_footer(self, h, w):
-        footer = "n: New  d: Delete  Enter: Edit  Esc: Save & Exit"
+        footer = "Enter: Edit  Esc: Back (Auto-saves)"
         TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
 
     def _handle_input(self, k):
         if super()._handle_input(k): return True
         
-        if k == curses.KEY_LEFT:
-            self.current_theme = (self.current_theme - 1) % len(self.theme_names)
-            self._build_items(); self.cursor = min(self.cursor, len(self.items) - 1)
-            return True
-        elif k == curses.KEY_RIGHT:
-            self.current_theme = (self.current_theme + 1) % len(self.theme_names)
-            self._build_items(); self.cursor = min(self.cursor, len(self.items) - 1)
-            return True
-        elif k in (ord('\n'), 10):
+        if k in (ord('\n'), 10):
             key, _ = self.items[self.cursor]
             curr_val = self._get_value(key)
-            new_val = TextEditor(self.scr, initial_text=curr_val, title="Edit Color").run()
+            new_val = LineEditor(self.scr, initial_value=curr_val, title="Edit Color").run()
             if new_val is not None:
                 self._set_value(key, new_val)
                 self._build_items()
             return True
-        elif k == ord('n'): self._create_new_scheme(); return True
+        return False
+
+
+class SchemeEditor(ListEditor):
+    def __init__(self, scr):
+        super().__init__(scr, "SCHEME MANAGER")
+        self.schemes = json.loads(SCHEMES_FILE.read_text())
+        self._build_items()
+        self.box_title = "Available Schemes"
+    def __init__(self, scr):
+        super().__init__(scr, "SCHEME MANAGER")
+        self.schemes = json.loads(SCHEMES_FILE.read_text())
+        self.config = load_config_safe()
+        self._build_items()
+        self.box_title = "Available Schemes"
+        self.box_width = 70
+    
+    def _build_items(self):
+        self.items = sorted(list(self.schemes.keys())) + ["+ Add new scheme..."]
+    
+    def save(self):
+        try:
+            SCHEMES_FILE.write_text(json.dumps(self.schemes, indent=4))
+            self.modified = False; return True
+        except: return False
+    
+    def _create_new(self):
+        name = TextEditor(self.scr, initial_text="new-scheme", title="New Scheme Name").run()
+        if name and name not in self.schemes:
+            # Clone currently selected or default
+            if self.items:
+                src = self.schemes[self.items[self.cursor]]
+            else:
+                src = self.schemes.get("noteworthy-light", {})
+            self.schemes[name] = copy.deepcopy(src)
+            self._build_items()
+            self.modified = True
+            # Move cursor to new item
+            try: self.cursor = self.items.index(name)
+            except: pass
+
+    def _delete_current(self):
+        if not self.items: return
+        name = self.items[self.cursor]
+        if name == "+ Add new scheme...": return
+        if len(self.items) > 2: # At least 1 scheme + button
+            del self.schemes[name]
+            self._build_items()
+            self.modified = True
+            self.cursor = min(self.cursor, len(self.items) - 1)
+
+    def refresh(self):
+        h, w = self.scr.getmaxyx()
+        self.scr.clear()
+        
+        list_h = min(len(self.items) + 2, h - 8)
+        total_h = 2 + list_h + 2
+        start_y = max(1, (h - total_h) // 2)
+        
+        title_str = f"{self.title}{' *' if self.modified else ''}"
+        TUI.safe_addstr(self.scr, start_y, (w - len(title_str)) // 2, title_str, curses.color_pair(1) | curses.A_BOLD)
+        
+        bw = min(self.box_width, w - 4)
+        bx = (w - bw) // 2
+        
+        TUI.draw_box(self.scr, start_y + 2, bx, list_h, bw, self.box_title)
+        
+        vis = list_h - 2
+        if self.cursor < self.scroll: self.scroll = self.cursor
+        elif self.cursor >= self.scroll + vis: self.scroll = self.cursor - vis + 1
+        
+        for i in range(vis):
+            idx = self.scroll + i
+            if idx >= len(self.items): break
+            y = start_y + 3 + i
+            self._draw_item(y, bx, self.items[idx], bw, idx == self.cursor)
+            
+        self._draw_footer(h, w)
+        self.scr.refresh()
+
+    def _draw_item(self, y, x, item, width, selected):
+        name = item
+        if name == "+ Add new scheme...":
+            TUI.safe_addstr(self.scr, y, x + 4, name, curses.color_pair(3 if selected else 4) | (curses.A_BOLD if selected else curses.A_DIM))
+            if selected: TUI.safe_addstr(self.scr, y, x + 2, ">", curses.color_pair(3) | curses.A_BOLD)
+            return
+
+        theme = self.schemes[name]
+        is_active = self.config.get("display-mode") == name
+        
+        if selected: TUI.safe_addstr(self.scr, y, x + 2, ">", curses.color_pair(3) | curses.A_BOLD)
+        
+        # Name
+        attr = curses.color_pair(1 if selected else 4) | (curses.A_BOLD if selected else 0)
+        TUI.safe_addstr(self.scr, y, x + 4, name[:width-25], attr)
+        
+        # Active Marker
+        if is_active:
+            TUI.safe_addstr(self.scr, y, x + width - 12, "(ACTIVE)", curses.color_pair(2) | curses.A_BOLD)
+    
+    def _draw_footer(self, h, w):
+        footer = "Space: Set Active  n: New  d: Delete  Enter: Edit  Esc: Save & Exit"
+        TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
+
+    def _handle_input(self, k):
+        if super()._handle_input(k): return True
+        
+        if k in (ord('\n'), 10):
+            if self.items:
+                name = self.items[self.cursor]
+                if name == "+ Add new scheme...":
+                    self._create_new()
+                else:
+                    # Pass modified=False initially, if detail editor changes something it sets self.modified
+                    editor = ThemeDetailEditor(self.scr, self.schemes, name)
+                    editor.run()
+                    if editor.modified: self.modified = True
+            return True
+        elif k == ord(' '):
+            if self.items:
+                name = self.items[self.cursor]
+                if name != "+ Add new scheme...":
+                    self.config["display-mode"] = name
+                    save_config(self.config)
+                    # self.modified = True # Config change doesn't count as schemes modified
+            return True
+        elif k == ord('n'):
+            self._create_new()
+            return True
         elif k == ord('d'):
             if TUI.prompt_confirm(self.scr, "Delete scheme? (y/n): "):
-                self._delete_current_scheme()
+                self._delete_current()
             return True
         
         return False
@@ -1946,18 +2156,18 @@ class SnippetsEditor(ListEditor):
                 self._update_items()
                 # Edit immediately
                 name, definition = self.snippets[self.cursor]
-                new_name = TextEditor(self.scr, initial_text=name, title="New Snippet Name").run()
+                new_name = LineEditor(self.scr, initial_value=name, title="New Snippet Name").run()
                 if new_name is not None: self.snippets[self.cursor][0] = new_name
-                new_def = TextEditor(self.scr, initial_text=definition, title="New Definition").run()
+                new_def = LineEditor(self.scr, initial_value=definition, title="New Definition").run()
                 if new_def is not None: self.snippets[self.cursor][1] = new_def
             else:
                 # Edit existing
                 name, definition = self.snippets[self.cursor]
-                new_name = TextEditor(self.scr, initial_text=name, title="Edit Snippet Name").run()
+                new_name = LineEditor(self.scr, initial_value=name, title="Edit Snippet Name").run()
                 if new_name is not None:
                     self.snippets[self.cursor][0] = new_name
                     self.modified = True
-                new_def = TextEditor(self.scr, initial_text=definition, title="Edit Definition").run()
+                new_def = LineEditor(self.scr, initial_value=definition, title="Edit Definition").run()
                 if new_def is not None:
                     self.snippets[self.cursor][1] = new_def
                     self.modified = True
@@ -2042,22 +2252,12 @@ class IndexignoreEditor(ListEditor):
         TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
     
     def _add_new(self):
-        curses.echo()
-        curses.curs_set(1)
-        h, w = self.scr.getmaxyx()
-        self.scr.addstr(h - 2, 2, "Enter file ID to ignore: ")
-        self.scr.clrtoeol()
-        self.scr.refresh()
-        try:
-            new_id = self.scr.getstr(h - 2, 27, 20).decode('utf-8').strip()
-            if new_id and new_id not in self.ignored:
-                self.ignored.append(new_id)
-                self.ignored.sort()
-                self._update_items()
-                self.modified = True
-        except: pass
-        curses.noecho()
-        curses.curs_set(0)
+        new_id = LineEditor(self.scr, title="Add Ignore Pattern").run()
+        if new_id and new_id not in self.ignored:
+            self.ignored.append(new_id)
+            self.ignored.sort()
+            self._update_items()
+            self.modified = True
 
     def _handle_input(self, k):
         if k in (curses.KEY_UP, ord('k')):
@@ -2458,14 +2658,20 @@ class InitWizard:
         
         # Clear the input area first to prevent ghosting
         try:
-            self.scr.move(y, x)
+            # TUI.safe_addstr uses y+1, x+1 internally
+            real_y = y + 1
+            real_x = x + 1
+            
+            self.scr.move(real_y, real_x)
             self.scr.clrtoeol()
             TUI.safe_addstr(self.scr, y, x, "> ", curses.color_pair(3) | curses.A_BOLD)
             self.scr.refresh()
             
             # Explicitly move cursor to input start position for getstr
-            # Note: getstr(y, x, n) reads from (y,x), so we must pass the shifted coordinate
-            value = self.scr.getstr(y, x + 2, self.input_w - 4).decode('utf-8').strip()
+            # safe_addstr(y, x, "> ") puts "> " at real_y, real_x.
+            # We want input to start at real_x + 2 (after "> ")
+            # getstr takes raw coordinates
+            value = self.scr.getstr(real_y, real_x + 2, self.input_w - 4).decode('utf-8').strip()
         except:
             value = ""
         
