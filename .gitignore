@@ -1,5 +1,5 @@
 # Build artifacts
-build/
+templates/build/
 output.pdf
 *.zip
 .build_settings.json

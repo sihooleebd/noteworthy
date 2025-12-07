@@ -83,7 +83,8 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
 mkdir project
 cd project
 mkdir content
-curl -O https://raw.githubusercontent.com/sihooleebd/noteworthy/master/noteworthy.py
+curl -O https://raw.githubusercontent.com/sihooleebd/noteworthy/master/load-noteworthy.py
+python3 load-noteworthy.py
 ```
 
 ### Quickstart
@@ -117,6 +118,7 @@ The noteworthy system guides you through the initialization, the configuration, 
 - **Controls**: Arrow keys to navigate, Space to toggle, Enter to build, `q` to quit
 - **Build Progress**: Real-time compilation status with Typst log toggle (`v`)
 - **Template Integrity Check**: Verify that the template files are not corrupted and auto fix
+- **Backup & Restore**: Export and Import configuration files individually
 
 #### Interface Preview
 
