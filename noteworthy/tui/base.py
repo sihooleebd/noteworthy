@@ -4,7 +4,6 @@ import termios
 import curses.textpad
 from pathlib import Path
 from ..core.config_mgmt import export_file, import_file, list_exports_for
-from ..config import MIN_TERM_HEIGHT, MIN_TERM_WIDTH
 from ..utils import register_key, handle_key_event
 from .keybinds import SaveBind, ExitBind, NavigationBind, KeyBind
 
@@ -56,29 +55,68 @@ class TUI:
             pass
 
     @staticmethod
-    def prompt_save(scr):
+    def get_dims(scr):
+        """Returns (h, w) of the safe drawing area (screen size - 2 for safe margin)."""
         h_raw, w_raw = scr.getmaxyx()
-        h, w = (h_raw - 2, w_raw - 2)
-        TUI.safe_addstr(scr, h - 1, 2, 'Save? (y/n/c): ', curses.color_pair(3) | curses.A_BOLD)
+        return h_raw - 2, w_raw - 2
+
+    @staticmethod
+    def center(scr, content_h=None, content_w=None, offset_y=0, offset_x=0):
+        """
+        Returns (y, x) to center content of size (content_h, content_w).
+        If content size is not provided, returns center point of the screen.
+        Result is adjusted for safe_addstr's implicit +1 offset.
+        """
+        h_raw, w_raw = scr.getmaxyx()
+        
+        # Calculate center point
+        cy = h_raw // 2
+        cx = w_raw // 2
+        
+        start_y = cy
+        start_x = cx
+        
+        if content_h is not None:
+            start_y = max(0, (h_raw - content_h) // 2)
+        if content_w is not None:
+            start_x = max(0, (w_raw - content_w) // 2)
+
+        # Apply offset and adjust for 'safe' coordinates (usually -1 because safe_* adds +1)
+        # However, safe_addstr takes 0-indexed relative coords and adds 1.
+        # So if we want to print at absolute screen row Y, we pass Y-1.
+        # But our calculation (h - ch) // 2 gives the absolute starting row.
+        # So we should return start_y - 1.
+        
+        return start_y - 1 + offset_y, start_x - 1 + offset_x
+
+    @staticmethod
+    def prompt_save(scr):
+        h, w = TUI.get_dims(scr)
+        msg = 'Save? (y/n/c): '
+        # Bottom-left positioning
+        TUI.safe_addstr(scr, h - 1, 2, msg, curses.color_pair(3) | curses.A_BOLD)
         scr.refresh()
         c = scr.getch()
         return chr(c) if c in (ord('y'), ord('n'), ord('c')) else 'c'
 
     @staticmethod
     def prompt_confirm(scr, message='Are you sure? (y/n): '):
-        h_raw, w_raw = scr.getmaxyx()
         box_h = 7
         box_w = max(40, len(message) + 8)
-        box_y = (h_raw - box_h) // 2
-        box_x = (w_raw - box_w) // 2
+        
+        box_y, box_x = TUI.center(scr, box_h, box_w)
+        
         TUI.draw_box(scr, box_y, box_x, box_h, box_w, 'CONFIRM')
+        
         msg_y = box_y + 2
         msg_x = box_x + (box_w - len(message)) // 2
         TUI.safe_addstr(scr, msg_y, msg_x, message, curses.color_pair(3) | curses.A_BOLD)
+        
         hint = '[y] Yes    [n] No'
         hint_y = box_y + 4
         hint_x = box_x + (box_w - len(hint)) // 2
         TUI.safe_addstr(scr, hint_y, hint_x, hint, curses.color_pair(4))
+        
         scr.refresh()
         while True:
             c = scr.getch()
@@ -89,31 +127,50 @@ class TUI:
 
     @staticmethod
     def show_saved(scr):
-        h_raw, w_raw = scr.getmaxyx()
-        h, w = (h_raw - 2, w_raw - 2)
+        h, w = TUI.get_dims(scr)
         TUI.safe_addstr(scr, h - 1, 2, 'Saved!', curses.color_pair(2) | curses.A_BOLD)
         scr.refresh()
         curses.napms(500)
 
     @staticmethod
-    def check_terminal_size(scr):
+    def check_terminal_size(scr, min_h=30, min_w=60):
         was_error = False
         while True:
             h, w = scr.getmaxyx()
-            if h >= MIN_TERM_HEIGHT and w >= MIN_TERM_WIDTH:
+            if h >= min_h and w >= min_w:
                 if was_error:
                     scr.clear()
                     scr.refresh()
-                    scr.timeout(-1)
+                    # Reset timeout to blocking if we were in error loop
+                    # But caller might expect different timeout. 
+                    # Usually callers do their own timeout setting or loop, 
+                    # but this blocks until size is fixed.
                 return True
+            
             was_error = True
             scr.clear()
-            y = h // 2 - 1
-            TUI.safe_addstr(scr, y, max(0, (w - 19) // 2), 'Terminal too small!', curses.color_pair(6) | curses.A_BOLD)
-            TUI.safe_addstr(scr, y + 1, max(0, (w - 15) // 2), f'Current: {h}×{w}', curses.color_pair(4))
-            TUI.safe_addstr(scr, y + 2, max(0, (w - 15) // 2), f'Required: {MIN_TERM_HEIGHT}×{MIN_TERM_WIDTH}', curses.color_pair(4) | curses.A_DIM)
+            
+            msg1 = 'Terminal too small!'
+            msg2 = f'Current: {h}x{w}'
+            msg3 = f'Required: {min_h}x{min_w}'
+            
+            # Using center helper
+            # 3 lines of text
+            start_y, _ = TUI.center(scr, content_h=3)
+            _, start_x1 = TUI.center(scr, content_w=len(msg1))
+            _, start_x2 = TUI.center(scr, content_w=len(msg2))
+            _, start_x3 = TUI.center(scr, content_w=len(msg3))
+
+            TUI.safe_addstr(scr, start_y, start_x1, msg1, curses.color_pair(6) | curses.A_BOLD)
+            TUI.safe_addstr(scr, start_y + 1, start_x2, msg2, curses.color_pair(4))
+            TUI.safe_addstr(scr, start_y + 2, start_x3, msg3, curses.color_pair(4) | curses.A_DIM)
+            
             scr.refresh()
-            scr.timeout(100)
+            curses.napms(100) # Sleep to prevent CPU spin
+            
+            # Flush input to ignore keys during resize
+            curses.flushinp()
+            
             if scr.getch() in (ord('q'), 27):
                 return False
 
@@ -237,30 +294,18 @@ class BaseEditor:
     def run(self):
         self.refresh()
         while True:
-            if not TUI.check_terminal_size(self.scr):
+            # Dynamic check: we need at least 10 lines height and box_width+4 width
+            if not TUI.check_terminal_size(self.scr, 10, self.box_width + 4):
                 return
-            k = self.scr.getch()
             
-            # Delegate to KeyHandler
+            k = self.scr.getch()
             handled, res = handle_key_event(k, self.keymap, self)
             if handled:
-                if res == 'EXIT':
-                    return
-                # If save return True, show saved
-                if res is True and not isinstance(res, str): 
-                     # Only if it was a save action? 
-                     # We can make SaveBind return 'SAVED' or True.
-                     # But self.save() usually returns boolean.
-                     pass 
+                if res == 'EXIT': return
             else:
-                 # Fallback for manual handling if needed, though we want to deprecate this
-                if k == ord('x'):
-                    self.do_export()
-                elif k == ord('l'):
-                    self.do_import()
-                else:
-                    self._handle_input(k)
-            
+                if k == ord('x'): self.do_export()
+                elif k == ord('l'): self.do_import()
+                else: self._handle_input(k)
             self.refresh()
 
     def _handle_input(self, k):

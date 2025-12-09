@@ -115,18 +115,21 @@ class ConfigEditor(ListEditor):
 
     def refresh(self):
          # Override refresh to add header
-        h, w = self.scr.getmaxyx()
+        h, w = TUI.get_dims(self.scr)
         self.scr.clear()
         
         list_h = min(len(self.items) + 2, h - 8)
         total_h = 2 + list_h + 2
-        start_y = max(1, (h - total_h) // 2)
+        
+        cy, cx = TUI.center(self.scr, total_h, self.box_width)
+        start_y = cy + 1
         
         title_str = f"{self.title}{' *' if self.modified else ''}"
-        TUI.safe_addstr(self.scr, start_y, (w - len(title_str)) // 2, title_str, curses.color_pair(1) | curses.A_BOLD)
+        ty, tx = TUI.center(self.scr, content_w=len(title_str))
+        TUI.safe_addstr(self.scr, start_y, tx, title_str, curses.color_pair(1) | curses.A_BOLD)
         
-        bw = min(self.box_width, w - 4)
-        bx = (w - bw) // 2
+        bw = min(self.box_width, w - 2)
+        _, bx = TUI.center(self.scr, content_w=bw)
         left_w = 26
         
         TUI.draw_box(self.scr, start_y + 2, bx, list_h, bw, self.box_title)
@@ -136,16 +139,7 @@ class ConfigEditor(ListEditor):
         TUI.safe_addstr(self.scr, start_y + 3, bx + left_w + 2, "Value", curses.color_pair(1) | curses.A_BOLD)
         TUI.safe_addstr(self.scr, start_y + 3, bx + left_w, "│", curses.color_pair(4) | curses.A_DIM)
 
-        # Draw separator line below header?
-        # Standard draw_box handles outline. list_h includes title row inside box?
-        # Creating a fake separator line (horizontal)
-        # for x_off in range(1, bw-1): 
-        #      if x_off == left_w - 2: TUI.safe_addstr(self.scr, start_y + 4, bx + x_off, "┼", curses.color_pair(4) | curses.A_DIM)
-        #      else: TUI.safe_addstr(self.scr, start_y + 4, bx + x_off, "─", curses.color_pair(4) | curses.A_DIM)
-
-        vis = list_h - 3 # -1 for top border, -1 for bottom, -1 for header row?
-        # Actually draw_box draws border. Inside is list_h-2 lines.
-        # We used first line for Header. So start loop at 1.
+        vis = list_h - 3 
         
         if self.cursor < self.scroll: self.scroll = self.cursor
         elif self.cursor >= self.scroll + vis: self.scroll = self.cursor - vis + 1

@@ -95,25 +95,53 @@ class BuildMenu:
         elif layout == 'horz':
             start_y, lbw, rbw = (max(0, (self.h - (lh + 2 + obh) - 2) // 2), min(40, (self.w - 6) // 2), min(50, (self.w - 6) // 2))
             lx, rx = ((self.w - lbw - rbw - 2) // 2, (self.w - lbw - rbw - 2) // 2 + lbw + 2)
-            for i, l in enumerate(LOGO[:self.h - 2]):
-                TUI.safe_addstr(self.scr, start_y + i, lx + (lbw - 14) // 2, l, curses.color_pair(1) | curses.A_BOLD)
-            TUI.draw_box(self.scr, start_y + lh + 2, lx, obh, lbw, 'Options')
-            opts(start_y + lh + 2, lx, lbw)
+            
+            # Hide logo if really short
+            if self.h >= lh + 2 + obh:
+                for i, l in enumerate(LOGO[:self.h - 2]):
+                    TUI.safe_addstr(self.scr, start_y + i, lx + (lbw - 14) // 2, l, curses.color_pair(1) | curses.A_BOLD)
+            
+            TUI.draw_box(self.scr, start_y + lh + 2 if self.h >= lh + 2 + obh else start_y, lx, obh, lbw, 'Options')
+            opts(start_y + lh + 2 if self.h >= lh + 2 + obh else start_y, lx, lbw)
+            
             TUI.draw_box(self.scr, start_y, rx, min(lh + 2 + obh, self.h - 2), rbw, 'Select Chapters')
             items(start_y, rx, rbw, min(lh + 2 + obh, self.h - 2))
         else:
             obh = 7
-            start_y = max(0, (self.h - (lh + 2 + obh + 1 + 10 + 2)) // 2)
-            for i, l in enumerate(LOGO):
-                TUI.safe_addstr(self.scr, start_y + i, (self.w - 14) // 2, l, curses.color_pair(1) | curses.A_BOLD)
+            # If height < 36, hide logo to make space for functionality
+            hide_logo = self.h < 36
+            real_lh = len(LOGO) if not hide_logo else 0
+            
+            # Calculate start_y centered based on content height
+            total_content_h = (real_lh + 2 if not hide_logo else 0) + obh + 1 + 6 + 2 # 6 min chapters?
+            start_y = max(0, (self.h - total_content_h) // 2)
+            
+            if not hide_logo:
+                for i, l in enumerate(LOGO):
+                    TUI.safe_addstr(self.scr, start_y + i, (self.w - 14) // 2, l, curses.color_pair(1) | curses.A_BOLD)
+            
             bw, bx = (min(60, self.w - 4), (self.w - min(60, self.w - 4)) // 2)
-            TUI.draw_box(self.scr, start_y + lh + 3, bx, obh, bw, 'Options')
-            opts(start_y + lh + 3, bx, bw)
-            cy = start_y + lh + 3 + obh + 1
-            TUI.draw_box(self.scr, cy, bx, max(4, min(len(self.items) + 2, self.h - cy - 3)), bw, 'Select Chapters')
-            items(cy, bx, bw, max(4, min(len(self.items) + 2, self.h - cy - 3)))
+            
+            # Reduce spacing if tight
+            spacing = 2 if not hide_logo else 0
+            opts_y = start_y + real_lh + spacing
+            if opts_y < 0: opts_y = 0
+            
+            TUI.draw_box(self.scr, opts_y, bx, obh, bw, 'Options')
+            opts(opts_y, bx, bw)
+            
+            cy = opts_y + obh + 1
+            # Remaining height for chapters
+            rem_h = self.h - cy - 2 # Footer space
+            
+            # Ensure at least 4 lines for chapters 
+            list_h = max(4, rem_h)
+            
+            TUI.draw_box(self.scr, cy, bx, list_h, bw, 'Select Chapters')
+            items(cy, bx, bw, list_h)
+            
         footer = 'Space: Toggle  a/n: All/None  Enter: Build  Esc: Back'
-        TUI.safe_addstr(self.scr, self.h - 3, (self.w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
+        TUI.safe_addstr(self.scr, self.h - 1, (self.w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
         self.scr.refresh()
 
     def run(self):

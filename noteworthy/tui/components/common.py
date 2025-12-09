@@ -31,14 +31,30 @@ class LineEditor:
         return True
 
     def run(self):
-        h_raw, w_raw = self.scr.getmaxyx()
+        h_raw, w_raw = self.scr.getmaxyx() # Still need these for box calc?
+        # Actually TUI.center uses scr.getmaxyx internally but we need box_w first.
         box_h = 7
         box_w = max(50, len(self.title) + 10, len(self.value) + 10)
-        box_y = (h_raw - box_h) // 2
-        box_x = (w_raw - box_w) // 2
+        
+        # logical_y, logical_x
+        cy, cx = TUI.center(self.scr, box_h, box_w)
+        # TUI.center returns coordinates compatible with implicit margins if used purely logically?
+        # TUI.center returns: ((h - 2 - content_h) // 2, (w - 2 - content_w) // 2)
+        # safe_addstr adds 1 to y and x.
+        # If we passed cy, cx to safe_addstr, it would print at cy+1, cx+1.
+        # Ideally (cy+1) is the visual top line.
+        # (h-2-content_h)//2 is the padding. +1 gives the start index.
+        # So passing logical cy, cx to safe_addstr works perfect.
+        
+        box_y = cy
+        box_x = cx
+        
         curses.curs_set(1)
         
         while True:
+            if not TUI.check_terminal_size(self.scr):
+                return None
+                
             TUI.draw_box(self.scr, box_y, box_x, box_h, box_w, self.title)
             TUI.safe_addstr(self.scr, box_y + 4, box_x + 2, 'Enter: Confirm  Esc: Cancel', curses.color_pair(4) | curses.A_DIM)
             input_y = box_y + 2
@@ -134,9 +150,11 @@ class LogScreen:
         
     def run(self):
         while True:
+            if not TUI.check_terminal_size(self.scr):
+                return
+                
             self.scr.clear()
-            h_raw, w_raw = self.scr.getmaxyx()
-            h, w = (h_raw - 2, w_raw - 2)
+            h, w = TUI.get_dims(self.scr)
             
             if self.view_log:
                  header = "LOG (press 'v' to go back, 'c' to copy)"
@@ -160,16 +178,35 @@ def show_error_screen(scr, error):
     if log.strip() == 'NoneType: None': log = str(error)
     
     def draw(s, h, w):
-        y = max(0, (h - len(SAD_FACE) - 8) // 2)
-        for i, line in enumerate(SAD_FACE):
-            TUI.safe_addstr(s, y + i, (w - 9) // 2, line, curses.color_pair(6) | curses.A_BOLD)
-        my = y + len(SAD_FACE) + 2
+        face = SAD_FACE
+        total_h = len(face) + 2 + 1 + 2 + 1 # Face + gap + Title + gap + Msg + gap + Hint (approx)
+        
+        # We can calculate exact total height if needed, but let's approximate or just use TUI.center for blocks
+        # Let's align based on start_y
+        
+        cy, cx = TUI.center(s, content_h=total_h if total_h < h else h)
+        y = cy + 1
+        
+        for i, line in enumerate(face):
+             # center each face line? or block?
+             # Face width 9
+             _, lx = TUI.center(s, content_w=len(line))
+             TUI.safe_addstr(s, y + i, lx, line, curses.color_pair(6) | curses.A_BOLD)
+             
+        my = y + len(face) + 2
+        
         is_build_error = "Build failed" in str(error) or (isinstance(error, Exception) and getattr(error, 'is_build_error', False))
         title = 'BUILD FAILED' if is_build_error else 'FATAL ERROR'
-        TUI.safe_addstr(s, my, (w - len(title)) // 2, title, curses.color_pair(6) | curses.A_BOLD)
-        err = str(error)[:w - 10]
-        TUI.safe_addstr(s, my + 2, (w - len(err)) // 2, err, curses.color_pair(4))
-        TUI.safe_addstr(s, my + 4, (w - 50) // 2, "Press 'v' to view log  |  Press any other key to exit", curses.color_pair(4) | curses.A_DIM)
+        _, tx = TUI.center(s, content_w=len(title))
+        TUI.safe_addstr(s, my, tx, title, curses.color_pair(6) | curses.A_BOLD)
+        
+        err = str(error)[:max(10, w - 10)]
+        _, ex = TUI.center(s, content_w=len(err))
+        TUI.safe_addstr(s, my + 2, ex, err, curses.color_pair(4))
+        
+        hint = "Press 'v' to view log  |  Press any other key to exit"
+        _, hx = TUI.center(s, content_w=len(hint))
+        TUI.safe_addstr(s, my + 4, hx, hint, curses.color_pair(4) | curses.A_DIM)
 
     LogScreen(scr, log, None, draw).run()
 
@@ -179,15 +216,26 @@ def show_success_screen(scr, page_count, has_warnings=False, typst_logs=None):
     def draw(s, h, w):
         face = HMM_FACE if has_warnings else HAPPY_FACE
         color = curses.color_pair(3) if has_warnings else curses.color_pair(2)
-        y = max(0, (h - len(face) - 8) // 2)
+        
+        total_h = len(face) + 2 + 1 + 2 + 1 
+        cy, cx = TUI.center(s, content_h=total_h)
+        y = cy + 1
+        
         for i, line in enumerate(face):
-            TUI.safe_addstr(s, y + i, (w - len(face[0])) // 2, line, color | curses.A_BOLD)
+            _, lx = TUI.center(s, content_w=len(line))
+            TUI.safe_addstr(s, y + i, lx, line, color | curses.A_BOLD)
+            
         my = y + len(face) + 2
         title = 'BUILD SUCCEEDED (with warnings)' if has_warnings else 'BUILD SUCCEEDED!'
-        TUI.safe_addstr(s, my, (w - len(title)) // 2, title, color | curses.A_BOLD)
+        _, tx = TUI.center(s, content_w=len(title))
+        TUI.safe_addstr(s, my, tx, title, color | curses.A_BOLD)
+        
         msg = f'Created: {OUTPUT_FILE} ({page_count} pages)'
-        TUI.safe_addstr(s, my + 2, (w - len(msg)) // 2, msg, curses.color_pair(4))
+        _, mx = TUI.center(s, content_w=len(msg))
+        TUI.safe_addstr(s, my + 2, mx, msg, curses.color_pair(4))
+        
         hint = "Press 'v' to view log  |  Press any other key to exit" if has_warnings else 'Press any key to exit...'
-        TUI.safe_addstr(s, my + 4, (w - len(hint)) // 2, hint, curses.color_pair(4) | curses.A_DIM)
+        _, hx = TUI.center(s, content_w=len(hint))
+        TUI.safe_addstr(s, my + 4, hx, hint, curses.color_pair(4) | curses.A_DIM)
 
     LogScreen(scr, log, None, draw).run()

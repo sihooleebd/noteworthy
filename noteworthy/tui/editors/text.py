@@ -62,10 +62,13 @@ class TextEditor(BaseEditor):
         self.refresh()
 
     def refresh(self):
-        h, w = self.scr.getmaxyx()
+        h, w = TUI.get_dims(self.scr)
         self.scr.clear()
+        
         title_str = f"{self.title}{(' *' if self.modified else '')}"
-        TUI.safe_addstr(self.scr, 0, (w - len(title_str)) // 2, title_str, curses.color_pair(1) | curses.A_BOLD)
+        _, tx = TUI.center(self.scr, content_w=len(title_str))
+        TUI.safe_addstr(self.scr, 0, tx, title_str, curses.color_pair(1) | curses.A_BOLD)
+        
         visual_lines = self._get_visual_lines(w - 5)
         vcy = 0
         for i, (text, l_idx, start_idx) in enumerate(visual_lines):
@@ -92,11 +95,13 @@ class TextEditor(BaseEditor):
                 TUI.safe_addstr(self.scr, y, 0, '    · ', curses.color_pair(4) | curses.A_DIM)
             TUI.safe_addstr(self.scr, y, 6, text)
         footer = 'Esc: Save & Exit  ^X: Export  ^L: Import'
-        TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
+        _, fx = TUI.center(self.scr, content_w=len(footer))
+        TUI.safe_addstr(self.scr, h - 1, fx, footer, curses.color_pair(4) | curses.A_DIM)
+        
         curses.curs_set(1)
-        cur_y = vcy - self.scroll_y + 2
+        cur_y = vcy - self.scroll_y + 1
         cur_x = 7 + (self.cx - visual_lines[vcy][2])
-        if 0 <= cur_y < h - 1 and 0 <= cur_x < w:
+        if 0 <= cur_y < h and 0 <= cur_x < w:
             self.scr.move(cur_y, cur_x)
         self.scr.refresh()
 

@@ -12,8 +12,7 @@ PREFACE_FILE = BASE_DIR / 'templates/config/preface.typ'
 SNIPPETS_FILE = BASE_DIR / 'templates/config/snippets.typ'
 SCHEMES_FILE = BASE_DIR / 'templates/config/schemes.json'
 SETUP_FILE = BASE_DIR / 'templates/setup.typ'
-MIN_TERM_HEIGHT = 30
-MIN_TERM_WIDTH = 52
+
 LOGO = ['         ,--. ', "       ,--.'| ", '   ,--,:  : | ', ",`--.'`|  ' : ", '|   :  :  | | ', ':   |   \\ | : ', "|   : '  '; | ", "'   ' ;.    ; ", '|   | | \\   | ', "'   : |  ; .' ", "|   | '`--'   ", "'   : |       ", ";   |.'       ", "'---'         "]
 HAPPY_FACE = ['    __  ', ' _  \\ \\ ', '(_)  | |', '     | |', ' _   | |', '(_)  | |', '    /_/ ']
 HMM_FACE = ['     _ ', ' _  | |', '(_) | |', '    | |', ' _  | |', '(_) | |', '    |_|']

@@ -105,19 +105,22 @@ class HierarchyEditor(ListEditor):
         except: return False
 
     def refresh(self):
-        h, w = self.scr.getmaxyx()
+        h, w = TUI.get_dims(self.scr)
         self.scr.clear()
         
         list_h = min(len(self.items) + 2, h - 8)
         total_h = 2 + list_h + 2
-        start_y = max(1, (h - total_h) // 2)
+        
+        cy, cx = TUI.center(self.scr, total_h, self.box_width)
+        start_y = cy + 1 
         
         title_str = f"{self.title}{' *' if self.modified else ''}"
-        TUI.safe_addstr(self.scr, start_y, (w - len(title_str)) // 2, title_str, curses.color_pair(1) | curses.A_BOLD)
+        ty, tx = TUI.center(self.scr, content_w=len(title_str))
+        TUI.safe_addstr(self.scr, start_y, tx, title_str, curses.color_pair(1) | curses.A_BOLD)
         
         bw = min(self.box_width, w - 4)
-        bx = (w - bw) // 2
-        left_w = 30 # Slightly wider than others to accommodate indentation
+        _, bx = TUI.center(self.scr, content_w=bw)
+        left_w = 30 
         
         TUI.draw_box(self.scr, start_y + 2, bx, list_h, bw, self.box_title)
         
