@@ -41,7 +41,7 @@ class BuildMenu:
         [self.selected.update({(ci, ai): v}) for ai in range(len(self.hierarchy[ci]['pages']))]
 
     def refresh(self):
-        self.h, self.w = self.scr.getmaxyx()
+        self.h, self.w = TUI.get_dims(self.scr)
         self.scr.clear()
         lh, obh = (len(LOGO), 7)
         vert_ch_rows = self.h - lh - 2 - obh - 1 - 5
@@ -272,7 +272,7 @@ class BuildUI:
     def refresh(self):
         if not self.check_input():
             return False
-        self.h, self.w = self.scr.getmaxyx()
+        self.h, self.w = TUI.get_dims(self.scr)
         self.scr.clear()
         lh = min(15, self.h - 12)
         total_h = lh + 8
@@ -301,7 +301,8 @@ class BuildUI:
             TUI.draw_box(self.scr, start_y + 8, bx, lh, bw, 'Build Log')
             for i, (msg, ok) in enumerate(self.logs[-(lh - 2):]):
                 TUI.safe_addstr(self.scr, start_y + 9 + i, bx + 2, ('✓ ' if ok else '  ') + msg[:bw - 6], curses.color_pair(2 if ok else 4))
-        TUI.safe_addstr(self.scr, self.h - 1, (self.w - 50) // 2, 'Esc: Cancel  |  v: Toggle Typst Log', curses.color_pair(4) | curses.A_DIM)
+        footer = 'Esc: Cancel  |  v: Toggle Typst Log'
+        TUI.safe_addstr(self.scr, self.h - 1, (self.w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
         self.scr.refresh()
         return True
 

@@ -1,4 +1,5 @@
 import curses
+import subprocess
 from ...config import SAD_FACE, HAPPY_FACE, HMM_FACE, OUTPUT_FILE
 from ...utils import register_key, handle_key_event
 from ..base import TUI
@@ -15,7 +16,6 @@ class LineEditor:
         register_key(self.keymap, KeyBind(27, self.action_cancel, "Cancel"))
         register_key(self.keymap, ConfirmBind(self.action_confirm))
         register_key(self.keymap, KeyBind([curses.KEY_BACKSPACE, 127, 8], self.action_backspace, "Backspace"))
-        # Character handling is via handle_char override
 
     def action_cancel(self, ctx):
         return 'EXIT_CANCEL'
@@ -31,23 +31,16 @@ class LineEditor:
         return True
 
     def run(self):
-        h_raw, w_raw = self.scr.getmaxyx() # Still need these for box calc?
-        # Actually TUI.center uses scr.getmaxyx internally but we need box_w first.
+        h_raw, w_raw = self.scr.getmaxyx()
         box_h = 7
         box_w = max(50, len(self.title) + 10, len(self.value) + 10)
+        box_w = min(box_w, w_raw - 2)
         
-        # logical_y, logical_x
-        cy, cx = TUI.center(self.scr, box_h, box_w)
-        # TUI.center returns coordinates compatible with implicit margins if used purely logically?
-        # TUI.center returns: ((h - 2 - content_h) // 2, (w - 2 - content_w) // 2)
-        # safe_addstr adds 1 to y and x.
-        # If we passed cy, cx to safe_addstr, it would print at cy+1, cx+1.
-        # Ideally (cy+1) is the visual top line.
-        # (h-2-content_h)//2 is the padding. +1 gives the start index.
-        # So passing logical cy, cx to safe_addstr works perfect.
+        bh, bw = (14, min(40, w_raw - 4))
+        by, bx = TUI.center(self.scr, bh, bw)
         
-        box_y = cy
-        box_x = cx
+        box_y = by
+        box_x = bx
         
         curses.curs_set(1)
         
@@ -121,14 +114,10 @@ class LogScreen:
         self.keymap = {}
         register_key(self.keymap, KeyBind(ord('v'), self.action_toggle_log, "View Log"))
         register_key(self.keymap, KeyBind(ord('c'), self.action_copy, "Copy Log"))
-        register_key(self.keymap, KeyBind(None, self.action_any, "Exit")) # Fallback
+        register_key(self.keymap, KeyBind(27, self.action_esc, "Back/Exit"))
+        register_key(self.keymap, KeyBind(None, self.action_any, "Exit"))
 
     def handle_key(self, k):
-        # Specific logic to handle any key if not v or c
-        # We manually check the keymap first? handle_key_event does this.
-        # But we need 'any other key' behavior.
-        # Let's trust handle_key_event logic which we will modify to handle None key as fallback?
-        # Actually, let's keep it simple here.
         if k == ord('v') or k == ord('c'):
              return handle_key_event(k, self.keymap, self)
         
@@ -145,6 +134,12 @@ class LogScreen:
         if self.view_log:
             self.copied = copy_to_clipboard(self.log)
             
+    def action_esc(self, ctx):
+        if self.view_log:
+            self.action_toggle_log(ctx)
+        else:
+            return 'EXIT'
+            
     def action_any(self, ctx):
         if not self.view_log: return 'EXIT'
         
@@ -157,7 +152,7 @@ class LogScreen:
             h, w = TUI.get_dims(self.scr)
             
             if self.view_log:
-                 header = "LOG (press 'v' to go back, 'c' to copy)"
+                 header = "LOG (press 'v' or 'Esc' to go back, 'c' to copy)"
                  if self.copied: header = 'LOG (copied to clipboard!)'
                  TUI.safe_addstr(self.scr, 0, 2, header, curses.color_pair(6) | curses.A_BOLD)
                  for i, line in enumerate(self.log.split('\n')[:h-3]):
@@ -179,24 +174,20 @@ def show_error_screen(scr, error):
     
     def draw(s, h, w):
         face = SAD_FACE
-        total_h = len(face) + 2 + 1 + 2 + 1 # Face + gap + Title + gap + Msg + gap + Hint (approx)
+        total_h = len(face) + 2 + 1 + 2 + 1
         
-        # We can calculate exact total height if needed, but let's approximate or just use TUI.center for blocks
-        # Let's align based on start_y
         
         cy, cx = TUI.center(s, content_h=total_h if total_h < h else h)
         y = cy + 1
         
         for i, line in enumerate(face):
-             # center each face line? or block?
-             # Face width 9
              _, lx = TUI.center(s, content_w=len(line))
              TUI.safe_addstr(s, y + i, lx, line, curses.color_pair(6) | curses.A_BOLD)
              
         my = y + len(face) + 2
         
         is_build_error = "Build failed" in str(error) or (isinstance(error, Exception) and getattr(error, 'is_build_error', False))
-        title = 'BUILD FAILED' if is_build_error else 'FATAL ERROR'
+        title = 'BUILD ERROR' if is_build_error else 'FATAL ERROR'
         _, tx = TUI.center(s, content_w=len(title))
         TUI.safe_addstr(s, my, tx, title, curses.color_pair(6) | curses.A_BOLD)
         
@@ -204,7 +195,7 @@ def show_error_screen(scr, error):
         _, ex = TUI.center(s, content_w=len(err))
         TUI.safe_addstr(s, my + 2, ex, err, curses.color_pair(4))
         
-        hint = "Press 'v' to view log  |  Press any other key to exit"
+        hint = "Press 'v' to view log  |  Esc: Exit"
         _, hx = TUI.center(s, content_w=len(hint))
         TUI.safe_addstr(s, my + 4, hx, hint, curses.color_pair(4) | curses.A_DIM)
 
@@ -217,7 +208,7 @@ def show_success_screen(scr, page_count, has_warnings=False, typst_logs=None):
         face = HMM_FACE if has_warnings else HAPPY_FACE
         color = curses.color_pair(3) if has_warnings else curses.color_pair(2)
         
-        total_h = len(face) + 2 + 1 + 2 + 1 
+        total_h = len(face) + 2 + 1 + 2 + 1
         cy, cx = TUI.center(s, content_h=total_h)
         y = cy + 1
         
@@ -234,7 +225,7 @@ def show_success_screen(scr, page_count, has_warnings=False, typst_logs=None):
         _, mx = TUI.center(s, content_w=len(msg))
         TUI.safe_addstr(s, my + 2, mx, msg, curses.color_pair(4))
         
-        hint = "Press 'v' to view log  |  Press any other key to exit" if has_warnings else 'Press any key to exit...'
+        hint = "Press 'v' to view log  |  Esc: Exit" if has_warnings else 'Press any key to exit...'
         _, hx = TUI.center(s, content_w=len(hint))
         TUI.safe_addstr(s, my + 4, hx, hint, curses.color_pair(4) | curses.A_DIM)
 

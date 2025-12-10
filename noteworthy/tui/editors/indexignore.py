@@ -9,13 +9,10 @@ from ..keybinds import ConfirmBind, KeyBind
 class IndexignoreEditor(ListEditor):
 
     def __init__(self, scr):
-        super().__init__(scr, 'INDEXIGNORE EDITOR')
+        super().__init__(scr, 'Ignored Files')
         self.filepath = INDEXIGNORE_FILE
         self.ignored = sorted(list(load_indexignore()))
-        self.ignored = sorted(list(load_indexignore()))
         self._update_items()
-        self.box_title = 'Ignored Files'
-        self.box_title = 'Ignored Files'
         self.box_title = 'Ignored Files'
         self.box_width = 50
         
@@ -26,6 +23,14 @@ class IndexignoreEditor(ListEditor):
     def action_enter(self, ctx):
         if self.items[self.cursor] == "+ Add new ignore pattern...":
             self.action_add(ctx)
+        else:
+            curr = self.ignored[self.cursor]
+            new_val = LineEditor(self.scr, initial_value=curr, title="Edit Pattern").run()
+            if new_val is not None:
+                self.ignored[self.cursor] = new_val
+                self.ignored.sort()
+                self._update_items()
+                self.modified = True
 
     def action_add(self, ctx):
         val = LineEditor(self.scr, title='Ignore File ID').run()
@@ -37,11 +42,12 @@ class IndexignoreEditor(ListEditor):
             
     def action_delete(self, ctx):
         if self.items and self.items[self.cursor] != "+ Add new ignore pattern...":
-            del self.ignored[self.cursor]
-            self._update_items()
-            self.modified = True
-            if self.cursor >= len(self.items):
-                self.cursor = max(0, len(self.items) - 1)
+            if TUI.prompt_confirm(self.scr, "Delete pattern? (y/n): "):
+                del self.ignored[self.cursor]
+                choice = self.cursor
+                self._update_items()
+                self.modified = True
+                self.cursor = min(choice, len(self.items) - 1)
 
     def _update_items(self):
         self.items = self.ignored + ["+ Add new ignore pattern..."]
@@ -66,11 +72,9 @@ class IndexignoreEditor(ListEditor):
         TUI.safe_addstr(self.scr, y, x + 4, item, curses.color_pair(5 if selected else 4))
 
     def _draw_footer(self, h, w):
-        footer = 'n:Add d:Del Esc:Save x:Export l:Import'
+        footer = 'Enter:Edit n:Add d:Del Esc:Save x:Export l:Import'
         TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
 
-    def _draw_footer(self, h, w):
-        footer = 'n:Add d:Del Esc:Save x:Export l:Import'
-        TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
+
 
     # Removed _handle_input

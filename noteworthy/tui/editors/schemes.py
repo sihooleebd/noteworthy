@@ -13,7 +13,7 @@ def extract_themes():
         schemes = json.loads(SCHEMES_FILE.read_text())
         return list(schemes.keys())
     except:
-        return ['noteworthy-dark', 'noteworthy-light', 'rose-pine', 'nord', 'dracula', 'gruvbox']
+        return ['noteworthy-dark', 'noteworthy-light', 'rose-pine', 'nord', 'dracula', 'gruvbox', 'catppuccin-mocha', 'catppuccin-latte', 'solarized-dark', 'solarized-light', 'tokyo-night', 'everforest', 'moonlight']
 
 def hex_to_curses_color(hex_color):
     if not hex_color or not hex_color.startswith('#'):
@@ -68,6 +68,12 @@ class ThemeDetailEditor(ListEditor):
         self.box_width = 80
         
         register_key(self.keymap, ConfirmBind(self.action_select))
+
+    
+    def save(self):
+        # Changes are applied to the dictionary reference in real-time
+        # Parent SchemeEditor handles the actual file saving
+        return True
 
     def action_select(self, ctx):
         key, _ = self.items[self.cursor]
@@ -178,7 +184,7 @@ class ThemeDetailEditor(ListEditor):
 class SchemeEditor(ListEditor):
 
     def __init__(self, scr):
-        super().__init__(scr, 'SCHEME MANAGER')
+        super().__init__(scr, 'Color Themes')
         self.filepath = SCHEMES_FILE
         self.schemes = self._load_schemes()
         self.config = load_config_safe()
@@ -187,9 +193,9 @@ class SchemeEditor(ListEditor):
         self.box_width = 70
         
         register_key(self.keymap, ConfirmBind(self.action_select))
-        register_key(self.keymap, KeyBind('n', self._create_new))
-        register_key(self.keymap, KeyBind('d', self._delete_current_prompt))
-        register_key(self.keymap, KeyBind(' ', self.action_set_active))
+        register_key(self.keymap, KeyBind(ord('n'), self._create_new))
+        register_key(self.keymap, KeyBind(ord('d'), self._delete_current_prompt))
+        register_key(self.keymap, KeyBind(ord(' '), self.action_set_active))
         
     def action_select(self, ctx):
         if self.items:
@@ -310,5 +316,5 @@ class SchemeEditor(ListEditor):
             TUI.safe_addstr(self.scr, y, x + width - 12, '(ACTIVE)', curses.color_pair(2) | curses.A_BOLD)
 
     def _draw_footer(self, h, w):
-        footer = 'Enter: Edit  d: Delete  Esc: Save & Exit'
+        footer = 'Enter: Edit  Space: Set Active  n: New  d: Delete  Esc: Save & Exit  x: Export  l: Import'
         TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)

@@ -1,7 +1,7 @@
 import curses
 import sys
 import termios
-import curses.textpad
+
 from pathlib import Path
 from ..core.config_mgmt import export_file, import_file, list_exports_for
 from ..utils import register_key, handle_key_event
@@ -133,6 +133,26 @@ class TUI:
         curses.napms(500)
 
     @staticmethod
+    def show_message(scr, title, message):
+        h, w = TUI.get_dims(scr)
+        lines = message.split('\n')
+        box_h = len(lines) + 6
+        box_w = max(40, max([len(l) for l in lines]) + 6, len(title) + 8)
+        
+        box_y, box_x = TUI.center(scr, box_h, box_w)
+        
+        TUI.draw_box(scr, box_y, box_x, box_h, box_w, title)
+        
+        for i, line in enumerate(lines):
+            TUI.safe_addstr(scr, box_y + 2 + i, box_x + 3, line, curses.color_pair(4) | curses.A_BOLD)
+            
+        hint = "Press any key to continue"
+        TUI.safe_addstr(scr, box_y + box_h - 2, box_x + (box_w - len(hint)) // 2, hint, curses.color_pair(4) | curses.A_DIM)
+        
+        scr.refresh()
+        scr.getch()
+
+    @staticmethod
     def check_terminal_size(scr, min_h=30, min_w=60):
         was_error = False
         while True:
@@ -176,7 +196,7 @@ class TUI:
 
 class BaseEditor:
 
-    def do_export(self):
+    def do_export(self, ctx=None):
         from .components.common import LineEditor, show_error_screen
         if not hasattr(self, 'filepath') or not self.filepath:
             return
@@ -185,11 +205,18 @@ class BaseEditor:
             return
         res = export_file(self.filepath, suf)
         if res:
-            TUI.show_saved(self.scr)
+            from ..config import BASE_DIR
+            try:
+                relative_path = Path(res).relative_to(BASE_DIR)
+            except:
+                relative_path = Path(res).name
+                
+            msg = f"File saved to:\n{relative_path}\n\nYou can move this file to save it permanently,\nor use 'Import' to restore it later."
+            TUI.show_message(self.scr, "Export Successful", msg)
         else:
             show_error_screen(self.scr, 'Export failed')
 
-    def do_import(self):
+    def do_import(self, ctx=None):
         from .components.common import show_error_screen
         if not hasattr(self, 'filepath') or not self.filepath:
             return
@@ -199,7 +226,7 @@ class BaseEditor:
             return
         h, w = self.scr.getmaxyx()
         bh, bw = (min(len(backups) + 6, h - 4), min(65, w - 4))
-        by, bx = ((h - bh) // 2, (w - bw) // 2)
+        by, bx = TUI.center(self.scr, bh, bw)
         sel = 0
         while True:
             self.scr.clear()
@@ -228,7 +255,8 @@ class BaseEditor:
                     from ..config import BASE_DIR
                     src = BASE_DIR / 'exports' / backups[sel]
                     if import_file(src, self.filepath):
-                        TUI.show_saved(self.scr)
+                        msg = "File imported successfully!\n\nThe editor will reload to reflect changes."
+                        TUI.show_message(self.scr, "Import Successful", msg)
                         if hasattr(self, '_load'):
                             self._load()
                         elif hasattr(self, 'config'):
@@ -262,28 +290,8 @@ class BaseEditor:
         
     def do_exit(self, ctx=None):
         if self.modified:
-            if not self.save_dialog():
-                return
+            self.save()
         return 'EXIT' # Signal to break loop
-        
-    def save_dialog(self):
-        """Returns True if it's safe to exit (saved, discarded, or not modified)."""
-        if not self.modified: return True
-        
-        # This prompts user, logic was in run loop efficiently inline, but we extract it
-        # Actually, let's keep it simple. If we trigger exit from binding, we need to handle the flow.
-        # The keybind return value is not fully used yet.
-        # Let's adjust implementation to just set a flag or handle logic.
-        
-        # Re-using the logic from old run() loop:
-        # if self.modified: if not self.save(): pass 
-        
-        # Let's try to prompt save.
-        res = TUI.prompt_save(self.scr) # y/n/c
-        if res == 'c': return False
-        if res == 'y':
-            return self.save()
-        return True # n -> exit without saving
 
     def refresh(self):
         raise NotImplementedError

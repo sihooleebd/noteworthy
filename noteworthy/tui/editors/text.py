@@ -88,7 +88,7 @@ class TextEditor(BaseEditor):
             if idx >= len(visual_lines):
                 break
             text, l_idx, start_idx = visual_lines[idx]
-            y = i + 1
+            y = i + 2
             if start_idx == 0:
                 TUI.safe_addstr(self.scr, y, 0, f'{l_idx + 1:3d} ', curses.color_pair(4) | curses.A_DIM)
             else:
@@ -99,7 +99,8 @@ class TextEditor(BaseEditor):
         TUI.safe_addstr(self.scr, h - 1, fx, footer, curses.color_pair(4) | curses.A_DIM)
         
         curses.curs_set(1)
-        cur_y = vcy - self.scroll_y + 1
+        curses.curs_set(1)
+        cur_y = vcy - self.scroll_y + 3 # +2 margin +1 safe_addstr offset
         cur_x = 7 + (self.cx - visual_lines[vcy][2])
         if 0 <= cur_y < h and 0 <= cur_x < w:
             self.scr.move(cur_y, cur_x)

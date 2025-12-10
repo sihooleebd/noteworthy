@@ -7,7 +7,7 @@ from ...utils import register_key
 
 class SnippetsEditor(ListEditor):
     def __init__(self, scr):
-        super().__init__(scr, "SNIPPETS EDITOR")
+        super().__init__(scr, "Code Snippets")
         self.filepath = SNIPPETS_FILE
         self._load_snippets()
         self.box_title = "Snippets"

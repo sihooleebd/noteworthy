@@ -162,7 +162,7 @@ class InitWizard:
             self.scr.clrtoeol()
             TUI.safe_addstr(self.scr, y, x, '> ', curses.color_pair(3) | curses.A_BOLD)
             self.scr.refresh()
-            value = self.scr.getstr(real_y, real_x + 2, self.input_w - 4).decode('utf-8').strip()
+            value = self.scr.getstr(real_y, real_x + 2, self.input_w - 6).decode('utf-8').strip()
         except:
             value = ''
         curses.noecho()

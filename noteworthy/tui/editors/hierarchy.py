@@ -8,7 +8,7 @@ from ...utils import load_config_safe, register_key
 
 class HierarchyEditor(ListEditor):
     def __init__(self, scr):
-        super().__init__(scr, "HIERARCHY EDITOR")
+        super().__init__(scr, "Chapter Structure")
         self.hierarchy = json.loads(HIERARCHY_FILE.read_text())
         self.config = load_config_safe()
         self.filepath = HIERARCHY_FILE
@@ -210,8 +210,13 @@ class HierarchyEditor(ListEditor):
         elif t == "add_page": self._add_page(ci)
         else:
             curr_val = str(self._get_value(item))
-            new_val = LineEditor(self.scr, initial_value=curr_val, title="Edit Value").run()
-            if new_val is not None: self._set_value(new_val)
+            if t == "ch_summary":
+                from .text import TextEditor
+                new_val = TextEditor(self.scr, initial_text=curr_val, title="Edit Summary").run()
+                if new_val is not None: self._set_value(new_val)
+            else:
+                new_val = LineEditor(self.scr, initial_value=curr_val, title="Edit Value").run()
+                if new_val is not None: self._set_value(new_val)
 
     def action_delete(self, ctx):
         item = self.items[self.cursor]; t = item[0]

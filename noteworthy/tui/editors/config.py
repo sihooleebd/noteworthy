@@ -11,7 +11,7 @@ from .text import TextEditor
 class ConfigEditor(ListEditor):
 
     def __init__(self, scr):
-        super().__init__(scr, 'CONFIGURATION')
+        super().__init__(scr, 'General Settings')
         self.config = load_config_safe()
         self.filepath = CONFIG_FILE
         self.themes = extract_themes()
@@ -89,7 +89,7 @@ class ConfigEditor(ListEditor):
         if key == 'Preface':
             TUI.safe_addstr(self.scr, y, x + 4, key, curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
             TUI.safe_addstr(self.scr, y, x + left_w, "│", curses.color_pair(4) | curses.A_DIM)
-            TUI.safe_addstr(self.scr, y, x + left_w + 2, label, curses.color_pair(3 if selected else 4) | (curses.A_BOLD if selected else 0))
+            TUI.safe_addstr(self.scr, y, x + left_w + 2, label, curses.color_pair(4) | (curses.A_BOLD if selected else 0))
             return
 
         TUI.safe_addstr(self.scr, y, x + 4, label[:left_w - 6], curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
