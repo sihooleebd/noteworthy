@@ -13,7 +13,7 @@ def extract_themes():
         schemes = json.loads(SCHEMES_FILE.read_text())
         return list(schemes.keys())
     except:
-        return ['noteworthy-dark', 'noteworthy-light', 'rose-pine', 'nord', 'dracula', 'gruvbox', 'catppuccin-mocha', 'catppuccin-latte', 'solarized-dark', 'solarized-light', 'tokyo-night', 'everforest', 'moonlight']
+        return []
 
 def hex_to_curses_color(hex_color):
     if not hex_color or not hex_color.startswith('#'):
@@ -59,7 +59,7 @@ def hex_to_curses_color(hex_color):
 class ThemeDetailEditor(ListEditor):
 
     def __init__(self, scr, schemes, theme_name):
-        super().__init__(scr, f'THEME: {theme_name}')
+        super().__init__(scr, f'Editing \"{theme_name}\"')
         self.schemes = schemes
         self.theme_name = theme_name
         self.theme = self.schemes[self.theme_name]

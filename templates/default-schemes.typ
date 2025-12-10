@@ -35,16 +35,11 @@
 }
 
 // Build all schemes from JSON
-#let scheme-noteworthy-dark = build-scheme(schemes-data.at("noteworthy-dark"))
-#let scheme-rose-pine = build-scheme(schemes-data.rose-pine)
-#let scheme-noteworthy-light = build-scheme(schemes-data.at("noteworthy-light"))
-#let scheme-nord = build-scheme(schemes-data.nord)
-#let scheme-dracula = build-scheme(schemes-data.dracula)
-#let scheme-gruvbox = build-scheme(schemes-data.gruvbox)
-#let scheme-catppuccin-mocha = build-scheme(schemes-data.catppuccin-mocha)
-#let scheme-catppuccin-latte = build-scheme(schemes-data.catppuccin-latte)
-#let scheme-solarized-dark = build-scheme(schemes-data.solarized-dark)
-#let scheme-solarized-light = build-scheme(schemes-data.solarized-light)
-#let scheme-tokyo-night = build-scheme(schemes-data.tokyo-night)
-#let scheme-everforest = build-scheme(schemes-data.everforest)
-#let scheme-moonlight = build-scheme(schemes-data.moonlight)
+// Build all schemes from JSON dynamically
+#let schemes = {
+  let s = (:)
+  for (name, data) in schemes-data {
+    s.insert(name, build-scheme(data))
+  }
+  s
+}

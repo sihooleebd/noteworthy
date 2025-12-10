@@ -81,9 +81,9 @@ class TextEditor(BaseEditor):
                     break
         if vcy < self.scroll_y:
             self.scroll_y = vcy
-        elif vcy >= self.scroll_y + (h - 2):
-            self.scroll_y = vcy - (h - 3)
-        for i in range(h - 4):
+        elif vcy >= self.scroll_y + (h - 5):
+            self.scroll_y = vcy - (h - 6)
+        for i in range(h - 5):
             idx = self.scroll_y + i
             if idx >= len(visual_lines):
                 break
@@ -98,7 +98,6 @@ class TextEditor(BaseEditor):
         _, fx = TUI.center(self.scr, content_w=len(footer))
         TUI.safe_addstr(self.scr, h - 1, fx, footer, curses.color_pair(4) | curses.A_DIM)
         
-        curses.curs_set(1)
         curses.curs_set(1)
         cur_y = vcy - self.scroll_y + 3 # +2 margin +1 safe_addstr offset
         cur_x = 7 + (self.cx - visual_lines[vcy][2])
@@ -220,11 +219,11 @@ class TextEditor(BaseEditor):
             
     def move_pgup(self, ctx):
         h, _ = self.scr.getmaxyx()
-        for _ in range(h - 4): self.move_up(ctx)
+        for _ in range(h - 5): self.move_up(ctx)
         
     def move_pgdn(self, ctx):
         h, _ = self.scr.getmaxyx()
-        for _ in range(h - 4): self.move_down(ctx)
+        for _ in range(h - 5): self.move_down(ctx)
 
     def move_left(self, ctx):
         if self.cx > 0:

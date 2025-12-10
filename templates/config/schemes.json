@@ -775,53 +775,53 @@
         "blocks": {
             "definition": {
                 "fill": "#ffffff",
-                "stroke": "#000000",
+                "stroke": "#2e7d32",
                 "title": "Definition"
             },
             "equation": {
                 "fill": "#ffffff",
-                "stroke": "#000000",
+                "stroke": "#f57f17",
                 "title": "Equation"
             },
             "example": {
                 "fill": "#ffffff",
-                "stroke": "#000000",
+                "stroke": "#ef6c00",
                 "title": "Example"
             },
             "solution": {
                 "fill": "#ffffff",
-                "stroke": "#000000",
+                "stroke": "#7b1fa2",
                 "title": "Solution"
             },
             "proof": {
                 "fill": "#ffffff",
-                "stroke": "#000000",
+                "stroke": "#c62828",
                 "title": "Proof"
             },
             "note": {
                 "fill": "#ffffff",
-                "stroke": "#000000",
+                "stroke": "#0277bd",
                 "title": "Note"
             },
             "notation": {
                 "fill": "#ffffff",
-                "stroke": "#000000",
+                "stroke": "#00838f",
                 "title": "Notation"
             },
             "analysis": {
                 "fill": "#ffffff",
-                "stroke": "#000000",
+                "stroke": "#1565c0",
                 "title": "Analysis"
             },
             "theorem": {
                 "fill": "#ffffff",
-                "stroke": "#000000",
+                "stroke": "#f9a825",
                 "title": "Theorem"
             }
         },
         "plot": {
             "stroke": "#000000",
-            "highlight": "#888888",
+            "highlight": "#1565c0",
             "grid-opacity": 0.25
         }
     }

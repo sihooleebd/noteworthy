@@ -33,23 +33,10 @@
 // Load schemes
 #import "./default-schemes.typ": *
 
-#let colorschemes = (
-  noteworthy-dark: scheme-noteworthy-dark,
-  noteworthy-light: scheme-noteworthy-light,
-  rose-pine: scheme-rose-pine,
-  nord: scheme-nord,
-  dracula: scheme-dracula,
-  gruvbox: scheme-gruvbox,
-  catppuccin-mocha: scheme-catppuccin-mocha,
-  catppuccin-latte: scheme-catppuccin-latte,
-  solarized-dark: scheme-solarized-dark,
-  solarized-light: scheme-solarized-light,
-  tokyo-night: scheme-tokyo-night,
-  everforest: scheme-everforest,
-  moonlight: scheme-moonlight,
-)
+#import "./default-schemes.typ": schemes
+#let colorschemes = schemes
 
-#let active-theme = colorschemes.at(lower(display-mode), default: scheme-noteworthy-dark)
+#let active-theme = colorschemes.at(lower(display-mode), default: schemes.at("noteworthy-dark"))
 
 // Import snippets
 #import "config/snippets.typ": *
