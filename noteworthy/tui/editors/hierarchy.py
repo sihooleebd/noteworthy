@@ -81,27 +81,13 @@ class HierarchyEditor(ListEditor):
     
     def _delete_current(self):
         t, ci, pi, _ = self.items[self.cursor]
-        from pathlib import Path
-        base_dir = Path('content')
-        
         if t in ("ch_title", "ch_summary", "ch_number"):
             if len(self.hierarchy) > 1:
-                # Delete chapter dir
-                ch_dir = base_dir / str(ci)
-                if ch_dir.exists():
-                    import shutil
-                    shutil.rmtree(ch_dir)
-                    
                 del self.hierarchy[ci]
                 self.modified = True
                 self._build_items()
                 self.cursor = min(self.cursor, len(self.items) - 1)
         elif t in ("pg_id", "pg_title", "pg_number"):
-            # Delete page file
-            pg_file = base_dir / str(ci) / f'{pi}.typ'
-            if pg_file.exists():
-                pg_file.unlink()
-                
             del self.hierarchy[ci]["pages"][pi]
             self.modified = True
             self._build_items()
@@ -117,9 +103,10 @@ class HierarchyEditor(ListEditor):
             HIERARCHY_FILE.write_text(json.dumps(self.hierarchy, indent=4))
             self.modified = False
             
-            # Auto-create files for new pages
-            from ...core.fs_sync import ensure_content_structure
+            # Auto-sync files: Create new, delete old
+            from ...core.fs_sync import ensure_content_structure, cleanup_extra_files
             ensure_content_structure(self.hierarchy)
+            cleanup_extra_files(self.hierarchy)
             
             return True
         except: return False
