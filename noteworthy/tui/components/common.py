@@ -17,8 +17,8 @@ class LineEditor:
         register_key(self.keymap, KeyBind(27, self.action_cancel, "Cancel"))
         register_key(self.keymap, ConfirmBind(self.action_confirm))
         register_key(self.keymap, KeyBind([curses.KEY_BACKSPACE, 127, 8], self.action_backspace, "Backspace"))
-        register_key(self.keymap, NavigationBind('LEFT', self.action_left))
-        register_key(self.keymap, NavigationBind('RIGHT', self.action_right))
+        register_key(self.keymap, KeyBind(curses.KEY_LEFT, self.action_left, "Left"))
+        register_key(self.keymap, KeyBind(curses.KEY_RIGHT, self.action_right, "Right"))
         register_key(self.keymap, KeyBind([curses.KEY_DC, 330], self.action_delete, "Delete"))
 
     def action_cancel(self, ctx):
