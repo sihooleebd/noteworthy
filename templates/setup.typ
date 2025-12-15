@@ -28,6 +28,7 @@
 #let display-mode = config.display-mode
 #let pad-chapter-id = config.pad-chapter-id
 #let pad-page-id = config.pad-page-id
+#let heading-numbering = config.heading-numbering
 #let hierarchy = json("config/hierarchy.json")
 
 // Load schemes

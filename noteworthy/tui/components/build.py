@@ -18,6 +18,10 @@ class BuildMenu:
         self.debug = settings.get('debug', False)
         self.frontmatter = settings.get('frontmatter', True)
         self.leave_pdfs = settings.get('leave_pdfs', False)
+        import os
+        # Default to 50% of CPU threads (min 1)
+        default_threads = max(1, (os.cpu_count() or 1) // 2)
+        self.threads = settings.get('threads', default_threads)
         self.typst_flags = settings.get('typst_flags', [])
         saved_pages = set((tuple(p) for p in settings.get('selected_pages', [])))
         self.items, self.selected = ([], {})
@@ -43,7 +47,7 @@ class BuildMenu:
     def refresh(self):
         self.h, self.w = TUI.get_dims(self.scr)
         self.scr.clear()
-        lh, obh = (len(LOGO), 7)
+        lh, obh = (len(LOGO), 8) 
         vert_ch_rows = self.h - lh - 2 - obh - 1 - 5
         layout = 'vert'
         if vert_ch_rows < 7 and self.w >= 90:
@@ -79,10 +83,17 @@ class BuildMenu:
                 TUI.safe_addstr(self.scr, sy + 1 + i, bx + 2, f'{l:14}', curses.color_pair(4))
                 TUI.safe_addstr(self.scr, sy + 1 + i, bx + 16, '[ON] ' if v else '[OFF]', curses.color_pair(2 if v else 6) | curses.A_BOLD)
                 TUI.safe_addstr(self.scr, sy + 1 + i, bx + 22, f'({k})', curses.color_pair(4) | curses.A_DIM)
+            
+            # Threads option
+            TUI.safe_addstr(self.scr, sy + 4, bx + 2, 'Threads:', curses.color_pair(4))
+            TUI.safe_addstr(self.scr, sy + 4, bx + 16, f'{self.threads}', curses.color_pair(5) | curses.A_BOLD)
+            TUI.safe_addstr(self.scr, sy + 4, bx + 22, '(t)', curses.color_pair(4) | curses.A_DIM)
+
             flags = ' '.join(self.typst_flags) or '(none)'
-            TUI.safe_addstr(self.scr, sy + 4, bx + 2, 'Typst Flags:', curses.color_pair(4))
-            TUI.safe_addstr(self.scr, sy + 4, bx + 16, flags[:bw - 20], curses.color_pair(5 if self.typst_flags else 4) | curses.A_DIM)
-            TUI.safe_addstr(self.scr, sy + 5, bx + 16, '(c)', curses.color_pair(4) | curses.A_DIM)
+            TUI.safe_addstr(self.scr, sy + 5, bx + 2, 'Typst Flags:', curses.color_pair(4))
+            TUI.safe_addstr(self.scr, sy + 5, bx + 16, flags[:bw - 20], curses.color_pair(5 if self.typst_flags else 4) | curses.A_DIM)
+            TUI.safe_addstr(self.scr, sy + 6, bx + 16, '(c)', curses.color_pair(4) | curses.A_DIM)
+
         if layout == 'compact':
             lw, rw = (20, min(50, self.w - 24))
             lx, rx = ((self.w - lw - rw - 2) // 2, (self.w - lw - rw - 2) // 2 + lw + 2)
@@ -96,7 +107,6 @@ class BuildMenu:
             start_y, lbw, rbw = (max(0, (self.h - (lh + 2 + obh) - 2) // 2), min(40, (self.w - 6) // 2), min(50, (self.w - 6) // 2))
             lx, rx = ((self.w - lbw - rbw - 2) // 2, (self.w - lbw - rbw - 2) // 2 + lbw + 2)
             
-            # Hide logo if really short
             if self.h >= lh + 2 + obh:
                 for i, l in enumerate(LOGO[:self.h - 2]):
                     TUI.safe_addstr(self.scr, start_y + i, lx + (lbw - 14) // 2, l, curses.color_pair(1) | curses.A_BOLD)
@@ -107,7 +117,7 @@ class BuildMenu:
             TUI.draw_box(self.scr, start_y, rx, min(lh + 2 + obh, self.h - 2), rbw, 'Select Chapters')
             items(start_y, rx, rbw, min(lh + 2 + obh, self.h - 2))
         else:
-            obh = 7
+            obh = 8 
             # If height < 36, hide logo to make space for functionality
             hide_logo = self.h < 36
             real_lh = len(LOGO) if not hide_logo else 0
@@ -157,8 +167,8 @@ class BuildMenu:
             elif k == ord('?'):
                 show_keybindings_menu(self.scr)
             elif k in (ord('\n'), curses.KEY_ENTER, 10):
-                res = {'selected_pages': [(ci, ai) for ci in range(len(self.hierarchy)) for ai in range(len(self.hierarchy[ci]['pages'])) if self.selected.get((ci, ai))], 'debug': self.debug, 'frontmatter': self.frontmatter, 'leave_individual': self.leave_pdfs, 'typst_flags': self.typst_flags}
-                save_settings({'debug': self.debug, 'frontmatter': self.frontmatter, 'leave_pdfs': self.leave_pdfs, 'typst_flags': self.typst_flags, 'selected_pages': res['selected_pages']})
+                res = {'selected_pages': [(ci, ai) for ci in range(len(self.hierarchy)) for ai in range(len(self.hierarchy[ci]['pages'])) if self.selected.get((ci, ai))], 'debug': self.debug, 'frontmatter': self.frontmatter, 'leave_individual': self.leave_pdfs, 'typst_flags': self.typst_flags, 'threads': self.threads}
+                save_settings({'debug': self.debug, 'frontmatter': self.frontmatter, 'leave_pdfs': self.leave_pdfs, 'typst_flags': self.typst_flags, 'selected_pages': res['selected_pages'], 'threads': self.threads})
                 return res
             elif k in (curses.KEY_UP, ord('k')):
                 self.cursor = max(0, self.cursor - 1)
@@ -180,11 +190,36 @@ class BuildMenu:
                 self.frontmatter = not self.frontmatter
             elif k == ord('l'):
                 self.leave_pdfs = not self.leave_pdfs
+            elif k == ord('t'):
+                self.configure_threads()
             elif k == ord('c'):
                 self.configure_flags()
             elif k == ord('e'):
                 show_editor_menu(self.scr)
             self.refresh()
+            
+    def configure_threads(self):
+        curses.echo()
+        curses.curs_set(1)
+        dh, dw = (8, 40)
+        d = curses.newwin(dh, dw, (self.h - dh) // 2, (self.w - dw) // 2)
+        d.box()
+        d.addstr(0, 2, ' Set Thread Count ', curses.color_pair(1) | curses.A_BOLD)
+        d.addstr(2, 2, f'Current: {self.threads}')
+        import os
+        d.addstr(3, 2, f'Recommended (50% CPU): {os.cpu_count() // 2}')
+        d.addstr(5, 2, 'New count: ')
+        d.refresh()
+        try:
+            s = d.getstr(5, 13, 10).decode('utf-8').strip()
+            if s and s.isdigit():
+                val = int(s)
+                if val > 0:
+                    self.threads = val
+        except:
+            pass
+        curses.noecho()
+        curses.curs_set(0)
 
     def configure_flags(self):
         curses.echo()
@@ -234,7 +269,7 @@ class BuildUI:
     def log_typst(self, out):
         if out:
             self.typst_logs.extend([l for l in out.split('\n') if l.strip()])
-            self.typst_logs = self.typst_logs[-100:]
+            self.typst_logs = self.typst_logs[-200:] 
             if 'warning:' in out.lower():
                 self.has_warnings = True
 
@@ -246,8 +281,9 @@ class BuildUI:
         self.task = t
         self.refresh()
 
-    def set_progress(self, p, t):
+    def set_progress(self, p, t, visual_percent=None):
         self.progress, self.total = (p, t)
+        self.visual_percent = visual_percent
         self.refresh()
 
     def check_input(self):
@@ -286,9 +322,19 @@ class BuildUI:
         if self.task:
             TUI.safe_addstr(self.scr, start_y + 4, bx + 2, f'→ {self.task}'[:bw - 4], curses.color_pair(4))
         if self.total:
-            filled = int((bw - 12) * self.progress / self.total)
+            if getattr(self, 'visual_percent', None) is not None:
+                effective_pct = max(0, min(100, self.visual_percent))
+            else:
+                effective_prog = min(self.progress, self.total)
+                effective_pct = 100 * effective_prog // self.total
+                
+            filled = int((bw - 12) * effective_pct / 100)
             TUI.safe_addstr(self.scr, start_y + 5, bx + 2, '█' * filled + '░' * (bw - 12 - filled), curses.color_pair(3))
-            TUI.safe_addstr(self.scr, start_y + 5, bx + bw - 8, f'{100 * self.progress // self.total:3d}%', curses.color_pair(3) | curses.A_BOLD)
+            TUI.safe_addstr(self.scr, start_y + 5, bx + bw - 8, f'{effective_pct:3d}%', curses.color_pair(3) | curses.A_BOLD)
+            # Add simple count
+            count_str = f'({self.progress}/{self.total})'
+            TUI.safe_addstr(self.scr, start_y + 2, bx + bw - 2 - len(count_str), count_str, curses.color_pair(4) | curses.A_DIM)
+            
         if self.view == 'typst':
             TUI.draw_box(self.scr, start_y + 8, bx, lh, bw, 'Typst Output (↑↓ scroll)')
             if self.typst_logs:
@@ -307,6 +353,7 @@ class BuildUI:
         return True
 
 def run_build_process(scr, hierarchy, opts):
+    from ...core.build import BuildManager
     if opts['debug']:
         logging.basicConfig(filename='build_debug.log', level=logging.DEBUG, format='%(asctime)s - %(message)s')
         logging.info('Debug mode enabled')
@@ -327,90 +374,110 @@ def run_build_process(scr, hierarchy, opts):
         shutil.rmtree(BUILD_DIR)
     BUILD_DIR.mkdir()
     ui.log('Build directory prepared', True)
+    
     pages = opts.get('selected_pages', [])
     by_ch = {}
     for ci, ai in pages:
         by_ch.setdefault(ci, []).append(ai)
     chapters = [(i, hierarchy[i]) for i in sorted(by_ch.keys())]
     ui.log(f'Building {len(pages)} pages from {len(chapters)} chapters', True)
-    total = (3 if opts['frontmatter'] else 0) + sum((1 + len(by_ch[ci]) for ci, _ in chapters))
-    ui.set_phase('Compiling Sections')
-    ui.set_progress(0, total + 1)
-    page_map, current, pdfs, prog = ({}, 1, [], 0)
+    
+    total_tasks = (3 if opts['frontmatter'] else 0) + sum((1 + len(by_ch[ci]) for ci, _ in chapters))
+    total = total_tasks + 3
+    ui.set_phase('Compiling')
+    ui.set_progress(0, total)
+    
+    bm = BuildManager(BUILD_DIR)
+    
+    # Track progress
+    progress_counter = 0
+    
+    def on_progress():
+        nonlocal progress_counter
+        progress_counter += 1
+        comp_pct = min(95, int(95 * progress_counter / total_tasks))
+        ui.set_progress(progress_counter, total, visual_percent=comp_pct)
+        ui.set_task(f"Completed {progress_counter} compilation tasks") 
+        
+    def on_log(msg, ok=True):
+        ui.log(msg, ok)
+    
     flags = opts.get('typst_flags', [])
+    pdfs = []
+    current_page_count = 0
+    
     try:
-        if opts['frontmatter']:
-            targets = []
-            if config.get('display-cover', True):
-                targets.append(('cover', '00_cover.pdf', 'Cover'))
-            targets.append(('preface', '01_preface.pdf', 'Preface'))
-            if config.get('display-outline', True):
-                targets.append(('outline', '02_outline.pdf', 'TOC'))
-            for target, name, label in targets:
-                ui.set_task(label)
-                out = BUILD_DIR / name
-                compile_target(target, out, extra_flags=flags, callback=ui.refresh, log_callback=ui.log_typst)
-                pdfs.append(out)
-                page_map[target] = current
-                current += get_pdf_page_count(out)
-                prog += 1
-                ui.set_progress(prog, total + 1)
-                ui.log(f'{label} compiled', True)
-        for ci, ch in chapters:
-            ch_id = str(ch.get('number', ci + 1))
-            ui.set_task(f"Chapter {ch_id}: {ch['title']}")
-            if config.get('display-chap-cover', True):
-                out = BUILD_DIR / f'10_chapter_{ci}_cover.pdf'
-                page_map[f'chapter-{ci + 1}'] = current
-                compile_target(f'chapter-{ci}', out, page_offset=current, extra_flags=flags, callback=ui.refresh, log_callback=ui.log_typst)
-                pdfs.append(out)
-                current += get_pdf_page_count(out)
-            prog += 1
-            ui.set_progress(prog, total + 1)
-            for ai in sorted(by_ch[ci]):
-                p = ch['pages'][ai]
-                ui.set_task(f"Section {p.get('number', ai + 1)}: {p['title']}")
-                out = BUILD_DIR / f'20_page_{ci}_{ai}.pdf'
-                page_map[f'{ci}/{ai}'] = current
-                compile_target(f'{ci}/{ai}', out, page_offset=current, extra_flags=flags, callback=ui.refresh, log_callback=ui.log_typst)
-                pdfs.append(out)
-                current += get_pdf_page_count(out)
-                prog += 1
-                ui.set_progress(prog, total + 1)
-            ui.log(f'Chapter {ch_id} compiled', True)
+        pdfs = bm.build_parallel(chapters, config, opts, {'on_progress': on_progress, 'on_log': on_log})
+        
+        ui.set_progress(progress_counter, total, visual_percent=95)
+        
+        current_page_count = sum([get_pdf_page_count(p) for p in pdfs]) + 1 # +1 start
+        
+        # Post-processing
+        page_map = bm.page_map # Get final map
+        
+        # Remaining 5% is split between TOC, Merge, Metadata (approx 1.6% each)
+        
         if opts['frontmatter'] and config.get('display-outline', True):
             ui.set_task('Regenerating TOC')
             out = BUILD_DIR / '02_outline.pdf'
-            compile_target('outline', out, page_offset=page_map.get('outline', 0), page_map=page_map, extra_flags=flags, callback=ui.refresh, log_callback=ui.log_typst)
+            compile_target(
+                'outline', 
+                out, 
+                page_offset=page_map.get('outline', 0), 
+                page_map=page_map, 
+                extra_flags=flags, 
+                callback=ui.refresh, 
+                log_callback=ui.log_typst
+            )
+            progress_counter += 1
+            ui.set_progress(progress_counter, total, visual_percent=96)
             ui.log('TOC regenerated', True)
-        ui.log(f'Total pages: {current - 1}', True)
+        else:
+            pass
+            
+        ui.log(f'Total pages: {current_page_count - 1}', True)
+        
         ui.set_phase('Merging PDFs')
+        ui.set_task('Merging...')
+        
         method = merge_pdfs(pdfs, OUTPUT_FILE)
+        progress_counter += 1
+        ui.set_progress(progress_counter, total, visual_percent=98)
+        
         if not method or not OUTPUT_FILE.exists():
             ui.log('Merge failed!', False)
             ui.set_phase('Failed')
             scr.nodelay(False)
             show_error_screen(scr, 'Failed to merge PDFs. Individual files left in ' + str(BUILD_DIR))
             return
+            
         ui.log(f'Merged with {method}', True)
         ui.set_phase('Adding Metadata')
-        bm = BUILD_DIR / 'bookmarks.txt'
-        create_pdf_metadata(chapters, page_map, bm)
-        apply_pdf_metadata(OUTPUT_FILE, bm, 'Noteworthy Framework', 'Sihoo Lee, Lee Hojun')
+        
+        bm_file = BUILD_DIR / 'bookmarks.txt'
+        bookmarks_list = create_pdf_metadata(chapters, page_map, bm_file)
+        apply_pdf_metadata(OUTPUT_FILE, bm_file, 'Noteworthy Framework', 'Sihoo Lee, Lee Hojun', bookmarks_list)
+        progress_counter += 1
+        ui.set_progress(progress_counter, total, visual_percent=100)
         ui.log('PDF metadata applied', True)
+        
         if opts['leave_individual']:
             zip_build_directory(BUILD_DIR)
             ui.log('Individual PDFs archived', True)
+            
         if OUTPUT_FILE.exists() and BUILD_DIR.exists():
             shutil.rmtree(BUILD_DIR)
             ui.log('Build directory cleaned', True)
+            
         ui.set_phase('BUILD COMPLETE!')
-        ui.set_progress(total + 1, total + 1)
-        ui.log(f'Created {OUTPUT_FILE} ({current - 1} pages)', True)
+        ui.log(f'Created {OUTPUT_FILE} ({current_page_count - 1} pages)', True)
+        
         scr.nodelay(False)
         scr.timeout(-1)
         curses.flushinp()
-        show_success_screen(scr, current - 1, ui.has_warnings, ui.typst_logs)
+        show_success_screen(scr, current_page_count - 1, ui.has_warnings, ui.typst_logs)
+        
     except Exception as e:
         scr.nodelay(False)
         scr.timeout(-1)

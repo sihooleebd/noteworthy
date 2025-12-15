@@ -1,7 +1,8 @@
-#import "templater.typ": * //edit templates/config/config.json to configure
+#import "templater.typ": *
 
 #let target = sys.inputs.at("target", default: none)
 #let page-offset = sys.inputs.at("page-offset", default: none)
+#set heading(numbering: heading-numbering)
 
 // Set page counter based on page offset
 #if page-offset != none {

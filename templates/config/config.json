@@ -23,5 +23,6 @@
     "render-implicit-count": 400,
     "display-mode": "rose-pine",
     "pad-chapter-id": true,
-    "pad-page-id": true
+    "pad-page-id": true,
+    "heading-numbering": "1.1."
 }

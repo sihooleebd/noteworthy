@@ -42,7 +42,8 @@ class ConfigEditor(ListEditor):
             "render-sample-count": ("Render Samples", "int"),
             "render-implicit-count": ("Implicit Samples", "int"),
             "pad-chapter-id": ("Pad Chapter ID", "bool"),
-            "pad-page-id": ("Pad Page ID", "bool")
+            "pad-page-id": ("Pad Page ID", "bool"),
+            "heading-numbering": ("Heading Numbering", "str")
         }
 
         self.fields = []

@@ -34,7 +34,7 @@
       date
     }
 
-    set heading(numbering: "1.1.")
+    // set heading(numbering: "1.1.")
     show heading: it => block(below: 1em)[
       #text(weight: "bold", fill: theme.text-heading, font: font, it)
     ]
