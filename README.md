@@ -22,6 +22,7 @@
 [![Typst](https://img.shields.io/badge/Typst-0.12%2B-239DAD?logo=typst)](https://typst.app/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/W3S2UQCJzM)
+[![Website](https://img.shields.io/badge/Website-noteworthy.benjaminlee.kr-purple)](https://noteworthy.benjaminlee.kr/)
 
 Say hi to **Noteworthy**, an academic parser and framework for creating massive and complex documents in one go. It can be used for building educational textbooks, lecture notes, and technical documentation with Typst. It provides a complete ecosystem of tools, themes, and components that work together seamlessly.
 
@@ -99,11 +100,11 @@ python3 noteworthy.py
 
 You can force an update or switch branches using CLI flags:
 
-| Flag | Description |
-|------|-------------|
-| `--load` | Force update/install from `master` branch. |
-| `--load-nightly` | Force update/install from `nightly` branch. |
-| `--force-update` | **Destructive**. Removes existing `noteworthy` and `templates` folders and reinstalls from `master`. |
+| Flag                     | Description                                                                                           |
+| ------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `--load`                 | Force update/install from `master` branch.                                                            |
+| `--load-nightly`         | Force update/install from `nightly` branch.                                                           |
+| `--force-update`         | **Destructive**. Removes existing `noteworthy` and `templates` folders and reinstalls from `master`.  |
 | `--force-update-nightly` | **Destructive**. Removes existing `noteworthy` and `templates` folders and reinstalls from `nightly`. |
 
 The noteworthy system guides you through the initialization, the configuration, and the build. Upon first run, the template will load the necessary template files. 
