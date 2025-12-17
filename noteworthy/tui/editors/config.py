@@ -23,7 +23,6 @@ class ConfigEditor(ListEditor):
         register_key(self.keymap, ToggleBind(self.action_toggle))
 
     def _build_items(self):
-        # Metadata for known fields to ensure nice display and ordering
         field_meta = {
             "title": ("Title", "str"),
             "subtitle": ("Subtitle", "str"),
@@ -49,15 +48,12 @@ class ConfigEditor(ListEditor):
         self.fields = []
         processed_keys = set()
         
-        # 1. Add known fields
-        # 1. Add known fields
         for key, meta in field_meta.items():
             if key in self.config:
                  if len(meta) == 3: self.fields.append((key, meta[0], meta[1], meta[2]))
                  else: self.fields.append((key, meta[0], meta[1]))
                  processed_keys.add(key)
         
-        # 2. Add remaining
         for key, val in self.config.items():
             if key not in processed_keys and key != 'display-mode':
                 if isinstance(val, bool): ftype = "bool"
@@ -68,9 +64,6 @@ class ConfigEditor(ListEditor):
                 self.fields.append((key, label, ftype))
         
         self.items = self.fields
-        # Sort not needed as we manual ordered known fields
-        self.items = self.fields
-        # Sort not needed as we manual ordered known fields
         self.items.insert(0, ('Preface', 'Edit Preface Content...', 'action'))
 
     def save(self):
@@ -78,16 +71,20 @@ class ConfigEditor(ListEditor):
             save_config(self.config)
             return True
         except Exception as e:
-            # In a real app we might show a popup, but for now we log/ignore
             return False
+
+    def _load(self):
+        self.config = load_config_safe()
+        self.themes = extract_themes()
+        self._build_items()
+        self.cursor = min(self.cursor, max(0, len(self.items) - 1))
 
     def _draw_item(self, y, x, item, width, selected):
         key = item[0]
-        # Check type
         if len(item) == 4: _, label, ftype, opts = item
         else: _, label, ftype = item
 
-        left_w = 26 # Increased margin
+        left_w = 26
 
         if selected:
             TUI.safe_addstr(self.scr, y, x + 2, '>', curses.color_pair(3) | curses.A_BOLD)
@@ -100,7 +97,6 @@ class ConfigEditor(ListEditor):
 
         TUI.safe_addstr(self.scr, y, x + 4, label[:left_w - 6], curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
         
-        # Draw separator
         TUI.safe_addstr(self.scr, y, x + left_w, "│", curses.color_pair(4) | curses.A_DIM)
 
         val = self.config.get(key)
@@ -120,7 +116,6 @@ class ConfigEditor(ListEditor):
         TUI.safe_addstr(self.scr, y, x + left_w + 2, val_str[:width - left_w - 4], color)
 
     def refresh(self):
-         # Override refresh to add header
         h, w = TUI.get_dims(self.scr)
         self.scr.clear()
         
@@ -140,7 +135,6 @@ class ConfigEditor(ListEditor):
         
         TUI.draw_box(self.scr, start_y + 2, bx, list_h, bw, self.box_title)
         
-        # Header
         TUI.safe_addstr(self.scr, start_y + 3, bx + 4, "Setting", curses.color_pair(1) | curses.A_BOLD)
         TUI.safe_addstr(self.scr, start_y + 3, bx + left_w + 2, "Value", curses.color_pair(1) | curses.A_BOLD)
         TUI.safe_addstr(self.scr, start_y + 3, bx + left_w, "│", curses.color_pair(4) | curses.A_DIM)
@@ -191,8 +185,6 @@ class ConfigEditor(ListEditor):
                 self.modified = True
         else:
             val = self.config.get(key)
-            # If value is explicitly None, show empty string. 
-            # If it's missing (shouldn't be for known fields), default to empty.
             init_val = str(val) if val is not None else ""
             
             new_val = LineEditor(self.scr, initial_value=init_val, title=f'Edit {label}').run()
@@ -203,9 +195,6 @@ class ConfigEditor(ListEditor):
                         if not new_val: self.config[key] = None
                         else: self.config[key] = int(new_val)
                     except ValueError:
-                         # Error handling: revert or ignore? User asked for error handling on save, 
-                         # but validating here is better. We'll just ignore invalid int for now or set None?
-                         # Better to not update if invalid.
                          pass
                 else:
                     if not new_val:

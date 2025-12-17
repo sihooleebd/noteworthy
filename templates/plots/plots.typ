@@ -11,6 +11,8 @@
 /// - y-domain: Y-axis range as (min, max) (default: (-5.5, 5.5))
 /// - x-tick: X-axis tick spacing (default: 1)
 /// - y-tick: Y-axis tick spacing (default: 1)
+/// - is-pi: If false, use normal numbers. If a positive integer, format x-axis
+///          labels as multiples of π/is-pi (e.g., is-pi: 2 → π/2, π, 3π/2, ...)
 /// - body: Plot content (functions, points, annotations)
 /// - draw-content: Additional CeTZ drawing commands (optional)
 #let rect-plot(
@@ -20,10 +22,34 @@
   y-domain: (-5.5, 5.5),
   x-tick: 1,
   y-tick: 1,
+  is-pi: false,
   body,
   draw-content: none,
 ) = {
   let actual-size = if size == auto { (10, 10) } else { size }
+
+  // Define x-format function based on is-pi
+  let x-format-fn = if is-pi != false {
+    let d = if is-pi == true { 1 } else { is-pi }
+    let gcd(a, b) = if b == 0 { a } else { gcd(b, calc.rem(a, b)) }
+    x => {
+      let n = int(calc.round(x * d / calc.pi))
+      let g = gcd(calc.abs(n), d)
+      let num = calc.quo(n, g)
+      let denom = calc.quo(d, g)
+
+      text(fill: theme.plot.stroke, size: 8pt, {
+        if num == 0 { $0$ } else if denom == 1 {
+          if num == 1 { $pi$ } else if num == -1 { $-pi$ } else { $#num pi$ }
+        } else {
+          if num == 1 { $pi / #denom$ } else if num == -1 { $-pi / #denom$ } else { $#num / #denom pi$ }
+        }
+      })
+    }
+  } else {
+    x => text(fill: theme.plot.stroke, size: 8pt, str(x))
+  }
+
   cetz.canvas({
     import cetz.draw: *
 
@@ -50,7 +76,7 @@
       x-label: text(fill: theme.plot.stroke, $x$),
       y-label: text(fill: theme.plot.stroke, $y$),
 
-      x-format: x => text(fill: theme.plot.stroke, size: 8pt, str(x)),
+      x-format: x-format-fn,
       y-format: y => text(fill: theme.plot.stroke, size: 8pt, str(y)),
 
       x-min: x-domain.at(0),
@@ -225,3 +251,4 @@
     )
   })
 }
+

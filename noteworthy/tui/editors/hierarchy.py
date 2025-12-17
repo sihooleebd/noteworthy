@@ -16,7 +16,6 @@ class HierarchyEditor(ListEditor):
         self.box_title = "Hierarchy"
         self.box_width = 75
         
-        # Register Binds
         register_key(self.keymap, ConfirmBind(self.action_edit))
         register_key(self.keymap, KeyBind(ord('d'), self.action_delete, "Delete Item"))
     
@@ -45,13 +44,11 @@ class HierarchyEditor(ListEditor):
         t, ci, pi, _ = self.items[self.cursor]
         val = val.strip()
         
-        # Handle number fields
         if t in ("ch_number", "pg_number"):
-            if not val: # Empty string -> remove explicit number
+            if not val:
                 if t == "ch_number": self.hierarchy[ci].pop("number", None)
                 else: self.hierarchy[ci]["pages"][pi].pop("number", None)
             else:
-                # Try to convert to int if possible, else keep as string
                 try: real_val = int(val)
                 except: real_val = val
                 
@@ -87,12 +84,11 @@ class HierarchyEditor(ListEditor):
                 self.modified = True
                 self._build_items()
                 self.cursor = min(self.cursor, len(self.items) - 1)
-        elif t in ("pg_id", "pg_title", "pg_number"):
+        elif t in ("pg_title", "pg_number"):
             del self.hierarchy[ci]["pages"][pi]
             self.modified = True
             self._build_items()
             self.cursor = min(self.cursor, len(self.items) - 1)
-    
     
     def _load(self):
         self.hierarchy = json.loads(HIERARCHY_FILE.read_text())
@@ -103,7 +99,6 @@ class HierarchyEditor(ListEditor):
             HIERARCHY_FILE.write_text(json.dumps(self.hierarchy, indent=4))
             self.modified = False
             
-            # Auto-sync files: Create new, delete old
             from ...core.fs_sync import ensure_content_structure, cleanup_extra_files
             ensure_content_structure(self.hierarchy)
             cleanup_extra_files(self.hierarchy)
@@ -159,7 +154,6 @@ class HierarchyEditor(ListEditor):
         val_x = x + left_w + 2
         
         if t == "ch_title":
-            # Chapter row
             ch_count = len(self.hierarchy)
             width_digits = 3 if ch_count >= 100 else 2
             explicit_num = self.hierarchy[ci].get("number")
@@ -171,10 +165,8 @@ class HierarchyEditor(ListEditor):
             label = self.config.get("chapter-name", "Chapter")
             label_disp = f"{label} {ch_num}"
             
-            # Draw label in left col
             TUI.safe_addstr(self.scr, y, x + 4, label_disp[:left_w-6], curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
             
-            # Draw title in right col
             val = str(self._get_value(item))
             TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
             
@@ -190,7 +182,6 @@ class HierarchyEditor(ListEditor):
             TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
             
         elif t == "pg_title":
-            # Page Title
             TUI.safe_addstr(self.scr, y, x + 6, "Page Title", curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
             val = str(self._get_value(item))
             TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))

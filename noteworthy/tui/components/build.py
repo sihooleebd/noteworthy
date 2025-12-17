@@ -19,7 +19,6 @@ class BuildMenu:
         self.frontmatter = settings.get('frontmatter', True)
         self.leave_pdfs = settings.get('leave_pdfs', False)
         import os
-        # Default to 50% of CPU threads (min 1)
         default_threads = max(1, (os.cpu_count() or 1) // 2)
         self.threads = settings.get('threads', default_threads)
         self.typst_flags = settings.get('typst_flags', [])
@@ -84,7 +83,6 @@ class BuildMenu:
                 TUI.safe_addstr(self.scr, sy + 1 + i, bx + 16, '[ON] ' if v else '[OFF]', curses.color_pair(2 if v else 6) | curses.A_BOLD)
                 TUI.safe_addstr(self.scr, sy + 1 + i, bx + 22, f'({k})', curses.color_pair(4) | curses.A_DIM)
             
-            # Threads option
             TUI.safe_addstr(self.scr, sy + 4, bx + 2, 'Threads:', curses.color_pair(4))
             TUI.safe_addstr(self.scr, sy + 4, bx + 16, f'{self.threads}', curses.color_pair(5) | curses.A_BOLD)
             TUI.safe_addstr(self.scr, sy + 4, bx + 22, '(t)', curses.color_pair(4) | curses.A_DIM)
@@ -118,12 +116,10 @@ class BuildMenu:
             items(start_y, rx, rbw, min(lh + 2 + obh, self.h - 2))
         else:
             obh = 8 
-            # If height < 36, hide logo to make space for functionality
             hide_logo = self.h < 36
             real_lh = len(LOGO) if not hide_logo else 0
             
-            # Calculate start_y centered based on content height
-            total_content_h = (real_lh + 2 if not hide_logo else 0) + obh + 1 + 6 + 2 # 6 min chapters?
+            total_content_h = (real_lh + 2 if not hide_logo else 0) + obh + 1 + 6 + 2
             start_y = max(0, (self.h - total_content_h) // 2)
             
             if not hide_logo:
@@ -132,7 +128,6 @@ class BuildMenu:
             
             bw, bx = (min(60, self.w - 4), (self.w - min(60, self.w - 4)) // 2)
             
-            # Reduce spacing if tight
             spacing = 2 if not hide_logo else 0
             opts_y = start_y + real_lh + spacing
             if opts_y < 0: opts_y = 0
@@ -141,10 +136,8 @@ class BuildMenu:
             opts(opts_y, bx, bw)
             
             cy = opts_y + obh + 1
-            # Remaining height for chapters
-            rem_h = self.h - cy - 2 # Footer space
+            rem_h = self.h - cy - 2
             
-            # Ensure at least 4 lines for chapters 
             list_h = max(4, rem_h)
             
             TUI.draw_box(self.scr, cy, bx, list_h, bw, 'Select Chapters')
@@ -331,7 +324,6 @@ class BuildUI:
             filled = int((bw - 12) * effective_pct / 100)
             TUI.safe_addstr(self.scr, start_y + 5, bx + 2, '█' * filled + '░' * (bw - 12 - filled), curses.color_pair(3))
             TUI.safe_addstr(self.scr, start_y + 5, bx + bw - 8, f'{effective_pct:3d}%', curses.color_pair(3) | curses.A_BOLD)
-            # Add simple count
             count_str = f'({self.progress}/{self.total})'
             TUI.safe_addstr(self.scr, start_y + 2, bx + bw - 2 - len(count_str), count_str, curses.color_pair(4) | curses.A_DIM)
             
@@ -389,7 +381,6 @@ def run_build_process(scr, hierarchy, opts):
     
     bm = BuildManager(BUILD_DIR)
     
-    # Track progress
     progress_counter = 0
     
     def on_progress():
@@ -411,12 +402,9 @@ def run_build_process(scr, hierarchy, opts):
         
         ui.set_progress(progress_counter, total, visual_percent=95)
         
-        current_page_count = sum([get_pdf_page_count(p) for p in pdfs]) + 1 # +1 start
+        current_page_count = sum([get_pdf_page_count(p) for p in pdfs]) + 1
         
-        # Post-processing
-        page_map = bm.page_map # Get final map
-        
-        # Remaining 5% is split between TOC, Merge, Metadata (approx 1.6% each)
+        page_map = bm.page_map
         
         if opts['frontmatter'] and config.get('display-outline', True):
             ui.set_task('Regenerating TOC')
