@@ -111,7 +111,6 @@ def merge_pdfs(pdf_files, output):
 def create_pdf_metadata(chapters, page_map, output_file):
     bookmarks = []
     
-    # Extract bookmarks helper using pypdf
     try:
         import pypdf
     except ImportError:
@@ -143,7 +142,6 @@ def create_pdf_metadata(chapters, page_map, output_file):
                             pass
                 return res
                 
-            # Typst usually outputs starting at Level 1, so we start recursion at base_level + 1
             extracted = process_outline(reader.outline, base_level + 1)
             
         except Exception as e:
@@ -151,24 +149,18 @@ def create_pdf_metadata(chapters, page_map, output_file):
             
         return extracted
 
-
-    # Add top-level items
     for key, title in [('cover', 'Cover'), ('preface', 'Preface'), ('outline', 'Table of Contents')]:
         if key in page_map:
             bookmarks.extend([f'BookmarkBegin', f'BookmarkTitle: {title}', f'BookmarkLevel: 1', f'BookmarkPageNumber: {page_map[key]}'])
 
-    # Process hierarchy
     for ci, ch in chapters:
         ch_id = str(ch.get('number', ci + 1))
         ch_key = f'chapter-{ci + 1}'
         
         if ch_key in page_map:
             start_pg = page_map[ch_key]
-            # Chapter bookmark
             bookmarks.extend([f'BookmarkBegin', f"BookmarkTitle: {ch['title']}", f'BookmarkLevel: 1', f"BookmarkPageNumber: {start_pg}"])
             
-            # Extract internal bookmarks from Chapter Cover PDF
-            # Path matches tui/components/build.py logic
             pdf_path = BUILD_DIR / f'10_chapter_{ci}_cover.pdf'
             
             sub_marks = extract_bookmarks(pdf_path, 1, start_pg)
@@ -179,22 +171,15 @@ def create_pdf_metadata(chapters, page_map, output_file):
             key = f'{ci}/{ai}'
             if key in page_map:
                 start_pg = page_map[key]
-                # Section bookmark (Level 2)
                 bookmarks.extend([f'BookmarkBegin', f"BookmarkTitle: {p['title']}", f'BookmarkLevel: 2', f"BookmarkPageNumber: {start_pg}"])
                 
-                # Extract internal bookmarks from Section PDF
-                # Path matches tui/components/build.py logic: 20_page_{ci}_{ai}.pdf
                 pdf_path = BUILD_DIR / f'20_page_{ci}_{ai}.pdf'
                 
                 sub_marks = extract_bookmarks(pdf_path, 2, start_pg)
                 for sm in sub_marks:
                     bookmarks.extend([f'BookmarkBegin', f"BookmarkTitle: {sm['title']}", f'BookmarkLevel: {sm["level"]}', f"BookmarkPageNumber: {sm['page']}"])
                         
-
-# ... (existing imports)
 import concurrent.futures
-
-# ... (existing get_pdf_page_count, compile_target)
 
 class BuildManager:
     def __init__(self, build_dir):
@@ -221,25 +206,18 @@ class BuildManager:
             pass
             
     def get_predicted_count(self, key):
-        return self.page_counts.get(key, 1) # Default to 1 page if unknown
+        return self.page_counts.get(key, 1)
         
     def update_count(self, key, count):
         with self.lock:
             self.page_counts[key] = count
             
     def build_parallel(self, chapters, config, opts, callbacks):
-        """
-        Orchestrates parallel build.
-        callbacks: dict of {on_progress: func, on_log: func}
-        """
         max_workers = opts.get('threads', os.cpu_count() or 1)
         flags = opts.get('typst_flags', [])
         
-        # 1. Flatten tasks
-        # Each task: (key, type, target, output_path, title)
         tasks = []
         
-        # Frontmatter
         if opts['frontmatter']:
             if config.get('display-cover', True):
                 tasks.append(('cover', 'front', 'cover', self.build_dir / '00_cover.pdf', 'Cover'))
@@ -247,7 +225,6 @@ class BuildManager:
             if config.get('display-outline', True):
                 tasks.append(('outline', 'front', 'outline', self.build_dir / '02_outline.pdf', 'TOC'))
                 
-        # Chapters
         for ci, ch in chapters:
             ch_id = str(ch.get('number', ci + 1))
             ch_key = f'chapter-{ci + 1}'
@@ -268,81 +245,60 @@ class BuildManager:
             projected_offsets[key] = current
             current += self.get_predicted_count(key)
             
-        # Parallel Execution with Optimistic Scheduling
-        # We run multiple passes if page counts mismatch the prediction ("ripple effect")
         iteration = 0
         while True:
             iteration += 1
             callbacks.get('on_log', lambda m, o: None)(f"Build Pass {iteration}...", True)
             
-            # Use previously compiled offset or default
             to_run = []
             for key in ordered_keys:
                  to_run.append(key)
             
-            # Optimization: Only run if offset changed OR verification failed?
-            # Actually, we can just run everything in parallel first.
-            
             if iteration > 1:
-                # Find first mismatch
-                # Re-calculate correct offsets based on actuals from Pass 1
                 new_offsets = {}
                 curr = 1
                 dirty_index = -1
                 
                 for idx, key in enumerate(ordered_keys):
                     new_offsets[key] = curr
-                    actual = self.get_predicted_count(key) # Updated in Pass 1
+                    actual = self.get_predicted_count(key)
                     curr += actual
                     
                     if dirty_index == -1:
-                        # Check if this task runs with a different offset than Pass 1
                         if new_offsets[key] != projected_offsets[key]:
                             dirty_index = idx
                             
                 if dirty_index == -1:
-                    # synced!
                     break
                     
-                # We need to re-run from dirty_index
-                # Update projected
                 projected_offsets = new_offsets
                 to_run = ordered_keys[dirty_index:]
                 callbacks.get('on_log', lambda m, o: None)(f"Detected layout shift at {ordered_keys[dirty_index]}. Recompiling {len(to_run)} tasks.", True)
             
-            # Execute `to_run` in parallel
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_key = {}
                 for key in to_run:
                     t_data = task_map[key]
-                    # (key, type, target, output_path, title)
                     offset = projected_offsets[key]
                     
-                    # Store what we run with
-                    # logic: compile_target(target, output, page_offset=offset, ...)
                     f = executor.submit(
                         compile_target, 
-                        t_data[2], # target
-                        t_data[3], # output
+                        t_data[2],
+                        t_data[3],
                         page_offset=offset,
                         extra_flags=flags,
-                        # Suppress direct string logging from threads to avoid UI race conditions
                         log_callback=lambda m: None 
                     )
                     future_to_key[f] = key
                     
-                # Wait for completion
                 completed_count = 0
                 for future in concurrent.futures.as_completed(future_to_key):
                     key = future_to_key[future]
                     try:
-                        # Result is stdout/stderr string usually, or checks return code
                         res = future.result()
-                        # Get actual page count
                         path = task_map[key][3]
                         count = get_pdf_page_count(path)
                         
-                        # Update cache/state
                         self.update_count(key, count)
                         
                         completed_count += 1
@@ -353,20 +309,17 @@ class BuildManager:
                         callbacks.get('on_log', lambda m, o: None)(f"Task {key} failed: {e}", False)
                         raise e 
                         
-            # End of Pass
             if iteration > 3:
                 callbacks.get('on_log', lambda m, o: None)("Max retries reached. Pagination might be unstable.", False)
                 break
                 
         self.save_cache()
         self.page_map = projected_offsets
-        return [task_map[k][3] for k in ordered_keys] # Return ordered PDF paths
+        return [task_map[k][3] for k in ordered_keys]
 
-# Keep create_pdf_metadata and others...
 def create_pdf_metadata(chapters, page_map, output_file):
     bookmarks = []
     
-    # Extract bookmarks helper using pypdf
     try:
         import pypdf
     except ImportError:
@@ -405,23 +358,18 @@ def create_pdf_metadata(chapters, page_map, output_file):
             
         return extracted
 
-    # Add top-level items
     for key, title in [('cover', 'Cover'), ('preface', 'Preface'), ('outline', 'Table of Contents')]:
         if key in page_map:
             bookmarks.extend([f'BookmarkBegin', f'BookmarkTitle: {title}', f'BookmarkLevel: 1', f'BookmarkPageNumber: {page_map[key]}'])
 
-    # Process hierarchy
     for ci, ch in chapters:
         ch_id = str(ch.get('number', ci + 1))
         ch_key = f'chapter-{ci + 1}'
         
         if ch_key in page_map:
             start_pg = page_map[ch_key]
-            # Chapter bookmark
             bookmarks.extend([f'BookmarkBegin', f"BookmarkTitle: {ch['title']}", f'BookmarkLevel: 1', f"BookmarkPageNumber: {start_pg}"])
             
-            # Extract internal bookmarks from Chapter Cover PDF
-            # Path matches tui/components/build.py logic
             pdf_path = BUILD_DIR / f'10_chapter_{ci}_cover.pdf'
             
             sub_marks = extract_bookmarks(pdf_path, 1, start_pg)
@@ -432,11 +380,8 @@ def create_pdf_metadata(chapters, page_map, output_file):
             key = f'{ci}/{ai}'
             if key in page_map:
                 start_pg = page_map[key]
-                # Section bookmark (Level 2)
                 bookmarks.extend([f'BookmarkBegin', f"BookmarkTitle: {p['title']}", f'BookmarkLevel: 2', f"BookmarkPageNumber: {start_pg}"])
                 
-                # Extract internal bookmarks from Section PDF
-                # Path matches tui/components/build.py logic: 20_page_{ci}_{ai}.pdf
                 pdf_path = BUILD_DIR / f'20_page_{ci}_{ai}.pdf'
                 
                 sub_marks = extract_bookmarks(pdf_path, 2, start_pg)
@@ -458,29 +403,19 @@ def apply_metadata_pypdf(pdf, bookmarks_list, title, author):
             '/Creator': 'Typst Noteworthy'
         })
         
-        # Add bookmarks (parsed from text format)
-        
-        # Helper to track parents by level
-        # parents[k] = parent_indirect_ref for level k
-        parents = {0: None} # Level 1 parent is None (root)
+        parents = {0: None}
         
         i = 0
         while i < len(bookmarks_list):
             line = bookmarks_list[i]
             if line == 'BookmarkBegin':
-                # Block format: Title, Level, PageNumber
                 try:
                     t = bookmarks_list[i+1].split(': ', 1)[1]
                     l = int(bookmarks_list[i+2].split(': ', 1)[1])
                     pg = int(bookmarks_list[i+3].split(': ', 1)[1])
                     
-                    # pypdf add_outline_item(title, page_number (0-based), parent)
-                    # Parent for level L is the item at level L-1
                     parent = parents.get(l - 1, None)
                     
-                    # add_outline_item returns the added item (IndirectObject)
-                    # We store it as potential parent for L+1
-                    # Page index is pg - 1
                     parents[l] = writer.add_outline_item(t, pg - 1, parent)
                     
                     i += 4
@@ -496,7 +431,6 @@ def apply_metadata_pypdf(pdf, bookmarks_list, title, author):
         return False
 
 def apply_pdf_metadata(pdf, bookmarks_file, title, author, bookmarks_list=None):
-    # Try pypdf first if bookmarks_list is provided or we can read file
     lines = bookmarks_list if bookmarks_list else Path(bookmarks_file).read_text().split('\n')
     
     if apply_metadata_pypdf(pdf, lines, title, author):

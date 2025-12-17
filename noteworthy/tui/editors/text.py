@@ -19,7 +19,6 @@ class TextEditor(BaseEditor):
         self.scroll_y = 0
         self.preferred_x = 0
         
-        # Register Bindings
         register_key(self.keymap, NavigationBind('UP', self.move_up))
         register_key(self.keymap, NavigationBind('DOWN', self.move_down))
         register_key(self.keymap, NavigationBind('LEFT', self.move_left))
@@ -33,11 +32,9 @@ class TextEditor(BaseEditor):
         register_key(self.keymap, KeyBind([curses.KEY_DC], self.handle_delete, "Delete"))
         register_key(self.keymap, ConfirmBind(self.handle_enter))
         register_key(self.keymap, KeyBind(9, self.handle_tab, "Tab"))
-        register_key(self.keymap, KeyBind(24, self.do_export, "Export")) # Ctrl+X
-        register_key(self.keymap, KeyBind(12, self.do_import, "Import")) # Ctrl+L
+        register_key(self.keymap, KeyBind(24, self.do_export, "Export"))
+        register_key(self.keymap, KeyBind(12, self.do_import, "Import"))
         
-        # Override Exit to handle return value behavior
-        # We replace the default ExitBind from BaseEditor
         register_key(self.keymap, KeyBind(27, self.do_exit_text, "Save & Exit"))
 
     def do_exit_text(self, ctx=None):
@@ -99,7 +96,7 @@ class TextEditor(BaseEditor):
         TUI.safe_addstr(self.scr, h - 1, fx, footer, curses.color_pair(4) | curses.A_DIM)
         
         curses.curs_set(1)
-        cur_y = vcy - self.scroll_y + 3 # +2 margin +1 safe_addstr offset
+        cur_y = vcy - self.scroll_y + 3
         cur_x = 7 + (self.cx - visual_lines[vcy][2])
         if 0 <= cur_y < h and 0 <= cur_x < w:
             self.scr.move(cur_y, cur_x)
@@ -130,13 +127,11 @@ class TextEditor(BaseEditor):
     def run(self):
         TUI.disable_flow_control()
         self.refresh()
-        self.refresh()
         while True:
             if not TUI.check_terminal_size(self.scr):
                 return None
             k = self.scr.getch()
             
-            # Delegate to KeyHandler
             handled, res = handle_key_event(k, self.keymap, self)
             if handled:
                 if res == 'EXIT_WITH_CONTENT':
@@ -187,7 +182,6 @@ class TextEditor(BaseEditor):
 
     def _get_visual_info(self):
         visual_lines = self._get_visual_lines(self.scr.getmaxyx()[1] - 5)
-        # Find current visual cursor y (vcy)
         vcy = 0
         for i, (text, l_idx, start_idx) in enumerate(visual_lines):
             if l_idx == self.cy:

@@ -29,3 +29,6 @@ extract_hierarchy.typ
 
 .indexignore
 build_settings.json
+
+# Exports
+exports/

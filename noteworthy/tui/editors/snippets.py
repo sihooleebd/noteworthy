@@ -21,7 +21,6 @@ class SnippetsEditor(ListEditor):
         if self.cursor >= len(self.snippets):
             self.action_new(ctx)
         else:
-            # Edit existing
             name, definition = self.snippets[self.cursor]
             new_name = LineEditor(self.scr, initial_value=name, title="Edit Snippet Name").run()
             if new_name is not None:
@@ -38,7 +37,6 @@ class SnippetsEditor(ListEditor):
         self.modified = True
         self._update_items()
         
-        # Edit immediately
         name, definition = self.snippets[self.cursor]
         new_name = LineEditor(self.scr, initial_value=name, title="New Snippet Name").run()
         if new_name is not None: self.snippets[self.cursor][0] = new_name
@@ -102,7 +100,6 @@ class SnippetsEditor(ListEditor):
             TUI.safe_addstr(self.scr, y, x + left_w + 2, definition[:width - left_w - 6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
 
     def refresh(self):
-        # Override refresh to add headers
         h, w = self.scr.getmaxyx()
         self.scr.clear()
         
@@ -141,5 +138,3 @@ class SnippetsEditor(ListEditor):
     def _draw_footer(self, h, w):
         footer = "n: New  d: Delete  Enter: Edit  Esc: Save & Exit  x: Export  l: Import"
         TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
-
-    # Removed _handle_input

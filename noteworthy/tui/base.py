@@ -56,20 +56,13 @@ class TUI:
 
     @staticmethod
     def get_dims(scr):
-        """Returns (h, w) of the safe drawing area (screen size - 2 for safe margin)."""
         h_raw, w_raw = scr.getmaxyx()
         return h_raw - 2, w_raw - 2
 
     @staticmethod
     def center(scr, content_h=None, content_w=None, offset_y=0, offset_x=0):
-        """
-        Returns (y, x) to center content of size (content_h, content_w).
-        If content size is not provided, returns center point of the screen.
-        Result is adjusted for safe_addstr's implicit +1 offset.
-        """
         h_raw, w_raw = scr.getmaxyx()
         
-        # Calculate center point
         cy = h_raw // 2
         cx = w_raw // 2
         
@@ -81,19 +74,12 @@ class TUI:
         if content_w is not None:
             start_x = max(0, (w_raw - content_w) // 2)
 
-        # Apply offset and adjust for 'safe' coordinates (usually -1 because safe_* adds +1)
-        # However, safe_addstr takes 0-indexed relative coords and adds 1.
-        # So if we want to print at absolute screen row Y, we pass Y-1.
-        # But our calculation (h - ch) // 2 gives the absolute starting row.
-        # So we should return start_y - 1.
-        
         return start_y - 1 + offset_y, start_x - 1 + offset_x
 
     @staticmethod
     def prompt_save(scr):
         h, w = TUI.get_dims(scr)
         msg = 'Save? (y/n/c): '
-        # Bottom-left positioning
         TUI.safe_addstr(scr, h - 1, 2, msg, curses.color_pair(3) | curses.A_BOLD)
         scr.refresh()
         c = scr.getch()
@@ -161,10 +147,6 @@ class TUI:
                 if was_error:
                     scr.clear()
                     scr.refresh()
-                    # Reset timeout to blocking if we were in error loop
-                    # But caller might expect different timeout. 
-                    # Usually callers do their own timeout setting or loop, 
-                    # but this blocks until size is fixed.
                 return True
             
             was_error = True
@@ -174,8 +156,6 @@ class TUI:
             msg2 = f'Current: {h}x{w}'
             msg3 = f'Required: {min_h}x{min_w}'
             
-            # Using center helper
-            # 3 lines of text
             start_y, _ = TUI.center(scr, content_h=3)
             _, start_x1 = TUI.center(scr, content_w=len(msg1))
             _, start_x2 = TUI.center(scr, content_w=len(msg2))
@@ -186,9 +166,8 @@ class TUI:
             TUI.safe_addstr(scr, start_y + 2, start_x3, msg3, curses.color_pair(4) | curses.A_DIM)
             
             scr.refresh()
-            curses.napms(100) # Sleep to prevent CPU spin
+            curses.napms(100)
             
-            # Flush input to ignore keys during resize
             curses.flushinp()
             
             if scr.getch() in (ord('q'), 27):
@@ -239,7 +218,6 @@ class BaseEditor:
                 else:
                     TUI.safe_addstr(self.scr, by + 1 + i, bx + 4, b[:bw - 6], curses.color_pair(4))
             
-            # Helper text
             TUI.safe_addstr(self.scr, by + bh - 2, bx + 2, "Tip: Add .json/.typ to 'exports/' folder", curses.color_pair(4) | curses.A_DIM)
 
             self.scr.refresh()
@@ -284,14 +262,13 @@ class BaseEditor:
         self.keymap = {}
         TUI.init_colors()
         
-        # Register default bindings
         register_key(self.keymap, ExitBind(self.do_exit))
-        register_key(self.keymap, SaveBind()) # Uses default self.save()
+        register_key(self.keymap, SaveBind())
         
     def do_exit(self, ctx=None):
         if self.modified:
             self.save()
-        return 'EXIT' # Signal to break loop
+        return 'EXIT'
 
     def refresh(self):
         raise NotImplementedError
@@ -302,7 +279,6 @@ class BaseEditor:
     def run(self):
         self.refresh()
         while True:
-            # Dynamic check: we need at least 10 lines height and box_width+4 width
             if not TUI.check_terminal_size(self.scr, 10, self.box_width + 4):
                 return
             
@@ -329,8 +305,6 @@ class ListEditor(BaseEditor):
         self.box_title = 'Items'
         self.box_width = 70
         
-        # Register Navigation
-        # Register Navigation
         register_key(self.keymap, NavigationBind('UP', self.cursor_up))
         register_key(self.keymap, NavigationBind('DOWN', self.cursor_down))
         register_key(self.keymap, NavigationBind('PGUP', self.cursor_pgup))
@@ -378,7 +352,7 @@ class ListEditor(BaseEditor):
         
     def cursor_pgup(self, ctx):
         h, _ = self.scr.getmaxyx()
-        jump = h - 8 # Approximate page size based on list_h calculation
+        jump = h - 8
         if jump < 1: jump = 1
         self.cursor = max(0, self.cursor - jump)
 

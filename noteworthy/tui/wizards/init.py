@@ -23,7 +23,6 @@ class InitWizard:
         
         self.keymap = {}
         
-        # Register Binds
         register_key(self.keymap, KeyBind(27, self.action_cancel, "Cancel"))
         register_key(self.keymap, KeyBind([curses.KEY_BACKSPACE, 127, 8], self.action_prev, "Previous Step"))
         register_key(self.keymap, ConfirmBind(self.action_next))
@@ -91,12 +90,28 @@ class InitWizard:
                 if ly + i < h:
                     TUI.safe_addstr(self.scr, ly + i, lx, line, curses.color_pair(1) | curses.A_BOLD)
             sy = ly + lh + 2
-            for i, step in enumerate(self.steps):
-                if sy + i >= h - 1:
-                    break
-                marker = '>' if i == self.current_step else ' '
-                style = curses.color_pair(3) | curses.A_BOLD if i == self.current_step else curses.color_pair(4)
-                TUI.safe_addstr(self.scr, sy + i, lx + 2, f'{marker} {step[1]}', style)
+            footer_y = h - 3
+            
+            # Use columns if list is too long for vertical space?
+            # Or scroll the list if current step is out of view
+            max_steps_visible = footer_y - 1 - sy
+            if max_steps_visible < 1: max_steps_visible = 1
+            
+            start_step = 0
+            if self.current_step >= max_steps_visible:
+                start_step = self.current_step - max_steps_visible + 1
+            
+            for i in range(min(len(self.steps) - start_step, max_steps_visible)):
+                step_idx = start_step + i
+                step = self.steps[step_idx]
+                y_pos = sy + i
+                
+                marker = '>' if step_idx == self.current_step else ' '
+                style = curses.color_pair(3) | curses.A_BOLD if step_idx == self.current_step else curses.color_pair(4)
+                
+                if y_pos < footer_y:
+                    TUI.safe_addstr(self.scr, y_pos, lx + 2, f'{marker} {step[1]}', style)
+            
             dx = lx + 20 + 4
             dw = 55
             dy = max(0, (h - 16) // 2)
@@ -169,7 +184,6 @@ class InitWizard:
         return value
 
     def run(self):
-        # Initial welcome screen
         while True:
             if not TUI.check_terminal_size(self.scr):
                 return None
@@ -189,19 +203,16 @@ class InitWizard:
             if k in (ord('\n'), 10, curses.KEY_ENTER):
                 break
                 
-        # Wizard loop
         while self.current_step < len(self.steps):
             if not TUI.check_terminal_size(self.scr):
                 return None
             self.refresh()
             k = self.scr.getch()
             
-            # Delegate to KeyHandler
             handled, res = handle_key_event(k, self.keymap, self)
             if handled and res == 'EXIT':
                 return None
                 
-        # Save
         try:
             CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
             CONFIG_FILE.write_text(json.dumps(self.config, indent=4))

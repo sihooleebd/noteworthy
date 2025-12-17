@@ -3,7 +3,6 @@ from ..base import ListEditor, TUI
 from ...config import INDEXIGNORE_FILE
 from ..components.common import LineEditor
 from ...utils import load_indexignore, save_indexignore, register_key
-from ...config import INDEXIGNORE_FILE
 from ..keybinds import ConfirmBind, KeyBind
 
 class IndexignoreEditor(ListEditor):
@@ -74,7 +73,3 @@ class IndexignoreEditor(ListEditor):
     def _draw_footer(self, h, w):
         footer = 'Enter:Edit n:Add d:Del Esc:Save x:Export l:Import'
         TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
-
-
-
-    # Removed _handle_input

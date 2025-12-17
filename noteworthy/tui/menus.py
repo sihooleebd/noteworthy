@@ -116,10 +116,9 @@ class MainMenu:
                 return None
             self.draw()
             k = self.scr.getch()
-            # Delegate to KeyHandler
             handled, res = handle_key_event(k, self.keymap, self)
             if handled:
                 if res == 'EXIT':
                     return 'EXIT'
-                elif res: # 'editor' or 'builder'
+                elif res:
                     return res

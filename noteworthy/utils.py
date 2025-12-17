@@ -46,13 +46,6 @@ def load_indexignore():
     return set()
 
 def register_key(keymap, bind):
-    """
-    Registers a KeyBind into the provided keymap dictionary.
-    
-    Args:
-        keymap (dict): Dictionary mapping key codes to KeyBind objects.
-        bind (KeyBind): The binding to register.
-    """
     if isinstance(bind.keys, list):
         for k in bind.keys:
             keymap[k] = bind
@@ -60,17 +53,6 @@ def register_key(keymap, bind):
         keymap[bind.keys] = bind
 
 def handle_key_event(key_code, keymap, context=None):
-    """
-    Dispatches a key press to the appropriate handler in the keymap.
-    
-    Args:
-        key_code (int): The key code pressed.
-        keymap (dict): Dictionary mapping key codes to KeyBind objects.
-        context (Any): The context to pass to the action (usually 'self').
-        
-    Returns:
-        tuple: (handled (bool), result (Any))
-    """
     if key_code in keymap:
         bind = keymap[key_code]
         res = bind(context)

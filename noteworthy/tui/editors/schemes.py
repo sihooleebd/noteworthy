@@ -1,12 +1,10 @@
 import curses
 import json
-import copy
 from ..base import ListEditor, TUI
 from ..components.common import LineEditor
 from ...config import SCHEMES_FILE
 from ...utils import load_config_safe, save_config, register_key
 from ..keybinds import ConfirmBind, KeyBind
-from .text import TextEditor
 
 def extract_themes():
     try:
@@ -69,10 +67,7 @@ class ThemeDetailEditor(ListEditor):
         
         register_key(self.keymap, ConfirmBind(self.action_select))
 
-    
     def save(self):
-        # Changes are applied to the dictionary reference in real-time
-        # Parent SchemeEditor handles the actual file saving
         return True
 
     def action_select(self, ctx):
@@ -218,6 +213,11 @@ class SchemeEditor(ListEditor):
     def _load_schemes(self):
         return json.loads(SCHEMES_FILE.read_text())
 
+    def _load(self):
+        self.schemes = self._load_schemes()
+        self._build_items()
+        self.cursor = min(self.cursor, max(0, len(self.items) - 1))
+
     def _build_items(self):
         self.items = sorted(list(self.schemes.keys())) + ['+ Add new scheme...']
 
@@ -265,11 +265,21 @@ class SchemeEditor(ListEditor):
         name = self.items[self.cursor]
         if name == '+ Add new scheme...':
             return
-        if len(self.items) > 2:
-            del self.schemes[name]
-            self._build_items()
-            self.modified = True
-            self.cursor = min(self.cursor, len(self.items) - 1)
+        if len(self.items) <= 2:
+            return
+        
+        active_theme = self.config.get('display-mode')
+        if active_theme == name:
+            real_themes = [t for t in self.items if t != '+ Add new scheme...' and t != name]
+            if real_themes:
+                fallback = real_themes[0]
+                self.config['display-mode'] = fallback
+                save_config(self.config)
+        
+        del self.schemes[name]
+        self._build_items()
+        self.modified = True
+        self.cursor = min(self.cursor, len(self.items) - 1)
 
     def _delete_current_prompt(self, ctx):
         if TUI.prompt_confirm(self.scr, 'Delete scheme? (y/n): '):

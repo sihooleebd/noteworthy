@@ -11,7 +11,7 @@ class LineEditor:
         self.scr = scr
         self.title = title
         self.value = initial_value
-        self.cursor_pos = len(initial_value) # Cursor position index
+        self.cursor_pos = len(initial_value)
         
         self.keymap = {}
         register_key(self.keymap, KeyBind(27, self.action_cancel, "Cancel"))
@@ -61,7 +61,6 @@ class LineEditor:
         
         curses.curs_set(1)
         
-        # Scroll offset for long text
         scroll_off = 0
         
         while True:
@@ -74,7 +73,6 @@ class LineEditor:
             input_x = box_x + 2
             max_len = box_w - 4
             
-            # Ensure cursor remains visible
             if self.cursor_pos < scroll_off:
                 scroll_off = self.cursor_pos
             if self.cursor_pos >= scroll_off + max_len:
@@ -82,15 +80,11 @@ class LineEditor:
             
             disp_val = self.value[scroll_off:scroll_off + max_len]
             
-            # If text is longer than visible area but doesn't fill it from start
-            # (standard slice handled above)
-            
             TUI.safe_addstr(self.scr, input_y, input_x, ' ' * max_len, curses.color_pair(4))
             TUI.safe_addstr(self.scr, input_y, input_x, disp_val, curses.color_pair(1) | curses.A_BOLD)
             
             real_cur_x = input_x + 1 + (self.cursor_pos - scroll_off)
             
-            # Clamp cursor visual (should be correct by logic above)
             real_cur_x = min(real_cur_x, input_x + 1 + max_len) 
             
             real_y = input_y + 1
@@ -203,7 +197,6 @@ class LogScreen:
             handled, res = self.handle_key(k)
             if handled and res == 'EXIT': break
 
-
 def show_error_screen(scr, error):
     import traceback
     log = traceback.format_exc()
@@ -212,7 +205,6 @@ def show_error_screen(scr, error):
     def draw(s, h, w):
         face = SAD_FACE
         total_h = len(face) + 2 + 1 + 2 + 1
-        
         
         cy, cx = TUI.center(s, content_h=total_h if total_h < h else h)
         y = cy + 1
