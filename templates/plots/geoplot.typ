@@ -11,17 +11,28 @@
 /// - pos: Anchor position for label (default: "west")
 /// - padding: Padding around label (default: 0.2)
 /// - color: Point fill color (default: theme.plot.highlight)
-#let point(theme: (:), xy, label-content, pos: "west", padding: 0.2, color: auto) = {
-  let fill-col = if color == auto { theme.plot.highlight } else { color }
+/// - hollow: If true, point has only outline with no fill (default: false)
+#let point(theme: (:), xy, label-content, pos: "west", padding: 0.2, color: auto, hollow: false) = {
+  let point-col = if color == auto { theme.plot.highlight } else { color }
+
+  let mark-style = if hollow {
+    (fill: none, stroke: point-col)
+  } else {
+    (fill: point-col, stroke: none)
+  }
 
   if xy.len() == 3 {
     // 3D mode: Raw draw for spaceplot
     import cetz.draw: *
-    circle(xy, radius: 0.05, fill: fill-col, stroke: none)
+    if hollow {
+      circle(xy, radius: 0.05, fill: none, stroke: point-col)
+    } else {
+      circle(xy, radius: 0.05, fill: point-col, stroke: none)
+    }
     content(xy, padding: padding, anchor: pos, text(fill: theme.plot.stroke, label-content))
   } else {
     // 2D mode: Plot item for rect-plot
-    plot.add((xy,), mark: "o", mark-style: (fill: fill-col, stroke: none))
+    plot.add((xy,), mark: "o", mark-style: mark-style)
     plot.annotate({
       import cetz.draw: *
       content(xy, padding: padding, anchor: pos, text(fill: theme.plot.stroke, label-content))
@@ -196,3 +207,4 @@
     plot.annotate(draw-cmd)
   }
 }
+

@@ -13,6 +13,7 @@
 /// - y-tick: Y-axis tick spacing (default: 1)
 /// - is-pi: If false, use normal numbers. If a positive integer, format x-axis
 ///          labels as multiples of π/is-pi (e.g., is-pi: 2 → π/2, π, 3π/2, ...)
+/// - has-grid: If true, show grid lines with theme.plot.grid color (default: false)
 /// - body: Plot content (functions, points, annotations)
 /// - draw-content: Additional CeTZ drawing commands (optional)
 #let rect-plot(
@@ -23,6 +24,7 @@
   x-tick: 1,
   y-tick: 1,
   is-pi: false,
+  has-grid: false,
   body,
   draw-content: none,
 ) = {
@@ -85,7 +87,34 @@
       y-max: y-domain.at(1),
 
       {
+        // Draw grid manually if enabled
+        if has-grid {
+          plot.annotate({
+            import cetz.draw: *
+            on-layer(-1, {
+              let grid-stroke = (paint: theme.plot.grid, thickness: 0.5pt)
+
+              // Vertical grid lines
+              let x-start = calc.ceil(x-domain.at(0) / x-tick) * x-tick
+              let x = x-start
+              while x <= x-domain.at(1) {
+                line((x, y-domain.at(0)), (x, y-domain.at(1)), stroke: grid-stroke)
+                x = x + x-tick
+              }
+
+              // Horizontal grid lines
+              let y-start = calc.ceil(y-domain.at(0) / y-tick) * y-tick
+              let y = y-start
+              while y <= y-domain.at(1) {
+                line((x-domain.at(0), y), (x-domain.at(1), y), stroke: grid-stroke)
+                y = y + y-tick
+              }
+            })
+          })
+        }
+
         body
+
         if draw-content != none {
           plot.annotate({
             draw-content
