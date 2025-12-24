@@ -16,9 +16,6 @@
         "summary": "Explore the powerful plotting capabilities of Noteworthy, from basic 2D graphs to complex geometric constructions and vector diagrams.",
         "pages": [
             {
-                "title": "Basic Plots"
-            },
-            {
                 "title": "Geometry (Geoplot)"
             },
             {
