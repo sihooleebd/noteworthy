@@ -43,106 +43,242 @@
 /// Adaptive sampler based on slope change (curvature)
 /// Starts from left, adjusting step size based on the "change rate of the current slope"
 /// Uses a refinement limit to prevent infinite subdivision in highly oscillatory regions
-#let adaptive-sample(f, x-min, x-max, samples: 200, tolerance: 1.0) = {
+/// Adaptive sampler using recursive subdivision
+/// Handles singularities, oscillations, and domain gaps seamlessly.
+#let adaptive-sample(f, x-min, x-max, samples: 200, tolerance: 0.5) = {
+  // 1. Setup constants
   let range-width = x-max - x-min
-  // PERFORMANCE: Use samples*5 — allows at most 5x base samples
-  let min-step = range-width / (samples * 5)
-  let max-step = range-width / (samples / 5)
-  if min-step < 1e-9 { min-step = 1e-9 }
+  let min-step = range-width / 1e5 // Machine precision limit for zoom
+  let max-depth = 12 // Recursion depth limit (2^12 = 4096 segments worst case)
 
-  // Maximum refinement attempts per step — keep low for speed
-  let max-refinements = 2
+  // 2. Helper: Safe Evaluation
+  let safe-eval(x) = {
+    if calc.abs(x) < 1e-12 { return none } // Strict zero avoidance
+    let y = f(x)
+    if is-valid(y) { y } else { none }
+  }
 
-  // Hard cap on total points — balances coverage vs speed
-  let max-points = samples * 5 // At most 1000 points for samples=200
+  // 3. Helper: Generate Dense Envelope (for oscillations)
+  // Creates a zig-zag fill for a segment [x1, x2]
+  let generate-envelope(x1, x2) = {
+    let pts = ()
+    let steps = 10
+    let dx = (x2 - x1) / steps
+    for i in range(steps + 1) {
+      let x = x1 + dx * i
+      let y = safe-eval(x)
+      if y != none { pts.push((x, y)) }
+    }
+    pts
+  }
+
+  // 4. Recursive Sampler
+  // Returns an array of points for the segment [x1, x2]
+  let rec-sample(x1, y1, x2, y2, depth) = {
+    let xm = (x1 + x2) / 2
+    let ym = safe-eval(xm)
+
+    // A. Handle Singularity / Invalid Midpoint
+    if ym == none {
+      // If midpoint is invalid, we might be crossing an asymptote or domain hole.
+      // Try to zoom in recursively to find the edge, but don't go too deep.
+      if depth < max-depth {
+        return rec-sample(x1, y1, xm, ym, depth + 1) + (none,) + rec-sample(xm, ym, x2, y2, depth + 1)
+      } else {
+        return (none,)
+      }
+    }
+
+    // B. Handle Endpoints being invalid (should be handled by caller, but safety check)
+    if y1 == none or y2 == none {
+      // Deep recursion to find valid boundary?
+      // For simplicity, if we are deep and still invalid, just return what we have.
+      if depth < max-depth {
+        return rec-sample(x1, y1, xm, ym, depth + 1) + ((xm, ym),) + rec-sample(xm, ym, x2, y2, depth + 1)
+      }
+      return ((xm, ym),)
+    }
+
+    // C. Check Flatness / Curvature
+    // Simple linearity check: is the midpoint close to the line connect P1 and P2?
+    // Or angle check.
+    // Let's use simple distance tolerance for now, normalized by step size.
+
+    // Line P1-P2: y - y1 = m(x - x1) -> mx - y + (y1 - mx1) = 0
+    // Distance of Pm to line.
+    let den = x2 - x1
+    let val-est = y1 + (y2 - y1) * (xm - x1) / den
+    let err = calc.abs(ym - val-est)
+
+    // Acceptance criteria
+    if err < tolerance or depth >= max-depth {
+      // If we hit depth limit and error is still HUGE, it's an oscillation.
+      // Generate a dense envelope for this tiny segment to fill it.
+      if depth >= max-depth and err > tolerance * 10 {
+        return generate-envelope(x1, x2)
+      }
+      return ((xm, ym),) // Return midpoint
+    }
+
+    // D. Split
+    return rec-sample(x1, y1, xm, ym, depth + 1) + ((xm, ym),) + rec-sample(xm, ym, x2, y2, depth + 1)
+  }
+
+  // 5. Initial Sampling Points
+  // Start with uniform initial points to seed the recursion
+  // This prevents missing features entirely if they fall between x-min and x-max.
+  let init-steps = int(samples) // Use full sample count for seed to avoid aliasing high-freq
+  let step-size = range-width / init-steps
 
   let points = ()
-  let x = x-min
-  let h = range-width / samples // Initial step guess
-  let refinement-count = 0 // Track how many times we've refined current step
 
-  // Evaluation cache to avoid re-calculating
-  let x-curr = x
-  let y-curr = safe-eval(f, x-curr)
+  for i in range(init-steps) {
+    let x1 = x-min + i * step-size
+    let x2 = x1 + step-size
+    // Ensure we hit x-max exactly on last step
+    if i == init-steps - 1 { x2 = x-max }
 
-  points.push(if y-curr != none { (x-curr, y-curr) } else { none })
+    let y1 = safe-eval(x1)
+    let y2 = safe-eval(x2)
 
-  while x < x-max and points.len() < max-points {
-    // Clamp h
-    if h < min-step { h = min-step }
-    if h > max-step { h = max-step }
-    if x + h > x-max { h = x-max - x }
-    if h <= 0 { break }
-
-    let x-next = x + h
-    let y-next = safe-eval(f, x-next)
-
-    // If we hit an invalid point (singularity), just step over it
-    if y-next == none {
-      points.push(none)
-      x = x-next
-      x-curr = x
-      y-curr = safe-eval(f, x) // Try to get back on track
-      refinement-count = 0 // Reset refinement counter
-      // if y-curr is still none, next loop will handle
-      if y-curr != none { points.push((x-curr, y-curr)) }
-      continue
+    // Add start point of segment if it's the very first point or after a break
+    if i == 0 or points.len() == 0 or points.last() == none {
+      if y1 != none { points.push((x1, y1)) }
     }
 
-    if y-curr == none {
-      // We were in invalid territory, now valid
-      x = x-next
-      x-curr = x
-      y-curr = y-next
-      refinement-count = 0 // Reset refinement counter
-      points.push((x-curr, y-curr))
-      continue
-    }
+    // Recursively fill segment
+    // Note: rec-sample returns INTERIOR points. We append them.
+    // We do NOT add x2 here, the next iteration (or end) will add it.
 
-    // Calculate slope change
-    // We check the midpoint to see if it aligns linearly
-    let x-mid = x + h / 2
-    let y-mid = safe-eval(f, x-mid)
+    // Logic:
+    // If y1, y2 both valid: standard recurse.
+    // If one invalid: still recurse to find edge.
+    // If both invalid: might be empty space, but recurse once to check middle?
 
-    let accept = true
-
-    if y-mid != none {
-      let s1 = (y-mid - y-curr) / (h / 2)
-      let s2 = (y-next - y-mid) / (h / 2)
-      let change = calc.abs(s2 - s1)
-
-      // Refine only if: curvature is high, step is large enough, AND we haven't hit refinement limit
-      if change > tolerance and h > min-step and refinement-count < max-refinements {
-        // Curvature too high, refine step
-        h = h / 2
-        refinement-count = refinement-count + 1
-        accept = false
-      } else {
-        // Accept step (either good enough, at min-step, or hit refinement limit)
-        points.push((x-mid, y-mid))
-        points.push((x-next, y-next))
-
-        // If very flat, try increasing step for next time
-        if change < tolerance * 0.1 {
-          h = h * 1.5
-        }
-        refinement-count = 0 // Reset for next step
-      }
+    if y1 != none or y2 != none {
+      let seg-pts = rec-sample(x1, y1, x2, y2, 0)
+      points += seg-pts
     } else {
-      // Midpoint invalid? Treat as discontinuity
-      points.push(none)
-      points.push((x-next, y-next))
-      refinement-count = 0 // Reset for next step
+      // Both endpoints invalid. Check middle just in case feature is entirely inside.
+      let xm = (x1 + x2) / 2
+      let ym = safe-eval(xm)
+      if ym != none {
+        // Found something! Recurse.
+        points += rec-sample(x1, y1, x2, y2, 0)
+      } else {
+        // Empty segment.
+        points.push(none)
+      }
     }
 
-    if accept {
-      x = x-next
-      x-curr = x
-      y-curr = y-next
+    // Add end point of segment (which is start of next)
+    if y2 != none {
+      points.push((x2, y2))
+    } else {
+      points.push(none)
     }
   }
 
-  // Filter adjacent nones
+  // 6. Gap Filling (Bleed) logic
+  // "Probe" the edges to see if they are volatile (singularity/oscillation)
+  let bleed = range-width * 0.005
+
+  // Robust Edge Checker
+  let check-edge-and-fill = (pts, is-start) => {
+    let limit-idx = if is-start { 0 } else { pts.len() - 1 }
+    // Find the edge point
+    let valid-edge-pt = none
+    if is-start {
+      // Search forward
+      for p in pts {
+        if p != none {
+          valid-edge-pt = p
+          break
+        }
+      }
+    } else {
+      // Search backward
+      for i in range(pts.len() - 1, -1, step: -1) {
+        if pts.at(i) != none {
+          valid-edge-pt = pts.at(i)
+          break
+        }
+      }
+    }
+
+    if valid-edge-pt == none { return pts } // Empty plot
+
+    // Check if this point is actually at the requested domain edge (within tolerance)
+    let edge-target = if is-start { x-min } else { x-max }
+    if calc.abs(valid-edge-pt.at(0) - edge-target) > range-width * 0.01 {
+      return pts // Edge is far from requested domain (clipped?), don't bleed
+    }
+
+    // PROBE: Sample densely a tiny region *inwards* from the edge
+    // to determine behavior.
+    let probe-count = 10
+    let probe-width = range-width * 0.001 // Look at 0.1% of domain
+    let dx = probe-width / probe-count
+    let probe-pts = ()
+    let direction = if is-start { 1 } else { -1 } // 1 = x increasing (inwards from min), -1 = x decreasing (inwards from max)
+
+    // Collect probe statistics
+    let min-y = valid-edge-pt.at(1)
+    let max-y = valid-edge-pt.at(1)
+    let max-slope = 0.0
+
+    for i in range(1, probe-count + 1) {
+      let x = valid-edge-pt.at(0) + dx * i * direction
+      let y = safe-eval(x)
+      if y != none {
+        probe-pts.push(y)
+        if y < min-y { min-y = y }
+        if y > max-y { max-y = y }
+
+        // Check slope relative to edge
+        let run = calc.abs(x - valid-edge-pt.at(0))
+        let rise = calc.abs(y - valid-edge-pt.at(1))
+        if run > 0 {
+          let s = rise / run
+          if s > max-slope { max-slope = s }
+        }
+      }
+    }
+
+    // DECISION: Trigger bleed if:
+    // 1. Slope is massive (Asymptote or fast oscillation)
+    // 2. OR significant amplitude in tiny window (Oscillation near extremum where slope might be 0)
+
+    let slope-thresh = 1000.0
+    let amp-thresh = 0.1 // If we move 0.1 units y in 0.001 units x, that's steep!
+
+    // Actually, amp 0.1 in width 0.001 IS slope 100.
+    // Let's stick to slope threshold, but max-slope covers the "peak" case
+    // because near a peak, slope is low, but slightly further away it's high.
+    // With 10 probe points, we'll catch the steep part of the wave.
+
+    if max-slope > slope-thresh {
+      // Generate Bleed Box
+      let x-edge = valid-edge-pt.at(0)
+      let x-out = x-edge - bleed * direction // Outwards (opposite to scan dir)
+
+      let box = ((x-edge, min-y), (x-out, min-y), (x-out, max-y), (x-edge, max-y))
+
+      if is-start {
+        return box + pts
+      } else {
+        return pts + box
+      }
+    }
+    return pts
+  }
+
+  // Apply checks
+  points = check-edge-and-fill(points, true)
+  points = check-edge-and-fill(points, false)
+
+  // 7. Filter clean
+  // Remove adjacent nones, ensure valid struct
   let result = ()
   let last-none = false
   for p in points {
