@@ -11,159 +11,136 @@
 // Robust Adaptive Sampling Algorithm
 // =====================================================
 
-/// Robust sampler for functions with potential singularities
-/// Uses dense uniform sampling with discontinuity detection.
-///
-/// Returns: Array of (x, y) tuples with `none` as break markers
-#let robust-sample(f, x-min, x-max, samples: 2000) = {
-  // Helper: Check if value is valid
-  let is-valid(val) = {
-    val != none and val == val and val != calc.inf and val != -calc.inf and calc.abs(val) < 1e10
+/// Helper: Check if value is valid
+#let is-valid(val) = {
+  val != none and val == val and val != calc.inf and val != -calc.inf and calc.abs(val) < 1e10
+}
+
+/// Helper: Safely evaluate function, returning none for errors
+#let safe-eval(f, x) = {
+  // Skip x=0 if it might cause issues (very common singularity)
+  let eps = 1e-10
+  
+  // Try to evaluate - if x is extremely small, it might cause division issues
+  if calc.abs(x) < eps {
+    return none
   }
-
-  // Helper: Safely evaluate function, returning none for errors
-  // Typst doesn't have try-catch, so we check for common error patterns
-  let safe-eval(f, x) = {
-    // Skip x=0 if it might cause issues (very common singularity)
-    // Also skip values very close to integers that are common singularities
-    let eps = 1e-10
-
-    // Try to evaluate - if x is extremely small, it might cause division issues
-    if calc.abs(x) < eps {
-      return none
-    }
-
-    // Evaluate the function
-    let y = f(x)
-
-    // Check if result is valid
-    if is-valid(y) {
-      y
-    } else {
-      none
-    }
+  
+  // Evaluate the function
+  let y = f(x)
+  
+  // Check if result is valid
+  if is-valid(y) {
+    y
+  } else {
+    none
   }
+}
 
+
+
+/// Adaptive sampler based on slope change (curvature)
+/// Starts from left, adjusting step size based on the "change rate of the current slope"
+#let adaptive-sample(f, x-min, x-max, samples: 200, tolerance: 1.0) = {
+  let range-width = x-max - x-min
+  let min-step = range-width / (samples * 100)
+  let max-step = range-width / (samples / 5)
+  if min-step < 1e-9 { min-step = 1e-9 }
+  
   let points = ()
-  let step = (x-max - x-min) / samples
-  let prev-y = none
-  let in-segment = false
-
-  for i in range(samples + 1) {
-    let x = x-min + i * step
-    let y = safe-eval(f, x)
-
-    if y != none {
-      // Check for large jump (discontinuity detection)
-      let is-jump = if prev-y != none {
-        calc.abs(y - prev-y) > 2.0 // Threshold for detecting jumps
-      } else { false }
-
-      if is-jump {
-        // Insert break marker before this point
-        points.push(none)
+  let x = x-min
+  let h = range-width / samples // Initial step guess
+  
+  // Evaluation cache to avoid re-calculating
+  let x-curr = x
+  let y-curr = safe-eval(f, x-curr)
+  
+  points.push(if y-curr != none { (x-curr, y-curr) } else { none })
+  
+  while x < x-max {
+    // Clamp h
+    if h < min-step { h = min-step }
+    if h > max-step { h = max-step }
+    if x + h > x-max { h = x-max - x }
+    if h <= 0 { break }
+    
+    let x-next = x + h
+    let y-next = safe-eval(f, x-next)
+    
+    // If we hit an invalid point (singularity), just step over it
+    if y-next == none {
+      points.push(none)
+      x = x-next
+      x-curr = x
+      y-curr = safe-eval(f, x) // Try to get back on track
+      // if y-curr is still none, next loop will handle
+      if y-curr != none { points.push((x-curr, y-curr)) }
+      continue
+    }
+    
+    if y-curr == none {
+      // We were in invalid territory, now valid
+      x = x-next
+      x-curr = x
+      y-curr = y-next
+      points.push((x-curr, y-curr))
+      continue
+    }
+    
+    // Calculate slope change
+    // We check the midpoint to see if it aligns linearly
+    let x-mid = x + h / 2
+    let y-mid = safe-eval(f, x-mid)
+    
+    let accept = true
+    
+    if y-mid != none {
+      let s1 = (y-mid - y-curr) / (h / 2)
+      let s2 = (y-next - y-mid) / (h / 2)
+      let change = calc.abs(s2 - s1)
+      
+      if change > tolerance and h > min-step {
+        // Curvature too high, refine step
+        h = h / 2
+        accept = false
+      } else {
+        // Accept step
+        points.push((x-mid, y-mid))
+        points.push((x-next, y-next))
+        
+        // If very flat, try increasing step for next time
+        if change < tolerance * 0.1 {
+          h = h * 1.5
+        }
       }
-
-      points.push((x, y))
-      prev-y = y
-      in-segment = true
     } else {
-      // Invalid value - insert break if we were in a segment
-      if in-segment {
-        points.push(none)
-        in-segment = false
+      // Midpoint invalid? Treat as discontinuity
+      points.push(none)
+      points.push((x-next, y-next))
+    }
+    
+    if accept {
+      x = x-next
+      x-curr = x
+      y-curr = y-next
+    }
+  }
+  
+  // Filter adjacent nones
+  let result = ()
+  let last-none = false
+  for p in points {
+    if p == none {
+      if not last-none {
+        result.push(none)
+        last-none = true
       }
-      prev-y = none
-    }
-  }
-
-  points
-}
-
-/// Dense sampler for oscillatory functions (like sin(1/x))
-/// Samples more densely near x=0 (or custom center)
-#let oscillation-sample(f, x-min, x-max, center: 0, samples: 3000) = {
-  let is-valid(val) = {
-    val == val and val != calc.inf and val != -calc.inf and calc.abs(val) < 1e10
-  }
-
-  // Helper: Safely evaluate, handling division by zero gracefully
-  let safe-eval(f, x) = {
-    let eps = 1e-10
-    if calc.abs(x) < eps {
-      return none
-    }
-    let y = f(x)
-    if is-valid(y) { y } else { none }
-  }
-
-  let points = ()
-  let prev-y = none
-  let in-segment = false
-
-  for i in range(samples + 1) {
-    // Use cubic spacing to concentrate samples near center
-    // u^3 is flat at 0, meaning small change in output for change in input -> high density
-    let t = i / samples // 0 to 1
-    let u = 2 * t - 1 // -1 to 1
-    let warped = u * u * u // -1 to 1, dense near 0
-    let t-warped = (warped + 1) / 2 // 0 to 1
-
-    // Map to x-range with density near center
-    let x = if center >= x-min and center <= x-max {
-      // Warp around center
-      let half-range = calc.max(center - x-min, x-max - center)
-      center + warped * half-range // Use raw warped (-1 to 1) directly scaled
     } else {
-      x-min + t * (x-max - x-min)
+      result.push(p)
+      last-none = false
     }
-
-    // Clamp to domain
-    if x < x-min or x > x-max { continue }
-
-    let y = safe-eval(f, x)
-
-    if y != none {
-      let is-jump = if prev-y != none {
-        calc.abs(y - prev-y) > 1.5
-      } else { false }
-
-      if is-jump {
-        points.push(none)
-      }
-
-      points.push((x, y))
-      prev-y = y
-      in-segment = true
-    } else {
-      if in-segment {
-        points.push(none)
-        in-segment = false
-      }
-      prev-y = none
-    }
-    in-segment = false
   }
-  prev-y = none
-}
-}
-
-// Sort by x (tanh warping may not be monotonic after center adjustment)
-let valid-pts = points.filter(p => p != none)
-let sorted = valid-pts.sorted(key: p => p.at(0))
-
-// Re-insert breaks based on jump detection
-let result = ()
-let prev = none
-for pt in sorted {
-if prev != none and calc.abs(pt.at(1) - prev.at(1)) > 1.5 {
-result.push(none)
-}
-result.push(pt)
-prev = pt
-}
-
-result
+  result
 }
 
 // =====================================================
@@ -185,27 +162,26 @@ result
   domain: (-5, 5),
   func-type: "standard",
   samples: 200,
-  robust: false,
-  singularity: 0,
+  adaptive: true,
   hole: (),
   filled-hole: (),
   label: none,
   style: auto,
 ) = {
   // Compute cached points if robust mode
-  let cached = if robust and func-type == "standard" {
-    oscillation-sample(f, domain.at(0), domain.at(1), center: singularity)
+  let cached = if adaptive and func-type == "standard" {
+    adaptive-sample(f, domain.at(0), domain.at(1), samples: samples)
   } else {
     none
   }
-
+  
   (
     type: "func",
     f: f,
     domain: domain,
     func-type: func-type,
     samples: samples,
-    robust: robust,
+    robust: adaptive,
     hole: hole,
     filled-hole: filled-hole,
     label: label,
@@ -214,24 +190,21 @@ result
   )
 }
 
-#let graph(f, domain: (-5, 5), hole: (), filled-hole: (), label: none, style: auto) = {
-  func(f, domain: domain, func-type: "standard", hole: hole, filled-hole: filled-hole, label: label, style: style)
-}
-
-/// Create a robust function (for singularities)
-#let robust-func(f, domain: (-5, 5), singularity: 0, hole: (), filled-hole: (), label: none, style: auto) = {
+#let graph(f, domain: (-5, 5), samples: 200, adaptive: true, hole: (), filled-hole: (), label: none, style: auto) = {
   func(
     f,
     domain: domain,
     func-type: "standard",
-    robust: true,
-    singularity: singularity,
+    samples: samples,
+    adaptive: adaptive,
     hole: hole,
     filled-hole: filled-hole,
     label: label,
     style: style,
   )
 }
+
+
 
 /// Create a parametric curve
 /// f should be: t => (x, y)
@@ -263,7 +236,7 @@ result
 /// (For more advanced interpolation, Lagrange or spline can be implemented)
 #let curve-through(..points, label: none, style: auto) = {
   let pts = points.pos()
-
+  
   (
     type: "curve",
     points: pts,
@@ -277,7 +250,7 @@ result
 /// This is a placeholder - full spline implementation is complex
 #let smooth-curve(..points, label: none, style: auto) = {
   let pts = points.pos()
-
+  
   (
     type: "curve",
     points: pts,

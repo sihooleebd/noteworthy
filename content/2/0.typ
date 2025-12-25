@@ -33,19 +33,3 @@ Plot mathematical functions easily with the new geometry system.
   cardioid,
 )
 
-== Robust Rendering (Singularity Handling)
-
-The `robust-func` uses adaptive sampling to correctly render functions like $sin(pi/x)$ near singularities:
-
-#let singular-func = robust-func(
-  x => if x == 0 { 0 } else { calc.sin(calc.pi / x) },
-  domain: (-0.5, 0.5),
-  label: $sin(pi/x)$,
-)
-
-
-#cartesian-canvas(
-  x-domain: (-0.6, 0.6),
-  y-domain: (-1.5, 1.5),
-  singular-func,
-)

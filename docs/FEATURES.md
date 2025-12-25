@@ -691,12 +691,6 @@ fill: gradient.linear(red, blue)
 
 **Fix**: Already corrected in codebase
 
-### Function Renders as Flat Line
-
-**Problem**: Oscillatory functions like `sin(1/x)` render incorrectly
-
-**Fix**: Use `robust-func` with high sample count and discontinuity detection
-
 ---
 
 *Documentation generated for Noteworthy v1.0*
