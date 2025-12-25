@@ -87,6 +87,16 @@
     val == val and val != calc.inf and val != -calc.inf and calc.abs(val) < 1e10
   }
 
+  // Helper: Safely evaluate, handling division by zero gracefully
+  let safe-eval(f, x) = {
+    let eps = 1e-10
+    if calc.abs(x) < eps {
+      return none
+    }
+    let y = f(x)
+    if is-valid(y) { y } else { none }
+  }
+
   let points = ()
   let prev-y = none
   let in-segment = false
@@ -111,9 +121,9 @@
     // Clamp to domain
     if x < x-min or x > x-max { continue }
 
-    let y = f(x)
+    let y = safe-eval(f, x)
 
-    if is-valid(y) {
+    if y != none {
       let is-jump = if prev-y != none {
         calc.abs(y - prev-y) > 1.5
       } else { false }
@@ -132,24 +142,28 @@
       }
       prev-y = none
     }
+    in-segment = false
   }
+  prev-y = none
+}
+}
 
-  // Sort by x (tanh warping may not be monotonic after center adjustment)
-  let valid-pts = points.filter(p => p != none)
-  let sorted = valid-pts.sorted(key: p => p.at(0))
+// Sort by x (tanh warping may not be monotonic after center adjustment)
+let valid-pts = points.filter(p => p != none)
+let sorted = valid-pts.sorted(key: p => p.at(0))
 
-  // Re-insert breaks based on jump detection
-  let result = ()
-  let prev = none
-  for pt in sorted {
-    if prev != none and calc.abs(pt.at(1) - prev.at(1)) > 1.5 {
-      result.push(none)
-    }
-    result.push(pt)
-    prev = pt
-  }
+// Re-insert breaks based on jump detection
+let result = ()
+let prev = none
+for pt in sorted {
+if prev != none and calc.abs(pt.at(1) - prev.at(1)) > 1.5 {
+result.push(none)
+}
+result.push(pt)
+prev = pt
+}
 
-  result
+result
 }
 
 // =====================================================
