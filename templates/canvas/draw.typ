@@ -154,18 +154,46 @@
 // =====================================================
 
 /// Draw a point
-#let draw-point(obj, theme) = {
+/// Parameters:
+/// - obj: Point geometry object
+/// - theme: Theme dictionary
+/// - aspect: Optional (x-range, y-range, width, height) for aspect ratio correction
+#let draw-point(obj, theme, aspect: none) = {
   import cetz.draw: *
   let style = get-point-style(obj, theme)
   let coords = if obj.at("z", default: none) != none { (obj.x, obj.y, obj.z) } else { (obj.x, obj.y) }
 
-  circle(coords, radius: style.radius, fill: style.fill, stroke: style.stroke)
+  // Calculate aspect-corrected radii to render as true circles
+  let (rx, ry) = if aspect != none {
+    let (x-range, y-range, width, height) = aspect
+    let x-scale = (x-range.at(1) - x-range.at(0)) / width
+    let y-scale = (y-range.at(1) - y-range.at(0)) / height
+    // Base radius in "screen" units, convert to plot units
+    let base-r = style.radius
+    (base-r * x-scale, base-r * y-scale)
+  } else {
+    (style.radius, style.radius)
+  }
+
+  // Use circle if aspect is square, otherwise use arc/line to draw ellipse
+  if rx == ry or aspect == none {
+    circle(coords, radius: style.radius, fill: style.fill, stroke: style.stroke)
+  } else {
+    // Draw ellipse using cetz arc
+    let steps = 32
+    let pts = ()
+    for i in range(steps) {
+      let a = i / steps * 360deg
+      pts.push((coords.at(0) + rx * calc.cos(a), coords.at(1) + ry * calc.sin(a)))
+    }
+    line(..pts, close: true, fill: style.fill, stroke: style.stroke)
+  }
 
   if obj.label != none {
     content(
       coords,
       text(fill: theme.at("plot", default: (:)).at("stroke", default: black), format-label(obj, obj.label)),
-      anchor: "south-west",
+      anchor: "center",
       padding: 0.15,
     )
   }
@@ -478,29 +506,40 @@
   let style = get-line-style(obj, theme)
   let fill = get-fill-style(obj, theme)
 
+  // Apply theme color if fill is auto
+  let final-fill = if fill == auto {
+    theme.at("plot", default: (:)).at("highlight", default: black).transparentize(70%)
+  } else {
+    fill
+  }
+
   // Support 3D points
   let coords = obj.points.map(p => {
     if p.at("z", default: none) != none { (p.x, p.y, p.z) } else { (p.x, p.y) }
   })
 
-  line(..coords, close: true, stroke: style.stroke, fill: fill)
+  line(..coords, close: true, stroke: style.stroke, fill: final-fill)
 
   if obj.at("label", default: none) != none {
+    // Calculate horizontal center and find max y for label positioning
     let sum-x = obj.points.map(p => p.x).sum()
-    let sum-y = obj.points.map(p => p.y).sum()
-    let sum-z = obj.points.map(p => p.at("z", default: 0)).sum()
+    let max-y = calc.max(..obj.points.map(p => p.y))
     let n = obj.points.len()
 
-    let center = if obj.points.first().at("z", default: none) != none {
-      (sum-x / n, sum-y / n, sum-z / n)
+    let center-x = sum-x / n
+
+    let label-pos = if obj.points.first().at("z", default: none) != none {
+      let sum-z = obj.points.map(p => p.at("z", default: 0)).sum()
+      (center-x, max-y, sum-z / n)
     } else {
-      (sum-x / n, sum-y / n)
+      (center-x, max-y)
     }
 
     content(
-      center,
+      label-pos,
       text(fill: theme.plot.stroke, format-label(obj, obj.label)),
-      anchor: "center",
+      anchor: "south",
+      padding: 0.1,
     )
   }
 }
@@ -625,6 +664,37 @@
     plot.add(domain: obj.domain, samples: obj.samples, style: style, obj.f)
   }
 
+  // Draw empty holes
+  if obj.at("hole", default: ()).len() > 0 {
+    let hole-pts = ()
+    for h in obj.hole {
+      // Evaluate f(h) approx (limit) since f(h) is likely undefined or 0/0
+      let y = (obj.f)(h + 0.0001)
+      hole-pts.push((h, y))
+    }
+    plot.annotate({
+      import cetz.draw: *
+      for p in hole-pts {
+        circle(p, radius: 0.08, fill: white, stroke: style.stroke)
+      }
+    })
+  }
+
+  // Draw filled holes
+  if obj.at("filled-hole", default: ()).len() > 0 {
+    let hole-pts = ()
+    for h in obj.at("filled-hole") {
+      let y = (obj.f)(h + 0.0001)
+      hole-pts.push((h, y))
+    }
+    plot.annotate({
+      import cetz.draw: *
+      for p in hole-pts {
+        circle(p, radius: 0.08, fill: stroke-col, stroke: style.stroke)
+      }
+    })
+  }
+
   if obj.at("label", default: none) != none {
     // Place label at a point ~75% along the domain (visible, not at edge)
     let t-label = obj.domain.at(0) + 0.75 * (obj.domain.at(1) - obj.domain.at(0))
@@ -685,10 +755,13 @@
 /// - theme: The active theme
 /// - bounds: Canvas bounds for infinite objects (optional)
 /// - origin: Origin for vectors (optional)
-#let draw-geo(obj, theme, bounds: (x: (-10, 10), y: (-10, 10)), origin: (0, 0)) = {
+/// - aspect: Aspect ratio info (x-range, y-range, width, height) for point circle correction
+#let draw-geo(obj, theme, bounds: (x: (-10, 10), y: (-10, 10)), origin: (0, 0), aspect: none) = {
   let t = obj.at("type", default: none)
 
-  if t == "point" { draw-point(obj, theme) } else if t == "segment" { draw-segment(obj, theme) } else if t == "line" {
+  if t == "point" { draw-point(obj, theme, aspect: aspect) } else if t == "segment" {
+    draw-segment(obj, theme)
+  } else if t == "line" {
     draw-line-infinite(obj, theme, bounds)
   } else if t == "ray" { draw-ray(obj, theme, bounds) } else if t == "circle" { draw-circle-obj(obj, theme) } else if (
     t == "arc"

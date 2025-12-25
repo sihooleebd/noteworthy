@@ -139,7 +139,7 @@ class TUI:
         scr.getch()
 
     @staticmethod
-    def check_terminal_size(scr, min_h=30, min_w=60):
+    def check_terminal_size(scr, min_h=24, min_w=60):
         was_error = False
         while True:
             h, w = scr.getmaxyx()

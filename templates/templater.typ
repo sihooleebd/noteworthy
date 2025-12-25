@@ -17,6 +17,7 @@
 #import "./geometry/construct.typ": *
 #import "./geometry/intersect.typ": *
 #import "./geometry/core.typ": *
+#import "./geometry/calculus.typ": *
 
 // Import canvas types
 #import "./canvas/draw.typ": draw-geo

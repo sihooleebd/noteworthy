@@ -21,3 +21,6 @@
 
 // Intersection operations
 #import "intersect.typ": *
+
+// Calculus operations
+#import "calculus.typ": *

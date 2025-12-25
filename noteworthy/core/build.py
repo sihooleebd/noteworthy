@@ -312,7 +312,9 @@ class BuildManager:
                         
                         completed_count += 1
                         if callbacks.get('on_progress'):
-                            callbacks['on_progress']()
+                            if callbacks['on_progress']() is False:
+                                executor.shutdown(wait=False, cancel_futures=True)
+                                raise KeyboardInterrupt("Build cancelled by user")
                             
                     except Exception as e:
                         callbacks.get('on_log', lambda m, o: None)(f"Task {key} failed: {e}", False)

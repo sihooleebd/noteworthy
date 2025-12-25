@@ -175,6 +175,10 @@ class LogScreen:
         if not self.view_log: return 'EXIT'
         
     def run(self):
+        self.scr.nodelay(False)
+        self.scr.timeout(-1)
+        curses.flushinp()
+        
         while True:
             if not TUI.check_terminal_size(self.scr):
                 return

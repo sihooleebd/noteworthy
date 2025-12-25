@@ -175,6 +175,25 @@
         func,
       )
     }
+    
+    // Draw explicit hole markers (poked holes)
+    for h in hole {
+      // Calculate y value for the hole
+      // Note: We assume the hole is at f(h), even if undefined, we approximate or expect user to know. 
+      // But typically a hole exists because the limit exists.
+      // We can try to evaluate f(h+epsilon) approx.
+      let y-val = try { func(h) } catch(e) { func(h + 0.0001) }
+      
+      // If still failing, skip
+      if y-val != none {
+        plot.add(
+           ((h, y-val),),
+           mark: "o",
+           mark-size: .15,
+           style: (stroke: final-style.stroke, fill: white),
+        )
+      }
+    }
   } else if type == "parametric" {
     // Parametric Curve: (x(t), y(t))
     let t-dom = if domain == auto { (0, 2 * calc.pi) } else { domain }

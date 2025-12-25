@@ -249,6 +249,7 @@ class BuildUI:
         self.view, self.scroll, self.has_warnings = ('normal', 0, False)
         TUI.init_colors()
         self.h, self.w = scr.getmaxyx()
+        self.base_total = 0
 
     def log(self, msg, ok=False):
         self.logs.append((msg, ok))
@@ -276,8 +277,10 @@ class BuildUI:
 
     def set_progress(self, p, t, visual_percent=None):
         self.progress, self.total = (p, t)
+        if not self.base_total and t > 0:
+            self.base_total = t
         self.visual_percent = visual_percent
-        self.refresh()
+        return self.refresh()
 
     def check_input(self):
         try:
@@ -314,7 +317,7 @@ class BuildUI:
             TUI.safe_addstr(self.scr, start_y + 3, bx + 2, self.phase[:bw - 4], curses.color_pair(5))
         if self.task:
             TUI.safe_addstr(self.scr, start_y + 4, bx + 2, f'→ {self.task}'[:bw - 4], curses.color_pair(4))
-        if self.total:
+        if getattr(self, 'visual_percent', None) is not None or self.total:
             if getattr(self, 'visual_percent', None) is not None:
                 effective_pct = max(0, min(100, self.visual_percent))
             else:
@@ -324,8 +327,16 @@ class BuildUI:
             filled = int((bw - 12) * effective_pct / 100)
             TUI.safe_addstr(self.scr, start_y + 5, bx + 2, '█' * filled + '░' * (bw - 12 - filled), curses.color_pair(3))
             TUI.safe_addstr(self.scr, start_y + 5, bx + bw - 8, f'{effective_pct:3d}%', curses.color_pair(3) | curses.A_BOLD)
-            count_str = f'({self.progress}/{self.total})'
-            TUI.safe_addstr(self.scr, start_y + 2, bx + bw - 2 - len(count_str), count_str, curses.color_pair(4) | curses.A_DIM)
+            TUI.safe_addstr(self.scr, start_y + 5, bx + bw - 8, f'{effective_pct:3d}%', curses.color_pair(3) | curses.A_BOLD)
+            
+            if self.total > self.base_total > 0:
+                retries = self.total - self.base_total
+                count_str = f'({self.progress}/{self.base_total} + {retries})'
+            else:
+                count_str = f'({self.progress}/{self.total})'
+                
+            # Move from box border (y+2) to inside line (y+3) to avoid truncation issues
+            TUI.safe_addstr(self.scr, start_y + 3, bx + bw - 2 - len(count_str), count_str, curses.color_pair(4) | curses.A_DIM)
             
         if self.view == 'typst':
             TUI.draw_box(self.scr, start_y + 8, bx, lh, bw, 'Typst Output (↑↓ scroll)')
@@ -384,11 +395,15 @@ def run_build_process(scr, hierarchy, opts):
     progress_counter = 0
     
     def on_progress():
-        nonlocal progress_counter
+        nonlocal progress_counter, total
         progress_counter += 1
-        comp_pct = min(95, int(95 * progress_counter / total_tasks))
-        ui.set_progress(progress_counter, total, visual_percent=comp_pct)
+        if progress_counter > total:
+            total = progress_counter
+        comp_pct = min(95, int(95 * progress_counter / total))
+        if not ui.set_progress(progress_counter, total, visual_percent=comp_pct):
+            return False
         ui.set_task(f"Completed {progress_counter} compilation tasks") 
+        return True 
         
     def on_log(msg, ok=True):
         ui.log(msg, ok)
@@ -419,6 +434,7 @@ def run_build_process(scr, hierarchy, opts):
                 log_callback=ui.log_typst
             )
             progress_counter += 1
+            if progress_counter > total: total = progress_counter
             ui.set_progress(progress_counter, total, visual_percent=96)
             ui.log('TOC regenerated', True)
         else:
@@ -431,6 +447,7 @@ def run_build_process(scr, hierarchy, opts):
         
         method = merge_pdfs(pdfs, OUTPUT_FILE)
         progress_counter += 1
+        if progress_counter > total: total = progress_counter
         ui.set_progress(progress_counter, total, visual_percent=98)
         
         if not method or not OUTPUT_FILE.exists():
@@ -447,6 +464,7 @@ def run_build_process(scr, hierarchy, opts):
         bookmarks_list = create_pdf_metadata(chapters, page_map, bm_file)
         apply_pdf_metadata(OUTPUT_FILE, bm_file, 'Noteworthy Framework', 'Sihoo Lee, Lee Hojun', bookmarks_list)
         progress_counter += 1
+        if progress_counter > total: total = progress_counter
         ui.set_progress(progress_counter, total, visual_percent=100)
         ui.log('PDF metadata applied', True)
         
