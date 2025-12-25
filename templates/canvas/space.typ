@@ -35,7 +35,7 @@
   show-ticks: false,
   ..objects,
 ) = {
-  let axis-col = theme.at("text-main", default: black)
+  let axis-col = theme.at("plot", default: (:)).at("stroke", default: black)
   let grid-col = theme.at("plot", default: (:)).at("grid", default: gray)
 
   let axis-style = (paint: axis-col, thickness: 1pt)
@@ -67,16 +67,16 @@
     // Draw axes
     if show-axes {
       // Z-Axis (vertical)
-      line((0, 0, 0), (0, 0, z-max + 1), stroke: axis-style, name: "z-axis")
-      content((0, 0, z-max + 1.2), z-label)
+      line((0, 0, 0), (0, 0, z-max + 1), stroke: axis-style, mark: (end: "stealth", fill: axis-col), name: "z-axis")
+      content((0, 0, z-max + 1.2), text(fill: axis-col, z-label))
 
       // X-Axis
-      line((0, 0, 0), (x-max + 1, 0, 0), stroke: axis-style, name: "x-axis")
-      content((x-max + 1.2, 0, 0), x-label)
+      line((0, 0, 0), (x-max + 1, 0, 0), stroke: axis-style, mark: (end: "stealth", fill: axis-col), name: "x-axis")
+      content((x-max + 1.2, 0, 0), text(fill: axis-col, x-label))
 
       // Y-Axis
-      line((0, 0, 0), (0, y-max + 1, 0), stroke: axis-style, name: "y-axis")
-      content((0, y-max + 1.2, 0), y-label)
+      line((0, 0, 0), (0, y-max + 1, 0), stroke: axis-style, mark: (end: "stealth", fill: axis-col), name: "y-axis")
+      content((0, y-max + 1.2, 0), text(fill: axis-col, y-label))
 
       // Tick marks
       if show-ticks {

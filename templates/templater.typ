@@ -36,6 +36,7 @@
 #import "./canvas/combi.typ": (
   draw-boxes as draw-boxes-impl, draw-circular as draw-circular-impl, draw-linear as draw-linear-impl,
 )
+#import "./canvas/data.typ": *
 
 // Canvas types (theme-bound)
 #let active-theme = active-theme

@@ -163,23 +163,25 @@
   let style = get-point-style(obj, theme)
   let coords = if obj.at("z", default: none) != none { (obj.x, obj.y, obj.z) } else { (obj.x, obj.y) }
 
-  // Calculate aspect-corrected radii to render as true circles
+  // Calculate aspect-corrected radii to render as true circles on screen
+  // When aspect ratio is non-square, we draw an ellipse in plot coords
+  // that appears as a circle on screen
   let (rx, ry) = if aspect != none {
     let (x-range, y-range, width, height) = aspect
-    let x-scale = (x-range.at(1) - x-range.at(0)) / width
-    let y-scale = (y-range.at(1) - y-range.at(0)) / height
-    // Base radius in "screen" units, convert to plot units
+    let x-units-per-pt = (x-range.at(1) - x-range.at(0)) / width
+    let y-units-per-pt = (y-range.at(1) - y-range.at(0)) / height
+    // Convert screen radius to plot units for each axis
     let base-r = style.radius
-    (base-r * x-scale, base-r * y-scale)
+    (base-r * x-units-per-pt, base-r * y-units-per-pt)
   } else {
     (style.radius, style.radius)
   }
 
-  // Use circle if aspect is square, otherwise use arc/line to draw ellipse
+  // Always draw ellipse with compensated radii (appears as circle on screen)
   if rx == ry or aspect == none {
     circle(coords, radius: style.radius, fill: style.fill, stroke: style.stroke)
   } else {
-    // Draw ellipse using cetz arc
+    // Draw ellipse in plot coordinates that appears circular on screen
     let steps = 32
     let pts = ()
     for i in range(steps) {
@@ -603,7 +605,7 @@
       ((start.at(0) + end.at(0)) / 2, (start.at(1) + end.at(1)) / 2)
     }
 
-    // Calculate perpendicular offset (2D only)
+    // Calculate perpendicular offset
     let label-pos = if start.len() == 2 {
       let dx = end.at(0) - start.at(0)
       let dy = end.at(1) - start.at(1)
@@ -612,10 +614,24 @@
         // Perpendicular unit vector (90 deg CCW)
         let nx = -dy / len
         let ny = dx / len
-        let offset = 0.3
+        let offset = 0.25
         (mid.at(0) + nx * offset, mid.at(1) + ny * offset)
       } else { mid }
-    } else { mid }
+    } else {
+      // 3D: Calculate perpendicular offset in XY plane
+      let dx = end.at(0) - start.at(0)
+      let dy = end.at(1) - start.at(1)
+      let len = calc.sqrt(dx * dx + dy * dy)
+      if len > 0 {
+        let nx = -dy / len
+        let ny = dx / len
+        let offset = 0.25
+        (mid.at(0) + nx * offset, mid.at(1) + ny * offset, mid.at(2))
+      } else {
+        // Fallback: offset in Z direction
+        (mid.at(0), mid.at(1), mid.at(2) + 0.25)
+      }
+    }
 
     content(
       label-pos,
@@ -664,7 +680,7 @@
     plot.add(domain: obj.domain, samples: obj.samples, style: style, obj.f)
   }
 
-  // Draw empty holes
+  // Draw empty holes (open circles) using plot markers for proper aspect ratio
   if obj.at("hole", default: ()).len() > 0 {
     let hole-pts = ()
     for h in obj.hole {
@@ -672,27 +688,31 @@
       let y = (obj.f)(h + 0.0001)
       hole-pts.push((h, y))
     }
-    plot.annotate({
-      import cetz.draw: *
-      for p in hole-pts {
-        circle(p, radius: 0.08, fill: white, stroke: style.stroke)
-      }
-    })
+    // Use plot.add with circle marker for proper circular rendering
+    plot.add(
+      hole-pts,
+      style: (stroke: none),
+      mark: "o",
+      mark-style: (fill: white, stroke: style.stroke),
+      mark-size: 0.16,
+    )
   }
 
-  // Draw filled holes
+  // Draw filled holes using plot markers for proper aspect ratio
   if obj.at("filled-hole", default: ()).len() > 0 {
     let hole-pts = ()
     for h in obj.at("filled-hole") {
       let y = (obj.f)(h + 0.0001)
       hole-pts.push((h, y))
     }
-    plot.annotate({
-      import cetz.draw: *
-      for p in hole-pts {
-        circle(p, radius: 0.08, fill: stroke-col, stroke: style.stroke)
-      }
-    })
+    // Use plot.add with filled circle marker
+    plot.add(
+      hole-pts,
+      style: (stroke: none),
+      mark: "o",
+      mark-style: (fill: stroke-col, stroke: style.stroke),
+      mark-size: 0.16,
+    )
   }
 
   if obj.at("label", default: none) != none {
@@ -744,6 +764,64 @@
   }
 }
 
+/// Draw a data series (scatter plot, line plot, or both)
+#let draw-data-series-obj(obj, theme) = {
+  let stroke-col = if obj.style != auto and obj.style != none and "stroke" in obj.style {
+    obj.style.stroke
+  } else {
+    theme.at("plot", default: (:)).at("highlight", default: black)
+  }
+
+  let fill-col = if obj.style != auto and obj.style != none and "fill" in obj.style {
+    obj.style.fill
+  } else {
+    stroke-col
+  }
+
+  let marker-size = if obj.style != auto and obj.style != none and "size" in obj.style {
+    obj.style.size
+  } else {
+    0.08
+  }
+
+  let plot-type = obj.at("plot-type", default: "scatter")
+  let data = obj.data
+
+  // Draw line if plot-type is "line" or "both"
+  if plot-type == "line" or plot-type == "both" {
+    if data.len() >= 2 {
+      plot.add(data, style: (stroke: stroke-col), mark: none)
+    }
+  }
+
+  // Draw points if plot-type is "scatter" or "both"
+  // Use plot.add with mark style for proper circular markers regardless of aspect ratio
+  if plot-type == "scatter" or plot-type == "both" {
+    plot.add(
+      data,
+      style: (stroke: none),
+      mark: "o",
+      mark-style: (fill: fill-col, stroke: none),
+      mark-size: marker-size * 2,
+    )
+  }
+
+  // Draw label if present
+  if obj.at("label", default: none) != none and data.len() > 0 {
+    // Place label near the last point
+    let last-pt = data.at(data.len() - 1)
+    plot.annotate({
+      import cetz.draw: *
+      content(
+        (last-pt.at(0) + 0.3, last-pt.at(1)),
+        text(fill: stroke-col, obj.label),
+        anchor: "west",
+        padding: 0.05,
+      )
+    })
+  }
+}
+
 // =====================================================
 // Universal Draw Dispatcher
 // =====================================================
@@ -770,5 +848,15 @@
   } else if t == "polygon" { draw-polygon-obj(obj, theme) } else if t == "vector" {
     draw-vector-obj(obj, theme, origin: origin)
   }
-  // Note: func objects are handled separately in plot context
+  // Note: func and data-series objects are handled separately in plot context
+}
+
+/// Draw function for use in plot context (handles func and data-series)
+#let draw-plot-obj(obj, theme) = {
+  let t = obj.at("type", default: none)
+  if t == "func" {
+    draw-func-obj(obj, theme)
+  } else if t == "data-series" {
+    draw-data-series-obj(obj, theme)
+  }
 }
