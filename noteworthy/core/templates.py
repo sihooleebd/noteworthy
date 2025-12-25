@@ -13,6 +13,12 @@ def restore_templates(scr):
         'templates/config/hierarchy.json',
         'templates/config/snippets.typ',
     }
+    
+    # OPTIMIZATION: Check if templates already exist locally to avoid network delay
+    # We check a core file that should always be present
+    if Path('templates/templater.typ').exists():
+        return
+
     try:
         api_url = 'https://api.github.com/repos/sihooleebd/noteworthy/git/trees/master?recursive=1'
         req = urllib.request.Request(api_url, headers={'User-Agent': 'Noteworthy-Builder'})
