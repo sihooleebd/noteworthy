@@ -11,17 +11,19 @@
 // Robust Adaptive Sampling Algorithm
 // =====================================================
 
-/// Helper: Check if value is valid
+/// Helper: Check if value is valid (and reasonably bounded)
+/// Values beyond ±100 are likely off-screen — typical plots are -20 to 20
 #let is-valid(val) = {
-  val != none and val == val and val != calc.inf and val != -calc.inf and calc.abs(val) < 1e10
+  val != none and val == val and val != calc.inf and val != -calc.inf and calc.abs(val) < 100
 }
 
 /// Helper: Safely evaluate function, returning none for errors
 #let safe-eval(f, x) = {
-  // Only skip exactly 0 to avoid division by zero in 1/x terms
-  // Use a much smaller epsilon - we want to sample as close to 0 as possible
-  let eps = 1e-15
-  if x == 0 or calc.abs(x) < eps {
+  // Skip x=0 if it might cause issues (very common singularity)
+  let eps = 1e-10
+
+  // Try to evaluate - if x is extremely small, it might cause division issues
+  if calc.abs(x) < eps {
     return none
   }
 
@@ -36,112 +38,104 @@
   }
 }
 
-/// Adaptive sampler with zone-based refinement for oscillatory functions.
-/// Forces dense sampling near x=0 where 1/x-type singularities cause rapid oscillation.
-#let adaptive-sample(f, x-min, x-max, y-min: -10, y-max: 10, width: 10, height: 10, samples: 200, tolerance: 0.1) = {
+
+
+/// Adaptive sampler based on slope change (curvature)
+/// Starts from left, adjusting step size based on the "change rate of the current slope"
+/// Uses a refinement limit to prevent infinite subdivision in highly oscillatory regions
+#let adaptive-sample(f, x-min, x-max, samples: 200, tolerance: 1.0) = {
   let range-width = x-max - x-min
-  let range-height = y-max - y-min
-
-  let x-scale = if range-width == 0 { 1 } else { width / range-width }
-  let y-scale = if range-height == 0 { 1 } else { height / range-height }
-
-  // Base limits
-  let min-step = range-width / 4000
+  // PERFORMANCE: Use samples*5 — allows at most 5x base samples
+  let min-step = range-width / (samples * 5)
   let max-step = range-width / (samples / 5)
+  if min-step < 1e-9 { min-step = 1e-9 }
+
+  // Maximum refinement attempts per step — keep low for speed
+  let max-refinements = 2
+
+  // Hard cap on total points — balances coverage vs speed
+  let max-points = samples * 5 // At most 1000 points for samples=200
 
   let points = ()
   let x = x-min
-  let h = range-width / samples
+  let h = range-width / samples // Initial step guess
+  let refinement-count = 0 // Track how many times we've refined current step
 
+  // Evaluation cache to avoid re-calculating
   let x-curr = x
   let y-curr = safe-eval(f, x-curr)
+
   points.push(if y-curr != none { (x-curr, y-curr) } else { none })
 
-  let safety-limit = 10000
-  let count = 0
-
-  while x < x-max {
-    count += 1
-    if count > safety-limit { break }
-
-    // ZONE-BASED SAMPLING: Force smaller steps near x=0
-    // Functions with 1/x terms oscillate faster as x approaches 0
-    let zone-factor = 1.0
-    if calc.abs(x) < 0.5 {
-      // The closer to 0, the smaller the step should be
-      // At x=0.1, factor = 0.2; at x=0.01, factor = 0.02
-      zone-factor = calc.max(0.02, calc.abs(x) * 2)
-    }
-    let local-max-step = max-step * zone-factor
-
-    // Clamp h with zone-aware max
+  while x < x-max and points.len() < max-points {
+    // Clamp h
     if h < min-step { h = min-step }
-    if h > local-max-step { h = local-max-step }
+    if h > max-step { h = max-step }
     if x + h > x-max { h = x-max - x }
-    if h <= 1e-15 { break }
+    if h <= 0 { break }
 
     let x-next = x + h
     let y-next = safe-eval(f, x-next)
 
-    // Handle invalid points
+    // If we hit an invalid point (singularity), just step over it
     if y-next == none {
       points.push(none)
       x = x-next
       x-curr = x
-      y-curr = safe-eval(f, x)
+      y-curr = safe-eval(f, x) // Try to get back on track
+      refinement-count = 0 // Reset refinement counter
+      // if y-curr is still none, next loop will handle
       if y-curr != none { points.push((x-curr, y-curr)) }
       continue
     }
 
     if y-curr == none {
+      // We were in invalid territory, now valid
       x = x-next
       x-curr = x
       y-curr = y-next
+      refinement-count = 0 // Reset refinement counter
       points.push((x-curr, y-curr))
       continue
     }
 
-    // Sample midpoint and quarter points for oscillation detection
-    let x-mid = x + h * 0.5
-    let x-q1 = x + h * 0.25
-    let x-q3 = x + h * 0.75
+    // Calculate slope change
+    // We check the midpoint to see if it aligns linearly
+    let x-mid = x + h / 2
     let y-mid = safe-eval(f, x-mid)
-    let y-q1 = safe-eval(f, x-q1)
-    let y-q3 = safe-eval(f, x-q3)
 
     let accept = true
 
     if y-mid != none {
-      let y-predict = (y-curr + y-next) / 2.0
-      let chord-error = calc.abs(y-mid - y-predict) * y-scale
+      let s1 = (y-mid - y-curr) / (h / 2)
+      let s2 = (y-next - y-mid) / (h / 2)
+      let change = calc.abs(s2 - s1)
 
-      // SECOND DERIVATIVE CHECK: Detect oscillation even with small amplitude
-      // If midpoint is above/below the line by much relative to the local values
-      let local-variation = calc.max(calc.abs(y-curr), calc.abs(y-next), 0.001)
-      let relative-error = calc.abs(y-mid - y-predict) / local-variation
+      // Refine only if: curvature is high, step is large enough, AND we haven't hit refinement limit
+      if change > tolerance and h > min-step and refinement-count < max-refinements {
+        // Curvature too high, refine step
+        h = h / 2
+        refinement-count = refinement-count + 1
+        accept = false
+      } else {
+        // Accept step (either good enough, at min-step, or hit refinement limit)
+        points.push((x-mid, y-mid))
+        points.push((x-next, y-next))
 
-      // Refine if: chord error high OR significant relative deviation
-      if chord-error > tolerance or relative-error > 0.3 {
-        if h > min-step * 1.1 {
-          h = h / 2
-          accept = false
+        // If very flat, try increasing step for next time
+        if change < tolerance * 0.1 {
+          h = h * 1.5
         }
-      } else if chord-error < tolerance * 0.1 and relative-error < 0.05 and zone-factor >= 1.0 {
-        // Only accelerate if NOT in a sensitive zone and very flat
-        h = h * 1.3
+        refinement-count = 0 // Reset for next step
       }
     } else {
+      // Midpoint invalid? Treat as discontinuity
       points.push(none)
       points.push((x-next, y-next))
+      refinement-count = 0 // Reset for next step
     }
 
     if accept {
-      // Include interior points for smooth rendering
-      if y-q1 != none { points.push((x-q1, y-q1)) }
-      if y-mid != none { points.push((x-mid, y-mid)) }
-      if y-q3 != none { points.push((x-q3, y-q3)) }
-      points.push((x-next, y-next))
-
       x = x-next
       x-curr = x
       y-curr = y-next
@@ -190,9 +184,12 @@
   label: none,
   style: auto,
 ) = {
-  // DEFER: cached-points is now always none for adaptive graphs
-  // Sampling happens in draw-func-obj where screen size is known
-  let cached = none
+  // Compute cached points if robust mode
+  let cached = if adaptive and func-type == "standard" {
+    adaptive-sample(f, domain.at(0), domain.at(1), samples: samples)
+  } else {
+    none
+  }
 
   (
     type: "func",
@@ -222,6 +219,8 @@
     style: style,
   )
 }
+
+
 
 /// Create a parametric curve
 /// f should be: t => (x, y)

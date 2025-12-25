@@ -72,8 +72,8 @@
             let t = obj.at("type", default: none)
 
             if t == "func" {
-              // Functions need to be added via plot.add
-              draw-func-obj(obj, theme)
+              // Functions need to be added via plot.add (with adaptive sampling context)
+              draw-func-obj(obj, theme, x-domain: x-domain, y-domain: y-domain, size: size)
             } else if t == "data-series" {
               // Data series are drawn via plot context
               draw-data-series-obj(obj, theme)
@@ -88,7 +88,7 @@
             // Handle arrays of objects
             for sub-obj in obj {
               if type(sub-obj) == dictionary and sub-obj.at("type", default: none) == "func" {
-                draw-func-obj(sub-obj, theme)
+                draw-func-obj(sub-obj, theme, x-domain: x-domain, y-domain: y-domain, size: size)
               } else if type(sub-obj) == dictionary and sub-obj.at("type", default: none) == "data-series" {
                 draw-data-series-obj(sub-obj, theme)
               } else if type(sub-obj) == dictionary {
@@ -179,7 +179,9 @@
         for obj in objects.pos() {
           if type(obj) == dictionary {
             let t = obj.at("type", default: none)
-            if t == "func" { draw-func-obj(obj, theme) } else if t != none {
+            if t == "func" { draw-func-obj(obj, theme, x-domain: x-domain, y-domain: y-domain, size: size) } else if (
+              t != none
+            ) {
               plot.annotate({ draw-geo(obj, theme, bounds: bounds) })
             }
           }

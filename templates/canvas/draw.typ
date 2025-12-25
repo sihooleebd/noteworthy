@@ -6,6 +6,7 @@
 
 #import "@preview/cetz:0.4.2"
 #import "@preview/cetz-plot:0.1.3": plot
+#import "../geometry/func.typ": adaptive-sample
 
 // =====================================================
 // Style Helpers
@@ -645,7 +646,8 @@
 }
 
 /// Draw a function using CeTZ plot
-#let draw-func-obj(obj, theme) = {
+/// For robust/adaptive functions, uses adaptive sampling algorithm
+#let draw-func-obj(obj, theme, x-domain: auto, y-domain: auto, size: (10, 10)) = {
   let stroke-col = if obj.style != auto and obj.style != none and "stroke" in obj.style {
     obj.style.stroke
   } else {
@@ -654,10 +656,29 @@
 
   let style = (stroke: stroke-col)
 
-  if obj.robust and obj.cached-points != none {
-    // Split cached points at break markers (none values) and render segments
+  // Use adaptive sampling for robust functions with "standard" type
+  if obj.robust and obj.func-type == "standard" {
+    // Get domain from object or fallback to passed domain
+    let dom = obj.domain
+    let x-min = dom.at(0)
+    let x-max = dom.at(1)
+
+    // Get y-domain for clipping (use passed or default)
+    let y-min = if y-domain == auto { -10 } else { y-domain.at(0) }
+    let y-max = if y-domain == auto { 10 } else { y-domain.at(1) }
+
+    // Call adaptive sampler
+    let points = adaptive-sample(
+      obj.f,
+      x-min,
+      x-max,
+      samples: obj.samples,
+      tolerance: 0.1,
+    )
+
+    // Split at none markers and render segments
     let segment = ()
-    for pt in obj.cached-points {
+    for pt in points {
       if pt == none {
         // Break marker - render current segment if non-empty
         if segment.len() >= 2 {
@@ -676,7 +697,7 @@
     // Parametric curve
     plot.add(domain: obj.domain, samples: obj.samples, style: style, obj.f)
   } else {
-    // Standard function
+    // Standard function (non-adaptive)
     plot.add(domain: obj.domain, samples: obj.samples, style: style, obj.f)
   }
 

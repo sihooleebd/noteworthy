@@ -113,7 +113,13 @@
           if type(obj) == dictionary {
             let t = obj.at("type", default: none)
             if t == "func" {
-              draw-func-obj(obj, theme)
+              draw-func-obj(
+                obj,
+                theme,
+                x-domain: (-effective-radius, effective-radius),
+                y-domain: (-effective-radius, effective-radius),
+                size: size,
+              )
             } else if t != none {
               plot.annotate({ draw-geo(obj, theme, bounds: bounds) })
             }
