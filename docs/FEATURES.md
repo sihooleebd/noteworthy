@@ -11,10 +11,11 @@ This document provides comprehensive documentation for all advanced features in 
 3. [Angle Rendering](#angle-rendering)
 4. [Vector System](#vector-system)
 5. [Function Plotting](#function-plotting)
-6. [3D Space Plots](#3d-space-plots)
-7. [Polar & Parametric Curves](#polar--parametric-curves)
-8. [Label Offset System](#label-offset-system)
-9. [Hierarchy Sync Wizard](#hierarchy-sync-wizard)
+6. [Calculus Visualization](#calculus-visualization)
+7. [3D Space Plots](#3d-space-plots)
+8. [Polar & Parametric Curves](#polar--parametric-curves)
+9. [Label Offset System](#label-offset-system)
+10. [Hierarchy Sync Wizard](#hierarchy-sync-wizard)
 
 ---
 
@@ -234,6 +235,269 @@ The robust sampler returns points with `none` as break markers:
 ```
 
 The renderer splits at `none` and draws separate segments.
+
+---
+
+## Calculus Visualization
+
+The calculus module provides tools for visualizing derivatives, integrals, and discontinuities. All functions integrate seamlessly with the theme system and support automatic styling.
+
+### Tangent Lines
+
+Draw tangent lines to functions at specific points:
+
+```typst
+#let f(x) = x * x / 4 + 1
+#let tangent-line = tangent(f, 2, length: 3, label: "Tangent")
+```
+
+| Parameter | Type     | Description                               |
+| --------- | -------- | ----------------------------------------- |
+| `f`       | function | The function to find tangent for          |
+| `x`       | float    | x-coordinate where tangent is drawn       |
+| `length`  | float    | Total length of tangent line (default: 2) |
+| `label`   | content  | Optional label                            |
+| `style`   | dict     | Style overrides (`stroke`, `dash`, etc.)  |
+
+**Example:**
+
+```typst
+#cartesian-canvas(
+  x-domain: (-1, 4),
+  y-domain: (0, 6),
+  graph(f, domain: (-1, 4), label: $f(x) = x^2/4 + 1$),
+  tangent(f, 2, length: 3, style: (stroke: (paint: blue, dash: "dashed"))),
+  point(2, f(2), label: $P(2, 2)$),
+)
+```
+
+### Normal Lines
+
+Draw normal (perpendicular) lines to function curves:
+
+```typst
+#let normal-line = normal(f, 2, length: 3, label: "Normal")
+```
+
+Parameters are identical to `tangent`. The normal is automatically perpendicular to the tangent at the given point.
+
+**Special Cases:**
+- **Horizontal tangents** (slope = 0): Normal is vertical
+- **Vertical tangents** (slope → ∞): Handled via slope magnitude check
+
+```typst
+#cartesian-canvas(
+  graph(f, domain: (-1, 4)),
+  tangent(f, 2, length: 3, style: (stroke: blue)),
+  normal(f, 2, length: 3, style: (stroke: red)),
+)
+```
+
+### Discontinuit visualization (Holes)
+
+Visualize removable discontinuities using **holes** - points where the function is undefined but has a limit.
+
+#### Empty Holes (Removable Discontinuities)
+
+```typst
+#let f(x) = if x == 1 { 2 } else { (x*x - 1)/(x - 1) }
+
+#cartesian-canvas(
+  graph(f, domain: (-1, 3), hole: (1,), label: $f(x) = (x^2-1)/(x-1)$),
+)
+```
+
+- **Appearance**: White-filled circle with function's stroke color
+- **Size**: `radius: 0.08` (matches point size)
+- **Placement**: At `(x, lim_{x→h} f(x))` - uses `f(x + 0.0001)` to approximate limit
+
+#### Filled Holes (Point Discontinuities)
+
+```typst
+#cartesian-canvas(
+  graph(f, domain: (-1, 3), filled-hole: (2,)),
+)
+```
+
+- **Appearance**: Solid circle in function's color
+- **Use case**: Show where function value differs from limit
+
+**Multiple Holes:**
+
+```typst
+graph(f, 
+  hole: (1, 3),           // Empty holes at x=1 and x=3
+  filled-hole: (2,),      // Filled hole at x=2
+)
+```
+
+### Riemann Sums (Integration Approximation)
+
+Visualize area under curves using rectangular/trapezoidal approximations.
+
+#### Basic Usage
+
+```typst
+#let f(x) = calc.sqrt(x) + 0.5
+#let domain = (0.5, 3.5)
+
+#cartesian-canvas(
+  graph(f, domain: (0, 4)),
+  riemann-sum(f, domain, 6, method: "left", label: "Left Sum"),
+)
+```
+
+| Parameter | Type     | Description                                         |
+| --------- | -------- | --------------------------------------------------- |
+| `f`       | function | Function to integrate                               |
+| `domain`  | tuple    | `(start, end)` integration bounds                   |
+| `n`       | int      | Number of rectangles/trapezoids                     |
+| `method`  | string   | `"left"`, `"right"`, `"midpoint"`, `"trapezoid"`    |
+| `label`   | content  | Optional label (appears centered above sum)         |
+| `style`   | dict     | Style overrides (ignored if using theme)            |
+| `smooth`  | bool     | If `true`, hide interior strokes (default: `false`) |
+
+#### Methods
+
+1. **Left Riemann Sum** (`method: "left"`)
+   - Rectangle height = `f(left edge)`
+   - Typically **underestimates** for increasing functions
+
+2. **Right Riemann Sum** (`method: "right"`)
+   - Rectangle height = `f(right edge)`
+   - Typically **overestimates** for increasing functions
+
+3. **Midpoint Sum** (`method: "midpoint"`)
+   - Rectangle height = `f(midpoint)`
+   - Better approximation than left/right
+
+4. **Trapezoid Sum** (`method: "trapezoid"`)
+   - Uses trapezoids instead of rectangles
+   - **Best approximation** among these methods
+   - Area = average of left and right heights
+
+#### Theme Integration
+
+By default, Riemann sums use **theme highlight color at 30% opacity**:
+
+```typst
+// Automatic theme colors
+riemann-sum(f, domain, 6, method: "left")
+```
+
+To override with custom colors:
+
+```typst
+riemann-sum(f, domain, 6, 
+  method: "trapezoid",
+  style: (
+    fill: purple.transparentize(80%),
+    stroke: purple,
+  )
+)
+```
+
+#### Smooth Integrals
+
+For clean integral visualizations without interior lines, use `smooth: true`:
+
+```typst
+#cartesian-canvas(
+  graph(f, domain: (0, 4)),
+  riemann-sum(f, domain, 50, 
+    method: "trapezoid", 
+    label: "∫ f(x) dx",
+    smooth: true,  // Hides interior vertical lines
+  ),
+)
+```
+
+**Effect**: Only the outline and filled area are visible, creating a smooth integral region.
+
+#### Label Positioning
+
+Labels automatically appear:
+- **Horizontally**: Centered at `(start + end) / 2`
+- **Vertically**: 5% above the tallest rectangle
+- **Anchor**: `"center"` for proper alignment
+
+**Example: Comparing Methods**
+
+```typst
+#let f(x) = calc.sqrt(x) + 0.5
+#let domain = (0.5, 3.5)
+
+// Left Sum
+#cartesian-canvas(
+  graph(f, domain: (0, 4)),
+  riemann-sum(f, domain, 6, method: "left", label: "Left"),
+)
+
+// Right Sum
+#cartesian-canvas(
+  graph(f, domain: (0, 4)),
+  riemann-sum(f, domain, 6, method: "right", label: "Right"),
+)
+
+// Midpoint Sum
+#cartesian-canvas(
+  graph(f, domain: (0, 4)),
+  riemann-sum(f, domain, 6, method: "midpoint", label: "Midpoint"),
+)
+
+// Trapezoid Sum
+#cartesian-canvas(
+  graph(f, domain: (0, 4)),
+  riemann-sum(f, domain, 6, method: "trapezoid", label: "Trapezoid"),
+)
+
+// Smooth Integral (many trapezoids)
+#cartesian-canvas(
+  graph(f, domain: (0, 4)),
+  riemann-sum(f, domain, 50, method: "trapezoid", 
+    label: "∫ f(x) dx", 
+    smooth: true
+  ),
+)
+```
+
+### Implementation Details
+
+#### Derivative Calculation
+
+Tangent/normal slopes use **symmetric difference quotient**:
+
+```typst
+m = (f(x + h) - f(x - h)) / (2h)  // h = 1e-5
+```
+
+More accurate than forward/backward differences.
+
+#### Hole Rendering
+
+Holes are drawn using `plot.annotate`:
+
+```typst
+plot.annotate({
+  circle((x, y), radius: 0.08, fill: white, stroke: func-stroke)
+})
+```
+
+This ensures they appear **on top** of the function line.
+
+#### Riemann Sum Rendering
+
+Each rectangle/trapezoid is a `polygon` object:
+
+```typst
+// Rectangle
+polygon(point(x0, 0), point(x0, h), point(x1, h), point(x1, 0))
+
+// Trapezoid
+polygon(point(x0, 0), point(x0, y0), point(x1, y1), point(x1, 0))
+```
+
+The `smooth` mode suppresses interior strokes by setting edge polygons to `stroke: none`.
 
 ---
 
