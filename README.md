@@ -114,6 +114,7 @@ You can force an update or switch branches using CLI flags:
 | `--load-nightly`         | Force update/install from `nightly` branch.                                                           |
 | `--force-update`         | **Destructive**. Removes existing `noteworthy` and `templates` folders and reinstalls from `master`.  |
 | `--force-update-nightly` | **Destructive**. Removes existing `noteworthy` and `templates` folders and reinstalls from `nightly`. |
+| `--print-inputs`         | Output Typst `--input` flags for content folder info. Use with `typst compile`.                       |
 
 The noteworthy system guides you through the initialization, the configuration, and the build. Upon first run, the template will load the necessary template files. 
 
@@ -170,11 +171,14 @@ The noteworthy system guides you through the initialization, the configuration, 
   <img src="images/building.png" width="45%" />
 </p>
 
-### Single File Compilation
+### Standalone/Single File Compilation
 
 ```bash
+# Compile full document with folder info
+eval "typst compile templates/parser.typ output.pdf --root . $(python3 noteworthy.py --print-inputs)"
+
 # Compile specific section
-typst compile templates/parser.typ --input target=01.01 section.pdf
+typst compile templates/parser.typ section.pdf --root . --input target=0/0
 ```
 
 ## Contributing

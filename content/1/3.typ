@@ -22,7 +22,7 @@ Use `#equation` for important equations that deserve highlighting:
 ]
 
 #equation("Schrödinger Equation")[
-  $ i planck.reduce partial / (partial t) Psi = hat(H) Psi $
+  $ i planck partial / (partial t) Psi = hat(H) Psi $
 ]
 
 == Combining Blocks

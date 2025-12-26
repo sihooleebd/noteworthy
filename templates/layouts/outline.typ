@@ -1,27 +1,14 @@
 #import "../setup.typ": *
+#import "../scanner.typ": load-content-info
 
-// Get folder info from sys.inputs (passed from Python build)
-#let chapter-folders-str = sys.inputs.at("chapter-folders", default: none)
-#let chapter-folders = if chapter-folders-str != none {
-  json(bytes(chapter-folders-str))
-} else {
-  range(hierarchy.len()).map(i => str(i))
-}
-
-#let page-folders-str = sys.inputs.at("page-folders", default: none)
-#let page-folders = if page-folders-str != none {
-  json(bytes(page-folders-str))
-} else {
-  let result = (:)
-  for (i, ch) in hierarchy.enumerate() {
-    result.insert(str(i), range(ch.pages.len()).map(j => str(j)))
-  }
-  result
-}
 
 #let outline(
   theme: (:),
 ) = {
+  // Load content info from scanner (uses manifest or sys.inputs)
+  let content-info = load-content-info()
+  let chapter-folders = content-info.chapters
+  let page-folders = content-info.pages
   // Get page map from input if available
   let page-map-str = sys.inputs.at("page-map", default: none)
   let page-map-file = sys.inputs.at("page-map-file", default: none)
@@ -63,7 +50,6 @@
 
       // Get page files for this chapter
       let pg-files = page-folders.at(str(i), default: range(chapter-entry.pages.len()).map(j => str(j)))
-
       block(breakable: false)[
         #text(
           size: 16pt,

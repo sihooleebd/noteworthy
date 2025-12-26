@@ -1,4 +1,5 @@
 #import "templater.typ": *
+#import "scanner.typ": load-content-info
 
 #let target = sys.inputs.at("target", default: none)
 #let page-offset = sys.inputs.at("page-offset", default: none)
@@ -31,28 +32,11 @@
   }
 }
 
-// Get sorted folder names from content/
-// chapter-folders is passed via sys.inputs from Python build
-#let chapter-folders-str = sys.inputs.at("chapter-folders", default: none)
-#let chapter-folders = if chapter-folders-str != none {
-  json(bytes(chapter-folders-str))
-} else {
-  // Fallback: assume folders 0,1,2... based on hierarchy length
-  range(hierarchy.len()).map(i => str(i))
-}
+// Load content info from scanner (uses manifest or sys.inputs)
+#let content-info = load-content-info()
+#let chapter-folders = content-info.chapters
+#let page-folders = content-info.pages
 
-// page-folders is a dict mapping chapter index to array of page file stems
-#let page-folders-str = sys.inputs.at("page-folders", default: none)
-#let page-folders = if page-folders-str != none {
-  json(bytes(page-folders-str))
-} else {
-  // Fallback: assume files 0,1,2... based on pages length
-  let result = (:)
-  for (i, ch) in hierarchy.enumerate() {
-    result.insert(str(i), range(ch.pages.len()).map(j => str(j)))
-  }
-  result
-}
 
 #for (i, chapter) in hierarchy.enumerate() {
   // Get folder name from sorted list

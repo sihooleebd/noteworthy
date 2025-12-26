@@ -42,25 +42,34 @@ When mismatch is found:
 
 ## Build System
 
-### Single File Compilation
-To speed up development, compile just the file you're working on:
+### Standalone Compilation
+Compile the full document without the Python TUI:
 ```bash
-typst compile content/1/1.typ
-```
-Or for a specific section via the build system:
-```bash
-typst compile templates/parser.typ --input target=01.01 section.pdf
+# With exact folder/page info (recommended)
+eval "typst compile templates/parser.typ output.pdf --root . $(python3 noteworthy.py --print-inputs)"
+
+# Quick compile (uses 1-indexed fallback)
+typst compile templates/parser.typ output.pdf --root .
 ```
 
-### Build Flags
+The `--print-inputs` flag outputs Typst `--input` flags with your content folder structure.
+
+### Single Section Compilation
+Compile a specific section for faster iteration:
+```bash
+typst compile templates/parser.typ section.pdf --root . --input target=0/0
+```
+
+### CLI Flags
 Pass flags to `python3 noteworthy.py`:
 
-| Flag             | Description                              |
-| :--------------- | :--------------------------------------- |
-| `--load`         | Force update from `master`.              |
-| `--force-update` | Destructive reinstall (wipes templates). |
-| `-d`             | Debug mode (verbose).                    |
-| `-c`             | Config mode (custom Typst flags).        |
+| Flag             | Description                                       |
+| :--------------- | :------------------------------------------------ |
+| `--load`         | Force update from `master`.                       |
+| `--force-update` | Destructive reinstall (wipes templates).          |
+| `--print-inputs` | Output Typst `--input` flags for content folders. |
+| `-d`             | Debug mode (verbose).                             |
+| `-c`             | Config mode (custom Typst flags).                 |
 
 ### Directory Structure
 

@@ -76,6 +76,24 @@ if __name__ == "__main__":
     branch = 'master'
     force = False
     
+    # Handle --print-inputs: output typst CLI flags for content folder info
+    if '--print-inputs' in sys.argv:
+        content_dir = Path('content')
+        ch_folders = []
+        pg_folders = {}
+        
+        if content_dir.exists():
+            ch_dirs = sorted([d for d in content_dir.iterdir() if d.is_dir() and d.name.isdigit()], key=lambda d: int(d.name))
+            for idx, ch_dir in enumerate(ch_dirs):
+                pg_files = sorted([f.stem for f in ch_dir.glob('*.typ') if f.stem.isdigit()], key=lambda s: int(s))
+                if pg_files:
+                    ch_folders.append(ch_dir.name)
+                    pg_folders[str(idx)] = pg_files
+        
+        # Output as typst --input flags (requires eval for shell parsing)
+        print(f"--input chapter-folders='{json.dumps(ch_folders)}' --input page-folders='{json.dumps(pg_folders)}'")
+        sys.exit(0)
+    
     # Parse flags
     if '--force-update-nightly' in sys.argv:
         do_install = True
