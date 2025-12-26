@@ -66,8 +66,9 @@
 
         // Draw all objects
         let bounds = (x: x-domain, y: y-domain)
+        let objs = objects.pos() + objects.named().at("children", default: ())
 
-        for obj in objects.pos() {
+        for obj in objs {
           if type(obj) == dictionary {
             let t = obj.at("type", default: none)
 

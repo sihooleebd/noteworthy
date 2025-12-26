@@ -398,14 +398,57 @@
   )
 }
 
+/// Helper: Convert Catmull-Rom control points to Cubic Bezier control points
+#let catmull-to-bezier(p0, p1, p2, p3, tension: 0.5) = {
+  // Extract coordinates
+  let get-coords(p) = if type(p) == dictionary { (p.x, p.y) } else { (p.at(0), p.at(1)) }
+  let (x0, y0) = get-coords(p0)
+  let (x1, y1) = get-coords(p1)
+  let (x2, y2) = get-coords(p2)
+  let (x3, y3) = get-coords(p3)
+
+  // Calculate derivatives (tangents)
+  let factor = (1.0 - tension) / 2.0
+  let m1x = (x2 - x0) * factor
+  let m1y = (y2 - y0) * factor
+  let m2x = (x3 - x1) * factor
+  let m2y = (y3 - y1) * factor
+
+  // Bezier control points
+  let c1x = x1 + m1x / 3.0
+  let c1y = y1 + m1y / 3.0
+  let c2x = x2 - m2x / 3.0
+  let c2y = y2 - m2y / 3.0
+
+  ((c1x, c1y), (c2x, c2y))
+}
+
 /// Create a smooth curve through points (cubic spline interpolation)
-/// This is a placeholder - full spline implementation is complex
-#let smooth-curve(..points, label: none, style: auto) = {
+#let smooth-curve(..points, label: none, style: auto, tension: 0.0) = {
   let pts = points.pos()
+  let segments = ()
+
+  if pts.len() >= 2 {
+    let coords = pts.map(p => if type(p) == dictionary { (p.x, p.y) } else { (p.at(0), p.at(1)) })
+
+    // Duplicate endpoints for open spline
+    let ext-pts = (coords.first(),) + coords + (coords.last(),)
+
+    for i in range(coords.len() - 1) {
+      let p0 = ext-pts.at(i)
+      let p1 = ext-pts.at(i + 1)
+      let p2 = ext-pts.at(i + 2)
+      let p3 = ext-pts.at(i + 3)
+
+      let (c1, c2) = catmull-to-bezier(p0, p1, p2, p3, tension: tension)
+      segments.push((p1, c1, c2, p2))
+    }
+  }
 
   (
     type: "curve",
     points: pts,
+    segments: segments,
     interpolation: "spline",
     label: label,
     style: style,

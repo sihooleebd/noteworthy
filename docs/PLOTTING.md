@@ -35,7 +35,19 @@ ray(origin, through)
 circle(center, radius, label: "C", fill: red.transparentize(80%))
 polygon(p1, p2, p3, stroke: blue)
 arc(center, radius, start: 0deg, end: 90deg)
+
+// Curves
+// Connected straight lines (Polyline)
+curve-through((0,0), (1,1), (2,0), label: "Linear")
+
+// Smooth Spline (Catmull-Rom)
+smooth-curve((0,0), (1,1), (2,0), label: "Spline")
 ```
+
+### Curve Types
+
+*   **`curve-through`**: Connects points with **straight line segments** (Polyline). Best for technical diagrams or raw data paths.
+*   **`smooth-curve`**: Connects points with a **smooth Catmull-Rom spline**. Best for natural paths and flow diagrams. `smooth-curve` accepts an optional `tension` parameter (default: 0.0) to control the spline curvature.
 
 ### Angles
 

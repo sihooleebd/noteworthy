@@ -1086,6 +1086,59 @@
 }
 
 // =====================================================
+// Curve Drawing (Splines)
+// =====================================================
+
+/// Draw a curve object
+#let draw-curve-obj(obj, theme) = {
+  import cetz.draw: *
+  let style = get-line-style(obj, theme)
+  let pts = obj.points
+
+  if pts.len() < 2 { return }
+
+  let coords = pts.map(p => if type(p) == dictionary { (p.x, p.y) } else { (p.at(0), p.at(1)) })
+
+  if obj.interpolation == "linear" {
+    line(..coords, stroke: style.stroke)
+  } else if obj.interpolation == "spline" {
+    // Spline segments are pre-calculated in the object constructor (func.typ)
+    let segments = obj.at("segments", default: ())
+
+    for seg in segments {
+      // seg is (start, c1, c2, end)
+
+      // Safely handle stroke for bezier
+      let s = style.stroke
+      bezier(seg.at(0), seg.at(3), seg.at(1), seg.at(2), stroke: s)
+    }
+  }
+
+
+  if obj.at("label", default: none) != none {
+    // Label at last point for now
+    let last = coords.last()
+
+    // Extract paint safely
+    let text-fill = if type(style.stroke) == dictionary {
+      style.stroke.at("paint", default: black)
+    } else {
+      style.stroke
+    }
+
+    let seg-len = obj.at("segments", default: ()).len()
+    let debug-label = format-label(obj, obj.label) + " [" + str(seg-len) + "]"
+
+    content(
+      (last.at(0) + 0.2, last.at(1)),
+      text(fill: text-fill, debug-label),
+      anchor: "west",
+    )
+  }
+}
+
+
+// =====================================================
 // Universal Draw Dispatcher
 // =====================================================
 
@@ -1114,6 +1167,8 @@
     draw-vector-projection-obj(obj, theme, origin: origin)
   } else if t == "vector-addition" {
     draw-vector-addition-obj(obj, theme, origin: origin)
+  } else if t == "curve" {
+    draw-curve-obj(obj, theme)
   }
   // Note: func and data-series objects are handled separately in plot context
 }
