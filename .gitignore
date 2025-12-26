@@ -1,6 +1,7 @@
 # Build artifacts
 templates/build/
 output.pdf
+content/**/*.pdf
 *.zip
 .build_settings.json
 
@@ -33,3 +34,4 @@ build_settings.json
 # Exports
 exports/
 templates/plots-backup/
+testing/

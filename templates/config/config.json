@@ -19,8 +19,6 @@
     "display-chap-cover": true,
     "box-margin": "5pt",
     "box-inset": "15pt",
-    "render-sample-count": 1000,
-    "render-implicit-count": 400,
     "display-mode": "print",
     "pad-chapter-id": true,
     "pad-page-id": true,

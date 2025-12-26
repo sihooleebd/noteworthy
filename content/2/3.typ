@@ -50,21 +50,21 @@ Visualize area approximation using Riemann sums.
   x-domain: (0, 4),
   y-domain: (0, 3),
   graph(f-int, domain: (0, 4)),
-  riemann-sum(f-int, area-dom, 6, method: "midpoint", label: "Midpoint Sum"),
+  riemann-sum(f-int, area-dom, 8, method: "midpoint", label: "Midpoint Sum"),
 )
 
 #cartesian-canvas(
   x-domain: (0, 4),
   y-domain: (0, 3),
   graph(f-int, domain: (0, 4)),
-  riemann-sum(f-int, area-dom, 6, method: "right", label: "Right Sum"),
+  riemann-sum(f-int, area-dom, 10, method: "right", label: "Right Sum"),
 )
 
 #cartesian-canvas(
   x-domain: (0, 4),
   y-domain: (0, 3),
   graph(f-int, domain: (0, 4)),
-  riemann-sum(f-int, area-dom, 6, method: "trapezoid", label: "Trapezoid Sum"),
+  riemann-sum(f-int, area-dom, 12, method: "trapezoid", label: "Trapezoid Sum"),
 )
 
 #cartesian-canvas(

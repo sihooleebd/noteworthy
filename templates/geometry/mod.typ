@@ -14,6 +14,7 @@
 #import "angle.typ": *
 #import "polygon.typ": *
 #import "vector.typ": *
+#import "table.typ": *
 #import "func.typ": *
 
 // Construction operations

@@ -75,6 +75,13 @@ def restore_templates(scr):
                         local_path.write_text('')
                     continue
                     
+                if path_str == 'templates/config/snippets.typ':
+                    local_path = Path(path_str)
+                    if not local_path.exists():
+                        local_path.parent.mkdir(parents=True, exist_ok=True)
+                        local_path.write_text('// Custom snippets - define your own shortcuts here\n')
+                    continue
+                    
                 local_path = Path(path_str)
                 if not local_path.exists():
                     missing_files.append(path_str)

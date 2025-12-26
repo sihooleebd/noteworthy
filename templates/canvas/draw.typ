@@ -785,8 +785,89 @@
   }
 }
 
+/// Clip a line segment (p1, p2) to the rectangle defined by bounds (x-min, x-max, y-min, y-max)
+/// Returns array of segments (usually 0 or 1 segment: ((x1, y1), (x2, y2)))
+#let clip-segment(p1, p2, bounds) = {
+  let (x-min, x-max) = bounds.x
+  let (y-min, y-max) = bounds.y
+
+  let x1 = p1.at(0)
+  let y1 = p1.at(1)
+  let x2 = p2.at(0)
+  let y2 = p2.at(1)
+
+  // Cohen-Sutherland Line Clipping
+  let INSIDE = 0
+  let LEFT = 1
+  let RIGHT = 2
+  let BOTTOM = 4
+  let TOP = 8
+
+  let compute-out-code = (x, y) => {
+    let code = INSIDE
+    if x < x-min { code = code + LEFT } else if x > x-max { code = code + RIGHT }
+    if y < y-min { code = code + BOTTOM } else if y > y-max { code = code + TOP }
+    code
+  }
+
+  let code1 = compute-out-code(x1, y1)
+  let code2 = compute-out-code(x2, y2)
+  let accept = false
+
+  let max-iter = 10 // Safety break
+  let iter = 0
+
+  while iter < max-iter {
+    if (code1.bit-and(code2) != 0) {
+      // Both points outside same region -> reject
+      return ()
+    } else if (code1.bit-or(code2) == 0) {
+      // Both points inside -> accept
+      accept = true
+      break
+    } else {
+      // At least one point outside
+      let code-out = if code1 != 0 { code1 } else { code2 }
+      let x = 0.0
+      let y = 0.0
+
+      // Find intersection point
+      if (code-out.bit-and(TOP) != 0) {
+        x = x1 + (x2 - x1) * (y-max - y1) / (y2 - y1)
+        y = y-max
+      } else if (code-out.bit-and(BOTTOM) != 0) {
+        x = x1 + (x2 - x1) * (y-min - y1) / (y2 - y1)
+        y = y-min
+      } else if (code-out.bit-and(RIGHT) != 0) {
+        y = y1 + (y2 - y1) * (x-max - x1) / (x2 - x1)
+        x = x-max
+      } else if (code-out.bit-and(LEFT) != 0) {
+        y = y1 + (y2 - y1) * (x-min - x1) / (x2 - x1)
+        x = x-min
+      }
+
+      if code-out == code1 {
+        x1 = x
+        y1 = y
+        code1 = compute-out-code(x1, y1)
+      } else {
+        x2 = x
+        y2 = y
+        code2 = compute-out-code(x2, y2)
+      }
+    }
+    iter += 1
+  }
+
+  if accept {
+    (((x1, y1), (x2, y2)),)
+  } else {
+    ()
+  }
+}
+
 /// Draw a data series (scatter plot, line plot, or both)
-#let draw-data-series-obj(obj, theme) = {
+#let draw-data-series-obj(obj, theme, x-domain: auto, y-domain: auto) = {
   let stroke-col = if obj.style != auto and obj.style != none and "stroke" in obj.style {
     obj.style.stroke
   } else {
@@ -808,38 +889,122 @@
   let plot-type = obj.at("plot-type", default: "scatter")
   let data = obj.data
 
+  let bounds = if x-domain != auto and y-domain != auto {
+    (x: x-domain, y: y-domain)
+  } else {
+    none
+  }
+
   // Draw line if plot-type is "line" or "both"
   if plot-type == "line" or plot-type == "both" {
     if data.len() >= 2 {
-      plot.add(data, style: (stroke: stroke-col), mark: none)
+      if bounds == none {
+        // Standard drawing (no manual clipping)
+        plot.add(data, style: (stroke: stroke-col), mark: none)
+      } else {
+        // Manual clipping + Multiple Segments
+        let segments = ()
+        let current-segment = ()
+
+        for i in range(data.len() - 1) {
+          let p1 = data.at(i)
+          let p2 = data.at(i + 1)
+
+          let result = clip-segment(p1, p2, bounds)
+          if result.len() > 0 {
+            // We have a visible segment
+            let seg = result.first()
+
+            // If current segment is empty, start it
+            if current-segment.len() == 0 {
+              current-segment.push(seg.at(0))
+              current-segment.push(seg.at(1))
+            } else {
+              // Check continuity with previous point
+              let last-pt = current-segment.last()
+              let new-start = seg.at(0)
+
+              // Basic float equality check
+              let dist_sq = calc.pow(last-pt.at(0) - new-start.at(0), 2) + calc.pow(last-pt.at(1) - new-start.at(1), 2)
+
+              if dist_sq < 0.000001 {
+                // Continuous, append end point
+                current-segment.push(seg.at(1))
+              } else {
+                // Gap detected (clipped part), flush current and start new
+                plot.add(current-segment, style: (stroke: stroke-col), mark: none)
+                current-segment = (seg.at(0), seg.at(1))
+              }
+            }
+          }
+        }
+
+        // Flush final segment
+        if current-segment.len() >= 2 {
+          plot.add(current-segment, style: (stroke: stroke-col), mark: none)
+        }
+      }
     }
   }
 
   // Draw points if plot-type is "scatter" or "both"
-  // Use plot.add with mark style for proper circular markers regardless of aspect ratio
   if plot-type == "scatter" or plot-type == "both" {
-    plot.add(
-      data,
-      style: (stroke: none),
-      mark: "o",
-      mark-style: (fill: fill-col, stroke: none),
-      mark-size: marker-size * 2,
-    )
+    let pts-to-draw = if bounds != none {
+      data.filter(pt => {
+        let (x, y) = pt
+        x >= bounds.x.at(0) and x <= bounds.x.at(1) and y >= bounds.y.at(0) and y <= bounds.y.at(1)
+      })
+    } else {
+      data
+    }
+
+    if pts-to-draw.len() > 0 {
+      plot.add(
+        pts-to-draw,
+        style: (stroke: none),
+        mark: "o",
+        mark-style: (fill: fill-col, stroke: none),
+        mark-size: marker-size * 2,
+      )
+    }
   }
 
   // Draw label if present
   if obj.at("label", default: none) != none and data.len() > 0 {
-    // Place label near the last point
-    let last-pt = data.at(data.len() - 1)
-    plot.annotate({
-      import cetz.draw: *
-      content(
-        (last-pt.at(0) + 0.3, last-pt.at(1)),
-        text(fill: stroke-col, obj.label),
-        anchor: "west",
-        padding: 0.05,
-      )
-    })
+    // Place label near the last VISIBLE point
+    let last-pt = none
+
+    if bounds != none {
+      // Find last point inside bounds
+      for i in range(data.len() - 1, -1, step: -1) {
+        let pt = data.at(i)
+        if (
+          pt.at(0) >= bounds.x.at(0)
+            and pt.at(0) <= bounds.x.at(1)
+            and pt.at(1) >= bounds.y.at(0)
+            and pt.at(1) <= bounds.y.at(1)
+        ) {
+          last-pt = pt
+          break
+        }
+      }
+      // If no points inside but we have lines, maybe label intersection?
+      // For now, simpliest is last visible point.
+    } else {
+      last-pt = data.last()
+    }
+
+    if last-pt != none {
+      plot.annotate({
+        import cetz.draw: *
+        content(
+          (last-pt.at(0) + 0.3, last-pt.at(1)),
+          text(fill: stroke-col, obj.label),
+          anchor: "west",
+          padding: 0.05,
+        )
+      })
+    }
   }
 }
 
@@ -873,11 +1038,11 @@
 }
 
 /// Draw function for use in plot context (handles func and data-series)
-#let draw-plot-obj(obj, theme) = {
+#let draw-plot-obj(obj, theme, x-domain: auto, y-domain: auto) = {
   let t = obj.at("type", default: none)
   if t == "func" {
     draw-func-obj(obj, theme)
   } else if t == "data-series" {
-    draw-data-series-obj(obj, theme)
+    draw-data-series-obj(obj, theme, x-domain: x-domain, y-domain: y-domain)
   }
 }

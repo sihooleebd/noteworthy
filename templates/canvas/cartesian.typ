@@ -76,7 +76,7 @@
               draw-func-obj(obj, theme, x-domain: x-domain, y-domain: y-domain, size: size)
             } else if t == "data-series" {
               // Data series are drawn via plot context
-              draw-data-series-obj(obj, theme)
+              draw-data-series-obj(obj, theme, x-domain: x-domain, y-domain: y-domain)
             } else if t != none {
               // Other geometry objects are drawn via annotate
               let aspect = (x-domain, y-domain, size.at(0), size.at(1))
@@ -90,7 +90,7 @@
               if type(sub-obj) == dictionary and sub-obj.at("type", default: none) == "func" {
                 draw-func-obj(sub-obj, theme, x-domain: x-domain, y-domain: y-domain, size: size)
               } else if type(sub-obj) == dictionary and sub-obj.at("type", default: none) == "data-series" {
-                draw-data-series-obj(sub-obj, theme)
+                draw-data-series-obj(sub-obj, theme, x-domain: x-domain, y-domain: y-domain)
               } else if type(sub-obj) == dictionary {
                 let aspect = (x-domain, y-domain, size.at(0), size.at(1))
                 plot.annotate({
