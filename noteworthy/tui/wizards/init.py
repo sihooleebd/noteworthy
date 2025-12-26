@@ -17,8 +17,18 @@ class InitWizard:
         self.choice_index = 0
         self.input_y = 0
         self.input_x = 0
+        self.input_y = 0
+        self.input_x = 0
         input_w = 50
         TUI.init_colors()
+
+        # Load existing config to preserve values
+        try:
+            current = load_config_safe()
+            if current:
+                self.config.update(current)
+        except:
+            pass
         
         self.keymap = {}
         
