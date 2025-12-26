@@ -14,7 +14,7 @@
 /// - label: Optional label (e.g., $theta$)
 /// - radius: Display radius for the arc marker (default: 0.5)
 /// - style: Optional style overrides (color, fill)
-#let angle(p1, vertex, p2, label: none, radius: 0.5, label-radius: auto, fill: auto, style: auto) = {
+#let angle(p1, vertex, p2, label: none, radius: 0.5, label-radius: auto, fill: auto, style: auto, reflex: "auto") = {
   let pt1 = if is-point(p1) { p1 } else { point(p1.at(0), p1.at(1)) }
   let vtx = if is-point(vertex) { vertex } else { point(vertex.at(0), vertex.at(1)) }
   let pt2 = if is-point(p2) { p2 } else { point(p2.at(0), p2.at(1)) }
@@ -29,6 +29,7 @@
     "label-radius": label-radius,
     fill: fill,
     style: style,
+    reflex: reflex,
   )
 }
 

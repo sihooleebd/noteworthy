@@ -1,5 +1,5 @@
 #import "setup.typ": *
-#import "./default-schemes.typ": *
+#import "load-schemes.typ": *
 
 #import "./blocks/mod.typ": *
 
@@ -116,7 +116,7 @@
 
 #let project = project.with(theme: active-theme)
 #let cover = cover.with(theme: active-theme)
-#let preface = preface.with(theme: active-theme, content: include "config/preface.typ", authors: authors)
+#let preface = preface.with(theme: active-theme, content: include "../config/preface.typ", authors: authors)
 #let outline = outline.with(theme: active-theme)
 #let chapter-cover = chapter-cover.with(theme: active-theme)
 #let definition = create-block.with(active-theme.blocks.definition)

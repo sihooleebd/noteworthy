@@ -1,75 +1,60 @@
 #import "../../templates/templater.typ": *
 
-= Calculus Visualization
+= Vectors (Vectorplot)
 
-Tools for visualizing limits, derivatives, and integrals.
+Visualize vectors with automatic scaling and labeling.
 
-== Limits and Holes
+== Basic Vectors
 
-Visualize discontinuities using the `hole` parameter.
+#let u = vector(3, 2, label: $arrow(u)$)
+#let v = vector(1, 3, label: $arrow(v)$, style: (stroke: red))
 
-#let rational(x) = if x == 1 { 2 } else { (x * x - 1) / (x - 1) }
+#blank-canvas(u, v)
 
-#cartesian-canvas(
-  x-domain: (-1, 3),
-  y-domain: (0, 4),
-  graph(rational, domain: (-1, 3), hole: (1,), label: $f(x) = (x^2-1)/(x-1)$),
+== Vector Addition
+
+The parallelogram method:
+
+#let a = vector(3, 0, label: $arrow(a)$)
+#let b = vector(1, 2, label: $arrow(b)$)
+
+#blank-canvas(
+  a,
+  b,
+  vec-add(a, b, helplines: true),
 )
 
-== Derivatives (Tangents & Normals)
+== Vector with Custom Origin
 
-Visualize instantaneous rates of change.
-
-#let curve(x) = x * x / 4 + 1
-#let t = 2
-
-#cartesian-canvas(
-  x-domain: (-1, 4),
-  y-domain: (0, 6),
-  graph(curve, domain: (-1, 4), label: $f(x) = x^2/4 + 1$),
-  tangent(curve, t, length: 3, style: (stroke: (paint: blue, dash: "dashed"))),
-  normal(curve, t, length: 3, style: (stroke: (paint: red, dash: "dotted"))),
-  point(t, curve(t), label: $P(2, 2)$),
-)
-
-== Integrals (Riemann Sums)
-
-Visualize area approximation using Riemann sums.
-
-#let f-int(x) = calc.sqrt(x) + 0.5
-#let area-dom = (0.5, 3.5)
+#let origin-vec = vector(2, 1, origin: (1, 1), label: $arrow(w)$)
 
 #cartesian-canvas(
   x-domain: (0, 4),
   y-domain: (0, 3),
-  graph(f-int, domain: (0, 4), label: $f(x) = sqrt(x) + 0.5$),
-  riemann-sum(f-int, area-dom, 6, method: "left", label: "Left Sum"),
+  origin-vec,
 )
 
-#cartesian-canvas(
-  x-domain: (0, 4),
-  y-domain: (0, 3),
-  graph(f-int, domain: (0, 4)),
-  riemann-sum(f-int, area-dom, 8, method: "midpoint", label: "Midpoint Sum"),
+== Multiple Vectors
+
+#let v1 = vector(2, 0, label: $hat(i)$, style: (stroke: red))
+#let v2 = vector(0, 2, label: $hat(j)$, style: (stroke: green))
+#let v3 = vector(2, 2, label: $hat(i) + hat(j)$, style: (stroke: blue))
+
+#blank-canvas(v1, v2, v3)
+
+== Vector Projection
+
+Project vector $arrow(a)$ onto $arrow(b)$:
+
+#let proj-a = vector(8, 6, label: $arrow(a)$)
+#let proj-b = vector(10, 0, label: $arrow(b)$)
+
+#blank-canvas(
+  proj-a,
+  proj-b,
+  vec-project(proj-a, proj-b, label: $"proj"_(arrow(a)) arrow(b)$, helplines: true),
 )
 
-#cartesian-canvas(
-  x-domain: (0, 4),
-  y-domain: (0, 3),
-  graph(f-int, domain: (0, 4)),
-  riemann-sum(f-int, area-dom, 10, method: "right", label: "Right Sum"),
-)
-
-#cartesian-canvas(
-  x-domain: (0, 4),
-  y-domain: (0, 3),
-  graph(f-int, domain: (0, 4)),
-  riemann-sum(f-int, area-dom, 12, method: "trapezoid", label: "Trapezoid Sum"),
-)
-
-#cartesian-canvas(
-  x-domain: (0, 4),
-  y-domain: (0, 3),
-  graph(f-int, domain: (0, 4)),
-  riemann-sum(f-int, area-dom, 50, method: "trapezoid", label: "∫ f(x) dx", smooth: true),
-)
+#note("Vector Notation")[
+  Vectors are defined by `vector(dx, dy, ...)` where `dx` and `dy` are the components.
+]

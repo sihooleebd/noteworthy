@@ -23,45 +23,31 @@ class HierarchyEditor(ListEditor):
         self.items = []
         for ci, ch in enumerate(self.hierarchy):
             self.items.append(("ch_title", ci, None, ch))
-            self.items.append(("ch_number", ci, None, ch))
             self.items.append(("ch_summary", ci, None, ch))
             for pi, p in enumerate(ch.get("pages", [])):
                 self.items.append(("pg_title", ci, pi, p))
-                self.items.append(("pg_number", ci, pi, p))
             self.items.append(("add_page", ci, None, None))
         self.items.append(("add_chapter", None, None, None))
     
     def _get_value(self, item):
         t, ci, pi, _ = item
         if t == "ch_title": return self.hierarchy[ci]["title"]
-        elif t == "ch_number": return self.hierarchy[ci].get("number", "")
         elif t == "ch_summary": return self.hierarchy[ci]["summary"]
         elif t == "pg_title": return self.hierarchy[ci]["pages"][pi]["title"]
-        elif t == "pg_number": return self.hierarchy[ci]["pages"][pi].get("number", "")
         return ""
     
     def _set_value(self, val):
         t, ci, pi, _ = self.items[self.cursor]
         val = val.strip()
         
-        if t in ("ch_number", "pg_number"):
-            if not val:
-                if t == "ch_number": self.hierarchy[ci].pop("number", None)
-                else: self.hierarchy[ci]["pages"][pi].pop("number", None)
-            else:
-                try: real_val = int(val)
-                except: real_val = val
-                
-                if t == "ch_number": self.hierarchy[ci]["number"] = real_val
-                else: self.hierarchy[ci]["pages"][pi]["number"] = real_val
-                
-        elif t == "ch_title": self.hierarchy[ci]["title"] = val
+        if t == "ch_title": self.hierarchy[ci]["title"] = val
         elif t == "ch_summary": self.hierarchy[ci]["summary"] = val
         elif t == "pg_title": self.hierarchy[ci]["pages"][pi]["title"] = val
         
         self.modified = True; self._build_items()
     
     def _add_chapter(self):
+        # No id field needed - position in array determines mapping
         new_ch = {"title": "New Chapter", "summary": "", "pages": []}
         self.hierarchy.append(new_ch)
         self.modified = True
@@ -71,6 +57,7 @@ class HierarchyEditor(ListEditor):
                 self.cursor = i; break
     
     def _add_page(self, ci):
+        # No id field needed - position in array determines mapping
         new_page = {"title": "New Page"}
         self.hierarchy[ci]["pages"].append(new_page)
         self.modified = True
@@ -78,13 +65,13 @@ class HierarchyEditor(ListEditor):
     
     def _delete_current(self):
         t, ci, pi, _ = self.items[self.cursor]
-        if t in ("ch_title", "ch_summary", "ch_number"):
+        if t in ("ch_title", "ch_summary"):
             if len(self.hierarchy) > 1:
                 del self.hierarchy[ci]
                 self.modified = True
                 self._build_items()
                 self.cursor = min(self.cursor, len(self.items) - 1)
-        elif t in ("pg_title", "pg_number"):
+        elif t == "pg_title":
             del self.hierarchy[ci]["pages"][pi]
             self.modified = True
             self._build_items()
@@ -154,27 +141,13 @@ class HierarchyEditor(ListEditor):
         val_x = x + left_w + 2
         
         if t == "ch_title":
-            ch_count = len(self.hierarchy)
-            width_digits = 3 if ch_count >= 100 else 2
-            explicit_num = self.hierarchy[ci].get("number")
-            ch_num = str(explicit_num) if explicit_num is not None else str(ci + 1)
-            
-            if self.config.get("pad-chapter-id", True) and explicit_num is None:
-                ch_num = ch_num.zfill(width_digits)
-                
+            # Just show "Chapter" without number
             label = self.config.get("chapter-name", "Chapter")
-            label_disp = f"{label} {ch_num}"
             
-            TUI.safe_addstr(self.scr, y, x + 4, label_disp[:left_w-6], curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
+            TUI.safe_addstr(self.scr, y, x + 4, label[:left_w-6], curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
             
             val = str(self._get_value(item))
             TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
-            
-        elif t == "ch_number":
-            TUI.safe_addstr(self.scr, y, x + 6, "Number", curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
-            val = str(self._get_value(item))
-            if not val: val = "(auto)"
-            TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else curses.A_DIM))
             
         elif t == "ch_summary":
             TUI.safe_addstr(self.scr, y, x + 6, "Summary", curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
@@ -182,15 +155,10 @@ class HierarchyEditor(ListEditor):
             TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
             
         elif t == "pg_title":
-            TUI.safe_addstr(self.scr, y, x + 6, "Page Title", curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
+            # Just show "Page" without number
+            TUI.safe_addstr(self.scr, y, x + 6, "Page", curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
             val = str(self._get_value(item))
             TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
-            
-        elif t == "pg_number":
-            TUI.safe_addstr(self.scr, y, x + 8, "Page Num", curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
-            val = str(self._get_value(item))
-            if not val: val = "(auto)"
-            TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else curses.A_DIM))
             
         elif t == "add_page":
             TUI.safe_addstr(self.scr, y, x + 6, "+ Add page...", curses.color_pair(3 if selected else 4) | (curses.A_BOLD if selected else curses.A_DIM))

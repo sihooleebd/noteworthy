@@ -1,53 +1,37 @@
 #import "../../templates/templater.typ": *
 
-= Vectors (Geoplot)
+= Content Blocks Overview
 
-Visualize vectors using the unified object system.
+Noteworthy provides 9 semantic block types for structuring educational content.
 
-== Vector Objects
+== The Block Types
 
-#let u = vector(3, 2, label: $arrow(u)$, origin: (0, 0))
-#let v = vector(1, 3, label: $arrow(v)$, origin: (0, 0), style: (stroke: red))
+=== Definition & Theorem
 
-#blank-canvas(u, v)
+#definition("Limit")[
+  The limit of $f(x)$ as $x$ approaches $a$ is $L$ if for every $epsilon > 0$ there exists $delta > 0$ such that $|f(x) - L| < epsilon$ whenever $0 < |x - a| < delta$.
+]
 
-== Vector Addition
+#theorem("Squeeze Theorem")[
+  If $g(x) <= f(x) <= h(x)$ for all $x$ near $a$, and $lim_(x -> a) g(x) = lim_(x -> a) h(x) = L$, then $lim_(x -> a) f(x) = L$.
+]
 
-Demonstrating the parallelogram method using object composition:
+=== Equation & Notation
 
-#let a = vector(3, 0, label: $arrow(a)$)
-#let b = vector(1, 2, label: $arrow(b)$)
-#let vec-sum = vec-add(a, b)
-// Create display object for sum
-#let sum-obj = vector(vec-sum.x, vec-sum.y, label: $sum$, style: (stroke: green))
+#equation("Euler's Identity")[
+  $ e^(i pi) + 1 = 0 $
+]
 
-// Dashed projection lines
-#let b-shifted = vector(b.x, b.y, origin: (a.x, a.y), style: (stroke: (dash: "dashed", paint: gray)))
-#let a-shifted = vector(a.x, a.y, origin: (b.x, b.y), style: (stroke: (dash: "dashed", paint: gray)))
+#notation("Big-O Notation")[
+  $O(n)$ denotes an upper bound on the growth rate of an algorithm.
+]
 
-#blank-canvas(
-  a,
-  b,
-  sum-obj,
-  b-shifted,
-  a-shifted,
-)
+=== Note & Analysis
 
-== Vector Projection
+#note("Remember")[
+  Limits describe behavior as we approach a point, not necessarily at the point itself.
+]
 
-Visualizing projection of $a$ onto $b$.
-
-#let vec-a = vector(2, 3, label: $arrow(a)$)
-#let vec-b = vector(4, 0, label: $arrow(b)$)
-#let proj = vec-project(vec-a, vec-b)
-#let proj-obj = vector(proj.x, proj.y, label: $"proj"_b a$, style: (stroke: blue, thickness: 2pt))
-
-// Perpendicular drop
-#let drop = segment((proj.x, proj.y), (vec-a.x, vec-a.y), style: (stroke: (dash: "dotted")))
-
-#blank-canvas(
-  vec-a,
-  vec-b,
-  proj-obj,
-  drop,
-)
+#analysis("Convergence")[
+  The sequence $a_n = 1/n$ converges to 0 because for any $epsilon > 0$, choosing $N > 1/epsilon$ ensures $|a_n| < epsilon$ for all $n > N$.
+]

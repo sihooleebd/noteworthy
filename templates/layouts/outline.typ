@@ -1,5 +1,24 @@
 #import "../setup.typ": *
 
+// Get folder info from sys.inputs (passed from Python build)
+#let chapter-folders-str = sys.inputs.at("chapter-folders", default: none)
+#let chapter-folders = if chapter-folders-str != none {
+  json(bytes(chapter-folders-str))
+} else {
+  range(hierarchy.len()).map(i => str(i))
+}
+
+#let page-folders-str = sys.inputs.at("page-folders", default: none)
+#let page-folders = if page-folders-str != none {
+  json(bytes(page-folders-str))
+} else {
+  let result = (:)
+  for (i, ch) in hierarchy.enumerate() {
+    result.insert(str(i), range(ch.pages.len()).map(j => str(j)))
+  }
+  result
+}
+
 #let outline(
   theme: (:),
 ) = {
@@ -8,7 +27,6 @@
   let page-map-file = sys.inputs.at("page-map-file", default: none)
 
   let page-map = if page-map-str != none {
-    // Parse JSON using bytes
     json(bytes(page-map-str))
   } else if page-map-file != none {
     json(page-map-file)
@@ -21,7 +39,7 @@
     fill: theme.page-fill,
     margin: (x: 2.5cm, y: 2.5cm),
   )[
-    #metadata("outline") <outline>
+    #std.metadata("outline") <outline>
     #line(length: 100%, stroke: 1pt + theme.text-muted)
     #v(0.5cm)
 
@@ -37,12 +55,14 @@
     #line(length: 100%, stroke: 1pt + theme.text-muted)
     #v(1.5cm)
 
-    // Read directly from hierarchy in config.typ
+    // Read directly from hierarchy
     #for (i, chapter-entry) in hierarchy.enumerate() {
-      // Fixed: use custom number if available
-      let explicit-num = chapter-entry.at("number", default: none)
-      let ch-num = if explicit-num != none { str(explicit-num) } else { str(i + 1) }
-      let chap-id = format-chapter-id(ch-num, hierarchy.len())
+      // Get folder name from sorted list (positional mapping)
+      let ch-folder = if i < chapter-folders.len() { chapter-folders.at(i) } else { str(i) }
+      let chap-id = format-chapter-id(ch-folder, hierarchy.len())
+
+      // Get page files for this chapter
+      let pg-files = page-folders.at(str(i), default: range(chapter-entry.pages.len()).map(j => str(j)))
 
       block(breakable: false)[
         #text(
@@ -75,7 +95,7 @@
         column-gutter: 1.5em,
 
         ..for (j, page-entry) in chapter-entry.pages.enumerate() {
-          // Fixed: use index-based keys for page-map
+          // Use index-based keys for page-map
           let page-key = str(i) + "/" + str(j)
           let page-num = if page-map != (:) and page-key in page-map {
             str(page-map.at(page-key))
@@ -83,10 +103,9 @@
             "—"
           }
 
-          // Added: use format-page-id for display
-          let explicit-pg-num = page-entry.at("number", default: none)
-          let pg-num-val = if explicit-pg-num != none { str(explicit-pg-num) } else { str(j + 1) }
-          let full-id = ch-num + "." + pg-num-val
+          // Get file name from sorted list (positional mapping)
+          let pg-file = if j < pg-files.len() { pg-files.at(j) } else { str(j) }
+          let full-id = ch-folder + "." + pg-file
           let page-display-id = format-page-id(full-id, chapter-entry.pages.len(), hierarchy.len())
 
           (

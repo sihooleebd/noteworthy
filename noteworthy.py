@@ -7,8 +7,6 @@ import urllib.parse
 import shutil
 from pathlib import Path
 
-# ... (rest of imports)
-
 def bootstrap(branch='master'):
     repo_api = f'https://api.github.com/repos/sihooleebd/noteworthy/git/trees/{branch}?recursive=1'
     raw_base = f'https://raw.githubusercontent.com/sihooleebd/noteworthy/{branch}/'
@@ -22,17 +20,39 @@ def bootstrap(branch='master'):
         print(f'Error fetching file list: {e}')
         return False
 
+    # User config files that should NOT be downloaded (user creates these)
+    USER_CONFIG_FILES = {
+        'config/metadata.json',
+        'config/constants.json',
+        'config/hierarchy.json',
+        'config/snippets.typ',
+        'config/preface.typ',
+    }
+
     files = []
     for item in data.get('tree', []):
         if item.get('type') != 'blob':
             continue
         p = item['path']
-        if p.startswith('noteworthy/') or p.startswith('templates/') or p == 'noteworthy.py':
-            # Changes for the user request: "JUST BRING THE SCHEMES"
-            # We want to skip the default config/hierarchy/preface so we don't load the "tutor" content.
-            # But we must ensure schemes.json is still downloaded.
-            if p.startswith('templates/config/') and not p.endswith('schemes.json'):
-                continue
+        
+        # Download noteworthy/ Python package
+        if p.startswith('noteworthy/'):
+            files.append(p)
+            continue
+            
+        # Download templates/
+        if p.startswith('templates/'):
+            files.append(p)
+            continue
+            
+        # Download config/ (excluding user files)
+        if p.startswith('config/'):
+            if p not in USER_CONFIG_FILES:
+                files.append(p)
+            continue
+            
+        # Download noteworthy.py itself
+        if p == 'noteworthy.py':
             files.append(p)
 
     print(f'Downloading {len(files)} files...')
@@ -84,19 +104,19 @@ if __name__ == "__main__":
         if force:
             print("Force updating: Removing existing directories...")
             
-            # Backup config files
+            # Backup user config files
             backups = []
-            files_to_save = ['config.json', 'hierarchy.json', 'preface.typ']
-            for fname in files_to_save:
-                src = Path(f'templates/config/{fname}')
+            files_to_save = ['config/metadata.json', 'config/constants.json', 'config/hierarchy.json', 'config/preface.typ']
+            for fpath in files_to_save:
+                src = Path(fpath)
                 if src.exists():
-                    dst = Path(f'{fname}.bak')
+                    dst = Path(f'{src.name}.bak')
                     try:
                         shutil.copy2(src, dst)
                         backups.append((dst, src))
-                        print(f"Backed up {fname}")
+                        print(f"Backed up {src.name}")
                     except Exception as e:
-                        print(f"Warning: Failed to backup {fname}: {e}")
+                        print(f"Warning: Failed to backup {src.name}: {e}")
 
             if Path('noteworthy').exists():
                 shutil.rmtree('noteworthy')
@@ -108,7 +128,6 @@ if __name__ == "__main__":
         success = bootstrap(branch)
         
         # Restore backups regardless of success (to save user data)
-        # If bootstrap successful, it overwrites defaults. If failed, it restores what it can.
         if force and backups:
             print("Restoring configuration files...")
             for dst, src in backups:
@@ -126,16 +145,10 @@ if __name__ == "__main__":
                 sys.exit(1)
         else:
             print("Update complete.")
-            
-        # Avoid running main if we just updated and main is potentially old/new mix? 
-        # Actually standard flow falls through. But we modified logic flow slightly.
-        # Original code had if not bootstrap: ... else: print.
-        # I refactored to check success variable.
-
 
     # Ensure preface.typ exists to prevent build errors, but keep it empty
-    preface_path = Path('templates/config/preface.typ')
-    if Path('templates/config').exists() and not preface_path.exists():
+    preface_path = Path('config/preface.typ')
+    if Path('config').exists() and not preface_path.exists():
         try:
             preface_path.write_text('')
             print("Created empty preface.typ")

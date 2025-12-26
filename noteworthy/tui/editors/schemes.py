@@ -2,16 +2,44 @@ import curses
 import json
 from ..base import ListEditor, TUI
 from ..components.common import LineEditor
-from ...config import SCHEMES_FILE
+from ...config import SCHEMES_DIR
 from ...utils import load_config_safe, save_config, register_key
 from ..keybinds import ConfirmBind, KeyBind
 
 def extract_themes():
+    """Extract theme names from the schemes folder."""
     try:
-        schemes = json.loads(SCHEMES_FILE.read_text())
-        return list(schemes.keys())
+        data_dir = SCHEMES_DIR / 'data'
+        if not data_dir.exists():
+            return []
+        return [f.stem for f in sorted(data_dir.glob('*.json'))]
     except:
         return []
+
+def load_all_schemes():
+    """Load all schemes from individual files in config/schemes/data/."""
+    schemes = {}
+    data_dir = SCHEMES_DIR / 'data'
+    if data_dir.exists():
+        for f in sorted(data_dir.glob('*.json')):
+            try:
+                schemes[f.stem] = json.loads(f.read_text())
+            except:
+                pass
+    return schemes
+
+def save_scheme(name, scheme_data):
+    """Save a single scheme to its individual file."""
+    data_dir = SCHEMES_DIR / 'data'
+    data_dir.mkdir(parents=True, exist_ok=True)
+    target = data_dir / f'{name}.json'
+    target.write_text(json.dumps(scheme_data, indent=4))
+
+def delete_scheme_file(name):
+    """Delete a scheme file."""
+    target = SCHEMES_DIR / 'data' / f'{name}.json'
+    if target.exists():
+        target.unlink()
 
 def hex_to_curses_color(hex_color):
     if not hex_color or not hex_color.startswith('#'):
@@ -57,7 +85,7 @@ def hex_to_curses_color(hex_color):
 class ThemeDetailEditor(ListEditor):
 
     def __init__(self, scr, schemes, theme_name):
-        super().__init__(scr, f'Editing \"{theme_name}\"')
+        super().__init__(scr, f'Editing "{theme_name}"')
         self.schemes = schemes
         self.theme_name = theme_name
         self.theme = self.schemes[self.theme_name]
@@ -68,6 +96,8 @@ class ThemeDetailEditor(ListEditor):
         register_key(self.keymap, ConfirmBind(self.action_select))
 
     def save(self):
+        # Save individual theme file
+        save_scheme(self.theme_name, self.theme)
         return True
 
     def action_select(self, ctx):
@@ -180,8 +210,7 @@ class SchemeEditor(ListEditor):
 
     def __init__(self, scr):
         super().__init__(scr, 'Color Themes')
-        self.filepath = SCHEMES_FILE
-        self.schemes = self._load_schemes()
+        self.schemes = load_all_schemes()
         self.config = load_config_safe()
         self._build_items()
         self.box_title = 'Available Schemes'
@@ -210,11 +239,8 @@ class SchemeEditor(ListEditor):
                 self.config['display-mode'] = name
                 save_config(self.config)
 
-    def _load_schemes(self):
-        return json.loads(SCHEMES_FILE.read_text())
-
     def _load(self):
-        self.schemes = self._load_schemes()
+        self.schemes = load_all_schemes()
         self._build_items()
         self.cursor = min(self.cursor, max(0, len(self.items) - 1))
 
@@ -222,12 +248,11 @@ class SchemeEditor(ListEditor):
         self.items = sorted(list(self.schemes.keys())) + ['+ Add new scheme...']
 
     def save(self):
-        try:
-            SCHEMES_FILE.write_text(json.dumps(self.schemes, indent=4))
-            self.modified = False
-            return True
-        except:
-            return False
+        # Save all schemes to individual files
+        for name, scheme_data in self.schemes.items():
+            save_scheme(name, scheme_data)
+        self.modified = False
+        return True
 
     def _create_new(self):
         name = LineEditor(self.scr, title='New Scheme Name', initial_value='new-scheme').run()
@@ -252,6 +277,7 @@ class SchemeEditor(ListEditor):
                     "title": b.title()
                 }
             self.schemes[name] = blank_scheme
+            save_scheme(name, blank_scheme)
             self._build_items()
             self.modified = True
             try:
@@ -277,6 +303,7 @@ class SchemeEditor(ListEditor):
                 save_config(self.config)
         
         del self.schemes[name]
+        delete_scheme_file(name)
         self._build_items()
         self.modified = True
         self.cursor = min(self.cursor, len(self.items) - 1)

@@ -3,19 +3,28 @@ import shutil
 import sys
 import subprocess
 from pathlib import Path
-from .config import CONFIG_FILE, SETTINGS_FILE, SYSTEM_CONFIG_DIR, INDEXIGNORE_FILE, HIERARCHY_FILE, BASE_DIR
+from .config import METADATA_FILE, CONSTANTS_FILE, SETTINGS_FILE, SYSTEM_CONFIG_DIR, INDEXIGNORE_FILE, HIERARCHY_FILE, BASE_DIR
 
 def load_config_safe():
+    """Load merged config from both metadata and constants files"""
+    config = {}
     try:
-        if CONFIG_FILE.exists():
-            return json.loads(CONFIG_FILE.read_text())
+        if METADATA_FILE.exists():
+            config.update(json.loads(METADATA_FILE.read_text()))
+        if CONSTANTS_FILE.exists():
+            config.update(json.loads(CONSTANTS_FILE.read_text()))
     except:
         pass
-    return {}
+    return config
 
 def save_config(config):
+    """Save config to split files (metadata and constants)"""
+    metadata_keys = {'title', 'subtitle', 'authors', 'affiliation', 'logo'}
     try:
-        CONFIG_FILE.write_text(json.dumps(config, indent=4))
+        metadata = {k: v for k, v in config.items() if k in metadata_keys}
+        constants = {k: v for k, v in config.items() if k not in metadata_keys}
+        METADATA_FILE.write_text(json.dumps(metadata, indent=4))
+        CONSTANTS_FILE.write_text(json.dumps(constants, indent=4))
         return True
     except:
         return False

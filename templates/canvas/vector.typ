@@ -98,6 +98,7 @@
   v2,
   label-sum: none,
   mode: "parallelogram",
+  helplines: true,
 ) = {
   import cetz.draw: *
 
@@ -115,10 +116,10 @@
   draw-vector(theme: theme, start: (sx, sy), v1)
   draw-vector(theme: theme, start: (sx, sy), v2)
 
-  if mode == "parallelogram" {
-    // Parallelogram sides
-    line(v1-end, sum-end, stroke: (paint: gray, thickness: 0.5pt))
-    line(v2-end, sum-end, stroke: (paint: gray, thickness: 0.5pt))
+  if mode == "parallelogram" and helplines {
+    // Parallelogram sides - Dotted and same strength
+    line(v1-end, sum-end, stroke: (paint: gray, thickness: 1.5pt, dash: "dotted"))
+    line(v2-end, sum-end, stroke: (paint: gray, thickness: 1.5pt, dash: "dotted"))
   } else {
     // Tip-to-tail: draw v2 from end of v1
     draw-vector(theme: theme, start: v1-end, v2)
@@ -136,6 +137,7 @@
   vec-a,
   vec-b,
   label-proj: none,
+  helplines: true,
 ) = {
   import cetz.draw: *
 
@@ -153,18 +155,40 @@
 
   // Extended b axis
   let b-scale = 1.3
-  line(
-    (sx - vec-b.x * 0.2, sy - vec-b.y * 0.2),
-    (sx + vec-b.x * b-scale, sy + vec-b.y * b-scale),
-    stroke: (paint: gray, dash: "dashed"),
-  )
+  if helplines {
+    line(
+      (sx - vec-b.x * 0.2, sy - vec-b.y * 0.2),
+      (sx + vec-b.x * b-scale, sy + vec-b.y * b-scale),
+      stroke: (paint: gray, thickness: 1.5pt, dash: "dotted"),
+    )
+  }
 
   // Original vectors
   draw-vector(theme: theme, start: (sx, sy), vec-a)
   draw-vector(theme: theme, start: (sx, sy), vec-b)
 
   // Perpendicular from a to projection
-  line(a-end, proj-end, stroke: (paint: accent-col, dash: "dotted"))
+  if helplines {
+    line(a-end, proj-end, stroke: (paint: gray, thickness: 1.5pt, dash: "dotted"))
+
+    // Right angle marker
+    // Construct simplified point objects for the drawer
+    let p-a = (x: a-end.at(0), y: a-end.at(1))
+    let p-proj = (x: proj-end.at(0), y: proj-end.at(1))
+    let p-start = (x: sx, y: sy)
+
+    // Draw directly using the helper
+    draw-right-angle-marker(
+      (
+        type: "right-angle",
+        p1: p-a,
+        vertex: p-proj,
+        p2: p-start,
+        radius: 0.3,
+      ),
+      theme,
+    )
+  }
 
   // Projection vector
   let proj-labeled = vector(proj.x, proj.y, label: label-proj, style: (stroke: hl-col))

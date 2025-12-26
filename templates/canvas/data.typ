@@ -50,10 +50,10 @@
   result
 }
 
-/// Load data from CSV file and create data series
+/// Create data series from CSV text
 ///
 /// Parameters:
-/// - path: Path to CSV file (relative to document)
+/// - csv-text: CSV content string (use `read("path.csv")` to load)
 /// - plot-type: "scatter", "line", or "both" (default: "scatter")
 /// - has-header: Whether CSV has header row (default: true)
 /// - x-col: Column index for x values (default: 0)
@@ -61,7 +61,7 @@
 /// - label: Optional label
 /// - style: Optional style overrides
 #let csv-series(
-  path,
+  csv-text,
   plot-type: "scatter",
   has-header: true,
   x-col: 0,
@@ -69,7 +69,6 @@
   label: none,
   style: auto,
 ) = {
-  let csv-text = read(path)
   let data = parse-csv(csv-text, has-header: has-header, x-col: x-col, y-col: y-col)
   data-series(data, plot-type: plot-type, label: label, style: style)
 }

@@ -162,7 +162,7 @@
     color
   }
 
-  circle(coords, radius: 0.08, fill: fill-col, stroke: none)
+  line(coords, coords, stroke: (cap: "round", thickness: 5pt, paint: fill-col))
 
   if label != none {
     content(

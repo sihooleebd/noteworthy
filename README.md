@@ -39,7 +39,7 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
 
 ### Themes
 
-[View the Themes Gallery](themes.md)
+[View the Theme Catalogue (PDF)](images/theme-library.pdf)
 
 ### Framework Components
 
@@ -47,7 +47,7 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
 - **Content Block Library**: Pre-styled components for definitions, theorems, examples, proofs, and solutions
 - **Plotting Engine**: Advanced 2D/3D plotting, vector diagrams, and geometric constructions
 - **Document Structure**: Automated table of contents, chapter covers, and page headers
-- **Configuration Layer**: JSON-based settings in `templates/config/`
+- **Configuration Layer**: JSON-based settings in `config/`
 - **Build System**: Incremental compilation with automatic PDF merging
 - **Interactive Editors**: TUI-based editors for config, hierarchy, schemes, and snippets
 
@@ -59,6 +59,14 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
 - **Extensible**: Add custom blocks, themes, and plotting functions
 - **Production-Ready**: Used for real educational materials
 - **Incremental Build**: Compile sections individually, merge automatically
+
+## Documentation
+
+**[Go to Documentation Hub](docs/HOME.md)**
+- [Plotting & Geometry](docs/PLOTTING.md)
+- [Theming & Styling](docs/THEMING.md)
+- [Workflow & Tools](docs/TOOLS.md)
+- [Components & Blocks](docs/COMPONENTS.md)
 
 ## Quick Start
 
@@ -171,13 +179,9 @@ typst compile templates/parser.typ --input target=01.01 section.pdf
 
 ## Contributing
 
-Contributions are welcome! To contribute:
+## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.
 
 ## License
 

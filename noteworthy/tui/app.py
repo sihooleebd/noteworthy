@@ -1,21 +1,35 @@
 import curses
 import json
-from ..config import CONFIG_FILE, HIERARCHY_FILE, SCHEMES_FILE
+from ..config import METADATA_FILE, CONSTANTS_FILE, HIERARCHY_FILE, SCHEMES_DIR, BASE_DIR
 from ..core.templates import restore_templates
-from ..core.sync import sync_hierarchy_with_content
 from .base import TUI
 from .wizards.init import InitWizard
 from .wizards.hierarchy import HierarchyWizard
 from .wizards.schemes import SchemesWizard
-from .wizards.sync import SyncWizard
 from .menus import MainMenu
 from .editors import show_editor_menu
 from .editors.hierarchy import HierarchyEditor
 from .components.build import BuildMenu, run_build_process
 from .components.common import show_error_screen
 
+def combine_schemes():
+    """Generate names.json manifest from config/schemes/data/ folder"""
+    schemes_dir = SCHEMES_DIR
+    themes_dir = schemes_dir / 'data'
+    if not themes_dir.exists():
+        return
+    
+    names = []
+    for scheme_file in sorted(themes_dir.glob('*.json')):
+        if scheme_file.name != 'names.json':  # Skip the manifest itself
+            names.append(scheme_file.stem)  # filename without .json
+    
+    if names:
+        names_file = schemes_dir / 'names.json'
+        names_file.write_text(json.dumps(names, indent=4))
+
 def needs_init():
-    return not (CONFIG_FILE.exists() and HIERARCHY_FILE.exists() and SCHEMES_FILE.exists())
+    return not (METADATA_FILE.exists() and HIERARCHY_FILE.exists() and (SCHEMES_DIR / 'names.json').exists())
 
 def run_build(scr):
     try:
@@ -31,9 +45,10 @@ def run_app(scr, args):
     TUI.init_colors()
     if not TUI.check_terminal_size(scr):
         return
+    combine_schemes()  # Combine schemes folder into names.json
     restore_templates(scr)
     if needs_init():
-        if not CONFIG_FILE.exists():
+        if not METADATA_FILE.exists():
             if InitWizard(scr).run() is None:
                 return
         if not HIERARCHY_FILE.exists():
@@ -42,14 +57,11 @@ def run_app(scr, args):
                 return
             elif res == 'edit':
                 HierarchyEditor(scr).run()
-        if not SCHEMES_FILE.exists():
+        if not (SCHEMES_DIR / 'names.json').exists():
             if SchemesWizard(scr).run() is None:
                 return
-    if HIERARCHY_FILE.exists():
-        missing, new = sync_hierarchy_with_content()
-        if missing or new:
-            if SyncWizard(scr, missing, new).run() is False:
-                return
+    
+    # No sync wizard - just run the main menu
     while True:
         menu = MainMenu(scr)
         action = menu.run()

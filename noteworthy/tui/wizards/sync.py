@@ -2,7 +2,7 @@ import curses
 import json
 from pathlib import Path
 from ..base import TUI
-from ...config import HIERARCHY_FILE, CONFIG_FILE
+from ...config import HIERARCHY_FILE, METADATA_FILE
 from ...utils import load_config_safe, get_formatted_name, load_indexignore, save_indexignore
 
 class SyncWizard:

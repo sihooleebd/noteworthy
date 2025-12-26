@@ -159,26 +159,27 @@ def create_pdf_metadata(chapters, page_map, output_file):
             bookmarks.extend([f'BookmarkBegin', f'BookmarkTitle: {title}', f'BookmarkLevel: 1', f'BookmarkPageNumber: {page_map[key]}'])
 
     for ci, ch in chapters:
-        ch_id = str(ch.get('number', ci + 1))
-        ch_key = f'chapter-{ci + 1}'
+        ch_id = str(ch.get('id', ci))  # Use id field
+        ch_key = f'chapter-{ch_id}'
         
         if ch_key in page_map:
             start_pg = page_map[ch_key]
             bookmarks.extend([f'BookmarkBegin', f"BookmarkTitle: {ch['title']}", f'BookmarkLevel: 1', f"BookmarkPageNumber: {start_pg}"])
             
-            pdf_path = BUILD_DIR / f'10_chapter_{ci}_cover.pdf'
+            pdf_path = BUILD_DIR / f'10_chapter_{ch_id}_cover.pdf'
             
             sub_marks = extract_bookmarks(pdf_path, 1, start_pg)
             for sm in sub_marks:
                 bookmarks.extend([f'BookmarkBegin', f"BookmarkTitle: {sm['title']}", f'BookmarkLevel: {sm["level"]}', f"BookmarkPageNumber: {sm['page']}"])
 
         for ai, p in enumerate(ch['pages']):
-            key = f'{ci}/{ai}'
+            pg_id = str(p.get('id', ai))  # Use id field
+            key = f'{ch_id}/{pg_id}'
             if key in page_map:
                 start_pg = page_map[key]
                 bookmarks.extend([f'BookmarkBegin', f"BookmarkTitle: {p['title']}", f'BookmarkLevel: 2', f"BookmarkPageNumber: {start_pg}"])
                 
-                pdf_path = BUILD_DIR / f'20_page_{ci}_{ai}.pdf'
+                pdf_path = BUILD_DIR / f'20_page_{ch_id}_{pg_id}.pdf'
                 
                 sub_marks = extract_bookmarks(pdf_path, 2, start_pg)
                 for sm in sub_marks:
@@ -221,6 +222,26 @@ class BuildManager:
         max_workers = opts.get('threads', os.cpu_count() or 1)
         flags = opts.get('typst_flags', [])
         
+        # Scan content/ folder to get sorted folder names
+        content_dir = Path('content')
+        ch_folders = []
+        pg_folders = {}  # {chapter_index: [page_file_stems]}
+        
+        if content_dir.exists():
+            ch_dirs = sorted([d for d in content_dir.iterdir() if d.is_dir() and d.name.isdigit()], key=lambda d: int(d.name))
+            idx = 0
+            for ch_dir in ch_dirs:
+                pg_files = sorted([f.stem for f in ch_dir.glob('*.typ') if f.stem.isdigit()], key=lambda s: int(s))
+                if pg_files:  # Only include folders with .typ files
+                    ch_folders.append(ch_dir.name)
+                    pg_folders[str(idx)] = pg_files
+                    idx += 1
+        
+        # Add folder info to flags (passed to all compile calls)
+        folder_flags = flags.copy()
+        folder_flags.extend(['--input', f'chapter-folders={json.dumps(ch_folders)}'])
+        folder_flags.extend(['--input', f'page-folders={json.dumps(pg_folders)}'])
+        
         tasks = []
         
         if opts['frontmatter']:
@@ -233,17 +254,19 @@ class BuildManager:
                 pass
             if config.get('display-outline', True):
                 tasks.append(('outline', 'front', 'outline', self.build_dir / '02_outline.pdf', 'TOC'))
-                
+        
+        # Use array indices for task keys - folder names are just for display
         for ci, ch in chapters:
-            ch_id = str(ch.get('number', ci + 1))
-            ch_key = f'chapter-{ci + 1}'
+            ch_folder = ch_folders[ci] if ci < len(ch_folders) else str(ci)
+            ch_key = f'chapter-{ci}'
             if config.get('display-chap-cover', True):
-                tasks.append((ch_key, 'chapter', f'chapter-{ci}', self.build_dir / f'10_chapter_{ci}_cover.pdf', f"Chapter {ch_id}"))
+                tasks.append((ch_key, 'chapter', f'chapter-{ci}', self.build_dir / f'10_chapter_{ci}_cover.pdf', f"Chapter {ch_folder}"))
             
+            pg_files = pg_folders.get(str(ci), [])
             for ai, p in enumerate(ch['pages']):
+                pg_file = pg_files[ai] if ai < len(pg_files) else str(ai)
                 key = f'{ci}/{ai}'
-                pg_num = p.get('number', ai + 1)
-                tasks.append((key, 'section', key, self.build_dir / f'20_page_{ci}_{ai}.pdf', f"Section {pg_num}: {p['title']}"))
+                tasks.append((key, 'section', key, self.build_dir / f'20_page_{ci}_{ai}.pdf', f"Section {pg_file}: {p['title']}"))
 
         task_map = {t[0]: t for t in tasks}
         projected_offsets = {}
@@ -295,7 +318,7 @@ class BuildManager:
                         t_data[2],
                         t_data[3],
                         page_offset=offset,
-                        extra_flags=flags,
+                        extra_flags=folder_flags,
                         log_callback=lambda m: None 
                     )
                     future_to_key[f] = key
@@ -374,26 +397,27 @@ def create_pdf_metadata(chapters, page_map, output_file):
             bookmarks.extend([f'BookmarkBegin', f'BookmarkTitle: {title}', f'BookmarkLevel: 1', f'BookmarkPageNumber: {page_map[key]}'])
 
     for ci, ch in chapters:
-        ch_id = str(ch.get('number', ci + 1))
-        ch_key = f'chapter-{ci + 1}'
+        ch_id = str(ch.get('id', ci))  # Use id field
+        ch_key = f'chapter-{ch_id}'
         
         if ch_key in page_map:
             start_pg = page_map[ch_key]
             bookmarks.extend([f'BookmarkBegin', f"BookmarkTitle: {ch['title']}", f'BookmarkLevel: 1', f"BookmarkPageNumber: {start_pg}"])
             
-            pdf_path = BUILD_DIR / f'10_chapter_{ci}_cover.pdf'
+            pdf_path = BUILD_DIR / f'10_chapter_{ch_id}_cover.pdf'
             
             sub_marks = extract_bookmarks(pdf_path, 1, start_pg)
             for sm in sub_marks:
                 bookmarks.extend([f'BookmarkBegin', f"BookmarkTitle: {sm['title']}", f'BookmarkLevel: {sm["level"]}', f"BookmarkPageNumber: {sm['page']}"])
 
         for ai, p in enumerate(ch['pages']):
-            key = f'{ci}/{ai}'
+            pg_id = str(p.get('id', ai))  # Use id field
+            key = f'{ch_id}/{pg_id}'
             if key in page_map:
                 start_pg = page_map[key]
                 bookmarks.extend([f'BookmarkBegin', f"BookmarkTitle: {p['title']}", f'BookmarkLevel: 2', f"BookmarkPageNumber: {start_pg}"])
                 
-                pdf_path = BUILD_DIR / f'20_page_{ci}_{ai}.pdf'
+                pdf_path = BUILD_DIR / f'20_page_{ch_id}_{pg_id}.pdf'
                 
                 sub_marks = extract_bookmarks(pdf_path, 2, start_pg)
                 for sm in sub_marks:

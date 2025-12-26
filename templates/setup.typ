@@ -2,43 +2,46 @@
 // CONFIGURATION LOADING
 // =====================
 
-// Load configuration from JSON
-#let config = json("config/config.json")
+// Load configuration from split JSON files
+#let metadata = json("../config/metadata.json")
+#let constants = json("../config/constants.json")
 
-// Export configuration variables
-#let title = config.title
-#let subtitle = config.subtitle
-#let authors = config.authors
-#let affiliation = config.affiliation
-#let logo = config.logo
-#let show-solution = config.show-solution
-#let solutions-text = config.solutions-text
-#let problems-text = config.problems-text
-#let chapter-name = config.chapter-name
-#let subchap-name = config.subchap-name
-#let font = config.font
-#let title-font = config.title-font
-#let display-cover = config.display-cover
-#let display-outline = config.display-outline
-#let display-chap-cover = config.display-chap-cover
-#let box-margin = eval(config.box-margin)
-#let box-inset = eval(config.box-inset)
-#let display-mode = config.display-mode
-#let pad-chapter-id = config.pad-chapter-id
-#let pad-page-id = config.pad-page-id
-#let heading-numbering = config.heading-numbering
-#let hierarchy = json("config/hierarchy.json")
+// Export metadata variables
+#let title = metadata.title
+#let subtitle = metadata.subtitle
+#let authors = metadata.authors
+#let affiliation = metadata.affiliation
+#let logo = metadata.logo
+
+// Export constants variables
+#let show-solution = constants.show-solution
+#let solutions-text = constants.solutions-text
+#let problems-text = constants.problems-text
+#let chapter-name = constants.chapter-name
+#let subchap-name = constants.subchap-name
+#let font = constants.font
+#let title-font = constants.title-font
+#let display-cover = constants.display-cover
+#let display-outline = constants.display-outline
+#let display-chap-cover = constants.display-chap-cover
+#let box-margin = eval(constants.box-margin)
+#let box-inset = eval(constants.box-inset)
+#let display-mode = constants.display-mode
+#let pad-chapter-id = constants.pad-chapter-id
+#let pad-page-id = constants.pad-page-id
+#let heading-numbering = constants.heading-numbering
+#let hierarchy = json("../config/hierarchy.json")
 
 // Load schemes
-#import "./default-schemes.typ": *
+#import "./load-schemes.typ": *
 
-#import "./default-schemes.typ": schemes
+#import "./load-schemes.typ": schemes
 #let colorschemes = schemes
 
 #let active-theme = colorschemes.at(lower(display-mode), default: schemes.at("noteworthy-dark"))
 
 // Import snippets
-#import "config/snippets.typ": *
+#import "../config/snippets.typ": *
 
 // =====================
 // HELPER FUNCTIONS

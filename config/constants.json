@@ -1,12 +1,4 @@
 {
-    "title": "Noteworthy Framework",
-    "subtitle": "Examples & Documentation",
-    "authors": [
-        "Sihoo Lee",
-        "Lee Hojun"
-    ],
-    "affiliation": "Noteworthy",
-    "logo": null,
     "show-solution": true,
     "solutions-text": "Solutions",
     "problems-text": "Problems",

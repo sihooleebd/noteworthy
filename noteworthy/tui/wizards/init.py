@@ -1,9 +1,8 @@
 import curses
 import json
 from ..base import TUI
-from ...config import CONFIG_FILE, LOGO
-from ...config import CONFIG_FILE, LOGO
-from ...utils import load_config_safe, register_key, handle_key_event
+from ...config import METADATA_FILE, CONSTANTS_FILE, LOGO
+from ...utils import load_config_safe, save_config, register_key, handle_key_event
 from ..editors.schemes import extract_themes
 from ..keybinds import KeyBind, NavigationBind, ConfirmBind
 
@@ -214,8 +213,7 @@ class InitWizard:
                 return None
                 
         try:
-            CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-            CONFIG_FILE.write_text(json.dumps(self.config, indent=4))
-            return True
+            METADATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+            return save_config(self.config)
         except:
             return None

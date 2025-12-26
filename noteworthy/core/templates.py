@@ -4,18 +4,21 @@ import json
 import curses
 import shutil
 from pathlib import Path
-from ..config import SCHEMES_FILE
+from ..config import SCHEMES_DIR
 from ..tui.base import TUI
 
 def restore_templates(scr):
-    EXCLUDE_FILES = {
-        'templates/config/config.json',
-        'templates/config/hierarchy.json',
-        'templates/config/snippets.typ',
+    """Restore missing templates and config files from GitHub."""
+    # User config files that should NOT be overwritten if they exist locally
+    USER_CONFIG_FILES = {
+        'config/metadata.json',
+        'config/constants.json',
+        'config/hierarchy.json',
+        'config/snippets.typ',
+        'config/preface.typ',
     }
     
     # OPTIMIZATION: Check if templates already exist locally to avoid network delay
-    # We check a core file that should always be present
     if Path('templates/templater.typ').exists():
         return
 
@@ -26,7 +29,7 @@ def restore_templates(scr):
             data = json.loads(response.read().decode())
         if 'tree' not in data:
             return
-        # Helper to fetch file content
+            
         def fetch_content(path):
             safe_path = urllib.parse.quote(path)
             url = f'https://raw.githubusercontent.com/sihooleebd/noteworthy/master/{safe_path}'
@@ -35,54 +38,46 @@ def restore_templates(scr):
 
         missing_files = []
         for item in data['tree']:
-            if item['type'] == 'blob' and item['path'].startswith('templates/'):
-                path_str = item['path']
+            if item['type'] != 'blob':
+                continue
                 
-                # Special handling for schemes.json (Smart Merge)
-                if path_str == 'templates/config/schemes.json':
-                    local_path = Path(path_str)
-                    try:
-                        remote_json = json.loads(fetch_content(path_str))
-                        if local_path.exists():
-                            try:
-                                local_json = json.loads(local_path.read_text())
-                            except:
-                                local_json = {}
-                        else:
-                            local_json = {}
-                        
-                        # Merge: Add missing defaults, preserve local changes/customs
-                        modified = False
-                        for name, scheme in remote_json.items():
-                            if name not in local_json:
-                                local_json[name] = scheme
-                                modified = True
-                        
-                        if modified or not local_path.exists():
-                            local_path.parent.mkdir(parents=True, exist_ok=True)
-                            local_path.write_text(json.dumps(local_json, indent=4))
-                    except:
-                        pass
-                    continue
-
-                if path_str in EXCLUDE_FILES:
-                    continue
-                    
-                if path_str == 'templates/config/preface.typ':
-                    local_path = Path(path_str)
-                    if not local_path.exists():
-                        local_path.parent.mkdir(parents=True, exist_ok=True)
-                        local_path.write_text('')
-                    continue
-                    
-                if path_str == 'templates/config/snippets.typ':
-                    local_path = Path(path_str)
-                    if not local_path.exists():
-                        local_path.parent.mkdir(parents=True, exist_ok=True)
-                        local_path.write_text('// Custom snippets - define your own shortcuts here\n')
-                    continue
-                    
+            path_str = item['path']
+            
+            # Handle templates/ files
+            if path_str.startswith('templates/'):
                 local_path = Path(path_str)
+                if not local_path.exists():
+                    missing_files.append(path_str)
+                continue
+            
+            # Handle config/ files
+            if path_str.startswith('config/'):
+                local_path = Path(path_str)
+                
+                # Skip user config files if they exist
+                if path_str in USER_CONFIG_FILES:
+                    if not local_path.exists():
+                        # Create blank user files
+                        local_path.parent.mkdir(parents=True, exist_ok=True)
+                        if path_str.endswith('.json'):
+                            local_path.write_text('{}')
+                        elif path_str == 'config/snippets.typ':
+                            local_path.write_text('// Custom snippets - define your own shortcuts here\n')
+                        else:
+                            local_path.write_text('')
+                    continue
+                
+                # Handle schemes - individual theme files in config/schemes/data/
+                if path_str.startswith('config/schemes/data/') and path_str.endswith('.json'):
+                    if not local_path.exists():
+                        missing_files.append(path_str)
+                    continue
+                    
+                # Handle names.json manifest (can be regenerated, skip)
+                if path_str == 'config/schemes/names.json':
+                    continue
+                    
+                # Other config files
                 if not local_path.exists():
                     missing_files.append(path_str)
                     
@@ -91,7 +86,7 @@ def restore_templates(scr):
 
         scr.clear()
         h, w = scr.getmaxyx()
-        msg = f'Restoring {len(missing_files)} missing templates...'
+        msg = f'Restoring {len(missing_files)} missing files...'
         TUI.safe_addstr(scr, h // 2 + 2, (w - len(msg)) // 2, msg, curses.color_pair(4))
         scr.refresh()
         

@@ -1,45 +1,71 @@
 #import "../../templates/templater.typ": *
 
-= Tables
+= Geometry (Geoplot)
 
-Themed tables for data presentation.
+Create Euclidean geometry constructions with the geometry object system.
 
-== Standard Table
+== Points & Labels
 
-#table-plot(
-  headers: ("Name", "Role", "Level"),
-  data: (
-    ("Alice", "Engineer", "Senior"),
-    ("Bob", "Designer", "Mid"),
-    ("Charlie", "Manager", "Lead"),
-  ),
+#let A = point(0, 0, label: "A")
+#let B = point(3, 0, label: "B")
+#let C = point(1.5, 2.5, label: "C")
+
+#cartesian-canvas(
+  x-domain: (-0.5, 4),
+  y-domain: (-0.5, 3),
+  A,
+  B,
+  C,
 )
 
-== Compact Table
+== Lines & Segments
 
-#compact-table(
-  headers: ("ID", "Status"),
-  data: (
-    ("001", "OK"),
-    ("002", "Fail"),
-    ("003", "OK"),
-  ),
+#cartesian-canvas(
+  x-domain: (-0.5, 4),
+  y-domain: (-0.5, 3),
+  A,
+  B,
+  C,
+  segment(A, B, label: "c"),
+  segment(B, C, label: "a"),
+  segment(C, A, label: "b"),
 )
 
-== Value Table (Function Values)
+== Triangles
 
-#value-table(
-  variable: $x$,
-  values: ("1", "2", "3"),
-  func: $f(x)$,
-  results: ("2", "4", "8"),
+The `triangle` object draws all three sides:
+
+#cartesian-canvas(
+  x-domain: (-0.5, 4),
+  y-domain: (-0.5, 3),
+  triangle(A, B, C, label: "△ABC"),
+  A,
+  B,
+  C,
 )
 
-== Grid Table
+== Circles
 
-#grid-table(
-  data: (
-    ("100", "120"),
-    ("110", "130"),
-  ),
+#let center = point(2, 1.5, label: "O")
+
+#cartesian-canvas(
+  x-domain: (-0.5, 5),
+  y-domain: (-0.5, 4),
+  center,
+  circle(center, 1.5, label: "r = 1.5"),
+)
+
+== Angles
+
+#let origin = point(0, 0, label: "O")
+#let p1 = point(2, 0)
+#let p2 = point(1.5, 1.5)
+
+#cartesian-canvas(
+  x-domain: (-0.5, 3),
+  y-domain: (-0.5, 2.5),
+  origin,
+  segment(origin, p1),
+  segment(origin, p2),
+  angle(p1, origin, p2, label: "{angle}"),
 )

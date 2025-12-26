@@ -1,0 +1,50 @@
+[
+    {
+        "title": "Getting Started",
+        "summary": "Introduction to Noteworthy basics.",
+        "pages": [
+            {
+                "title": "Welcome"
+            },
+            {
+                "title": "Quick Start"
+            }
+        ]
+    },
+    {
+        "title": "Content Blocks",
+        "summary": "Semantic blocks for structuring educational content: definitions, theorems, proofs, examples, and solutions.",
+        "pages": [
+            {
+                "title": "Introduction"
+            },
+            {
+                "title": "Content Blocks"
+            },
+            {
+                "title": "Layout Elements"
+            }
+        ]
+    },
+    {
+        "title": "Geometry & Visualization",
+        "summary": "Powerful plotting system for Euclidean geometry, vectors, and 3D space.",
+        "pages": [
+            {
+                "title": "Introduction"
+            },
+            {
+                "title": "Geometry (Geoplot)"
+            },
+            {
+                "title": "Vectors (Vectorplot)"
+            },
+            {
+                "title": "3D Space (Spaceplot)"
+            },
+            {
+                "title": "Custom Plots"
+            }
+        ]
+    }
+]

@@ -12,7 +12,7 @@
   } else {
     number
   }
-  
+
   page(
     paper: "a4",
     fill: theme.page-fill,
@@ -20,11 +20,11 @@
     header: none,
     footer: none,
   )[
-    #metadata((number, title, chapter-id)) <chapter-cover>
+    #std.metadata((number, title, chapter-id)) <chapter-cover>
     #line(length: 100%, stroke: 1pt + theme.text-muted)
-    
+
     #v(2cm)
-    
+
     #if number != "" {
       text(
         font: title-font,
@@ -33,9 +33,9 @@
         tracking: 2pt,
       )[#number]
     }
-    
+
     #v(0.5em)
-    
+
     #text(
       font: title-font,
       size: 40pt,
@@ -44,13 +44,13 @@
     )[
       #title
     ]
-    
+
     #v(1cm)
-    
+
     #line(length: 100%, stroke: 1pt + theme.text-muted)
-    
+
     #v(2cm)
-    
+
     #if summary != none {
       block(width: 100%)[
         #text(
@@ -64,7 +64,7 @@
         ]
       ]
     }
-    
+
     #v(1fr)
   ]
   counter(page).step()

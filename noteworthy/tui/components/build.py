@@ -23,6 +23,36 @@ class BuildMenu:
         self.threads = settings.get('threads', default_threads)
         self.typst_flags = settings.get('typst_flags', [])
         saved_pages = set((tuple(p) for p in settings.get('selected_pages', [])))
+        
+        # Scan content/ folder to get sorted folder/file names
+        from pathlib import Path
+        content_dir = Path('content')
+        self.ch_folders = []
+        self.pg_folders = {}
+        self.mismatch_error = None  # Error message if hierarchy doesn't match content/
+        
+        if content_dir.exists():
+            ch_dirs = sorted([d for d in content_dir.iterdir() if d.is_dir() and d.name.isdigit()], key=lambda d: int(d.name))
+            idx = 0
+            for ch_dir in ch_dirs:
+                pg_files = sorted([f.stem for f in ch_dir.glob('*.typ') if f.stem.isdigit()], key=lambda s: int(s))
+                if pg_files:  # Only include folders with .typ files
+                    self.ch_folders.append(ch_dir.name)
+                    self.pg_folders[idx] = pg_files
+                    idx += 1
+        
+        # Check for hierarchy/content mismatch
+        if len(hierarchy) != len(self.ch_folders):
+            self.mismatch_error = f"MISMATCH: hierarchy.json has {len(hierarchy)} chapters but content/ has {len(self.ch_folders)} folders ({', '.join(self.ch_folders)})"
+        else:
+            for ci, ch in enumerate(hierarchy):
+                expected_pages = len(ch.get('pages', []))
+                actual_pages = len(self.pg_folders.get(ci, []))
+                if expected_pages != actual_pages:
+                    ch_folder = self.ch_folders[ci] if ci < len(self.ch_folders) else str(ci)
+                    self.mismatch_error = f"MISMATCH: Chapter {ch_folder} has {expected_pages} pages in hierarchy but {actual_pages} files in content/{ch_folder}/"
+                    break
+        
         self.items, self.selected = ([], {})
         for ci, ch in enumerate(hierarchy):
             self.items.append(('ch', ci, None))
@@ -70,12 +100,15 @@ class BuildMenu:
                     ch = self.hierarchy[ci]
                     cb = '[✓]' if self.ch_selected(ci) else '[~]' if self.ch_partial(ci) else '[ ]'
                     TUI.safe_addstr(self.scr, y, bx + 4, cb, curses.color_pair(2 if self.ch_selected(ci) else 3 if self.ch_partial(ci) else 4))
-                    TUI.safe_addstr(self.scr, y, bx + 7, f" Ch {ch.get('number', ci + 1)}: {ch['title']}"[:bw - 12], curses.color_pair(1) | (curses.A_BOLD if cur else 0))
+                    ch_folder = self.ch_folders[ci] if ci < len(self.ch_folders) else str(ci)
+                    TUI.safe_addstr(self.scr, y, bx + 7, f" Ch {ch_folder}: {ch['title']}"[:bw - 12], curses.color_pair(1) | (curses.A_BOLD if cur else 0))
                 else:
                     p = self.hierarchy[ci]['pages'][ai]
                     sel = self.selected.get((ci, ai), False)
                     TUI.safe_addstr(self.scr, y, bx + 6, '[✓]' if sel else '[ ]', curses.color_pair(2 if sel else 4))
-                    TUI.safe_addstr(self.scr, y, bx + 9, f" {p.get('number', ai + 1)}: {p['title']}"[:bw - 14], curses.color_pair(4) | (curses.A_BOLD if cur else 0))
+                    pg_files = self.pg_folders.get(ci, [])
+                    pg_folder = pg_files[ai] if ai < len(pg_files) else str(ai)
+                    TUI.safe_addstr(self.scr, y, bx + 9, f" {pg_folder}: {p['title']}"[:bw - 14], curses.color_pair(4) | (curses.A_BOLD if cur else 0))
 
         def opts(sy, bx, bw):
             for i, (l, v, k) in enumerate([('Debug Mode:', self.debug, 'd'), ('Frontmatter:', self.frontmatter, 'f'), ('Leave PDFs:', self.leave_pdfs, 'l')]):
@@ -143,13 +176,26 @@ class BuildMenu:
             TUI.draw_box(self.scr, cy, bx, list_h, bw, 'Select Chapters')
             items(cy, bx, bw, list_h)
             
-        footer = 'Space: Toggle  a/n: All/None  Enter: Build  Esc: Back'
+        # Display mismatch error if present
+        if self.mismatch_error:
+            err_msg = self.mismatch_error[:self.w - 4]
+            TUI.safe_addstr(self.scr, self.h - 3, (self.w - len(err_msg)) // 2, err_msg, curses.color_pair(6) | curses.A_BOLD)
+            footer = 'ERROR: Fix hierarchy.json or content/ to proceed  Esc: Back'
+        else:
+            footer = 'Space: Toggle  a/n: All/None  Enter: Build  Esc: Back'
         TUI.safe_addstr(self.scr, self.h - 1, (self.w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
         self.scr.refresh()
 
     def run(self):
         from ..editors import show_editor_menu
         from ..menus import show_keybindings_menu
+        from .common import show_error_screen
+        
+        # Show error screen immediately if there's a mismatch
+        if self.mismatch_error:
+            show_error_screen(self.scr, self.mismatch_error)
+            return None
+            
         self.refresh()
         while True:
             if not TUI.check_terminal_size(self.scr):
@@ -160,7 +206,10 @@ class BuildMenu:
             elif k == ord('?'):
                 show_keybindings_menu(self.scr)
             elif k in (ord('\n'), curses.KEY_ENTER, 10):
-                res = {'selected_pages': [(ci, ai) for ci in range(len(self.hierarchy)) for ai in range(len(self.hierarchy[ci]['pages'])) if self.selected.get((ci, ai))], 'debug': self.debug, 'frontmatter': self.frontmatter, 'leave_individual': self.leave_pdfs, 'typst_flags': self.typst_flags, 'threads': self.threads}
+                if self.mismatch_error:
+                    # Don't allow build when there's a mismatch
+                    continue
+                res = {'selected_pages': [(ci, ai) for ci in range(len(self.hierarchy)) for ai in range(len(self.hierarchy[ci]['pages'])) if self.selected.get((ci, ai))], 'debug': self.debug, 'frontmatter': self.frontmatter, 'leave_individual': self.leave_pdfs, 'typst_flags': self.typst_flags, 'threads': self.threads, 'ch_folders': self.ch_folders, 'pg_folders': self.pg_folders}
                 save_settings({'debug': self.debug, 'frontmatter': self.frontmatter, 'leave_pdfs': self.leave_pdfs, 'typst_flags': self.typst_flags, 'selected_pages': res['selected_pages'], 'threads': self.threads})
                 return res
             elif k in (curses.KEY_UP, ord('k')):

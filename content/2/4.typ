@@ -1,40 +1,48 @@
 #import "../../templates/templater.typ": *
 
-= Data Plotting
+= 3D Space (Spaceplot)
 
-Plot data from CSV files or arrays using scatter plots and line plots.
+Render 3D scenes with perspective projection.
 
-== Scatter Plot from CSV
+== Coordinate Axes
 
-Load data directly from a CSV file and display as a scatter plot.
-
-#let csv-data = parse-csv(read("../data/sample.csv"))
-#let sample-data = data-series(csv-data, plot-type: "scatter", label: "Measurements")
-#let trend-data = data-series(csv-data, plot-type: "line", label: "Trend")
-#let combined-data = data-series(csv-data, plot-type: "both", label: "Data")
-
-#cartesian-canvas(
-  x-domain: (0, 6),
-  y-domain: (0, 12),
-  sample-data,
+#space-canvas(
+  view: (x: -90deg, y: -70deg, z: 0deg),
+  vector-3d(2, 0, 0, origin: (0, 0, 0), label: $x$, style: (stroke: red)),
+  vector-3d(0, 2, 0, origin: (0, 0, 0), label: $y$, style: (stroke: green)),
+  vector-3d(0, 0, 2, origin: (0, 0, 0), label: $z$, style: (stroke: blue)),
 )
 
-== Line Plot from Array
+== 3D Points
 
-Create a line plot from inline data.
-
-#cartesian-canvas(
-  x-domain: (0, 6),
-  y-domain: (0, 12),
-  trend-data,
+#space-canvas(
+  view: (x: -90deg, y: -70deg, z: 0deg),
+  vector-3d(2, 0, 0, origin: (0, 0, 0), label: $x$, style: (stroke: red)),
+  vector-3d(0, 2, 0, origin: (0, 0, 0), label: $y$, style: (stroke: green)),
+  vector-3d(0, 0, 2, origin: (0, 0, 0), label: $z$, style: (stroke: blue)),
+  point-3d(1, 2, 1.5, label: "P"),
 )
 
-== Combined Scatter + Line
+== 3D Vectors
 
-Show both points and connecting lines.
-
-#cartesian-canvas(
-  x-domain: (0, 6),
-  y-domain: (0, 12),
-  combined-data,
+#space-canvas(
+  view: (x: -90deg, y: -70deg, z: 0deg),
+  vector-3d(3, 3, 3, origin: (0, 0, 0), label: $arrow(r)$),
+  point-3d(3, 3, 3, label: "P(3,3,3)"),
 )
+
+== Custom View Angles
+
+Change perspective with the `view` parameter:
+
+#space-canvas(
+  view: (x: -45deg, y: -45deg, z: 0deg),
+  vector-3d(2, 0, 0, origin: (0, 0, 0), style: (stroke: red)),
+  vector-3d(0, 2, 0, origin: (0, 0, 0), style: (stroke: green)),
+  vector-3d(0, 0, 2, origin: (0, 0, 0), style: (stroke: blue)),
+  point-3d(1, 1, 1, label: "(1,1,1)"),
+)
+
+#note("View Angle")[
+  The `view` parameter takes rotation angles for each axis to control the 3D projection.
+]

@@ -2,7 +2,7 @@ import curses
 import json
 from ..base import ListEditor, TUI
 from ..components.common import LineEditor
-from ...config import CONFIG_FILE, PREFACE_FILE
+from ...config import METADATA_FILE, CONSTANTS_FILE, PREFACE_FILE
 from ...utils import load_config_safe, save_config, register_key
 from ..keybinds import ConfirmBind, ToggleBind, KeyBind
 from .schemes import extract_themes
@@ -13,7 +13,6 @@ class ConfigEditor(ListEditor):
     def __init__(self, scr):
         super().__init__(scr, 'General Settings')
         self.config = load_config_safe()
-        self.filepath = CONFIG_FILE
         self.themes = extract_themes()
         self._build_items()
         self.box_title = 'Configuration'

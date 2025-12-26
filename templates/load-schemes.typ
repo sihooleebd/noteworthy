@@ -1,5 +1,8 @@
-// Load color schemes from JSON
-#let schemes-data = json("config/schemes.json")
+// Load color schemes from individual JSON files
+// Reads names.json manifest, then loads each scheme by name
+
+// Read scheme names from manifest
+#let scheme-names = json("../config/schemes/names.json")
 
 // Helper to convert hex string to rgb color
 #let hex-to-rgb(hex) = {
@@ -34,11 +37,11 @@
   )
 }
 
-// Build all schemes from JSON
-// Build all schemes from JSON dynamically
+// Build all schemes from individual files
 #let schemes = {
   let s = (:)
-  for (name, data) in schemes-data {
+  for name in scheme-names {
+    let data = json("../config/schemes/data/" + name + ".json")
     s.insert(name, build-scheme(data))
   }
   s

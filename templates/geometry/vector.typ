@@ -44,7 +44,14 @@
 
 /// Check if object is a vector
 #let is-vector(obj) = {
-  type(obj) == dictionary and obj.at("type", default: none) == "vector"
+  (
+    type(obj) == dictionary
+      and (
+        obj.at("type", default: none) == "vector"
+          or obj.at("type", default: none) == "vector-addition"
+          or obj.at("type", default: none) == "vector-projection"
+      )
+  )
 }
 
 // =====================================================
@@ -52,8 +59,8 @@
 // =====================================================
 
 /// Add two vectors
-#let vec-add(v1, v2) = {
-  if v1.z != none or v2.z != none {
+#let vec-add(v1, v2, helplines: true) = {
+  let res = if v1.z != none or v2.z != none {
     let z1 = v1.at("z", default: 0)
     let z2 = v2.at("z", default: 0)
     let z = if z1 == none { 0 } else { z1 }
@@ -62,6 +69,17 @@
   } else {
     vector(v1.x + v2.x, v1.y + v2.y)
   }
+
+  // Return specialized object with metadata
+  (
+    res
+      + (
+        type: "vector-addition",
+        v1: v1,
+        v2: v2,
+        helplines: helplines,
+      )
+  )
 }
 
 /// Subtract two vectors (v1 - v2)
@@ -130,11 +148,21 @@
 #let vec-unit = vec-normalize
 
 /// Project v1 onto v2
-#let vec-project(v1, v2) = {
+#let vec-project(v1, v2, label: none, helplines: true) = {
   let dot = vec-dot(v1, v2)
   let mag-sq = vec-dot(v2, v2)
-  if mag-sq == 0 { vector(0, 0) } else {
-    vec-scale(v2, dot / mag-sq)
+  if mag-sq == 0 { vector(0, 0, label: label) } else {
+    let res = vec-scale(v2, dot / mag-sq)
+    (
+      res
+        + (
+          type: "vector-projection",
+          v1: v1,
+          v2: v2,
+          label: label,
+          helplines: helplines,
+        )
+    )
   }
 }
 

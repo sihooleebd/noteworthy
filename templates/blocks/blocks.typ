@@ -21,7 +21,7 @@
     1 <= args.pos().len() and args.pos().len() <= 2,
     message: "create-block must be called with (config, name, body) or (config, body)",
   )
-  [#metadata("block") <block-start>]
+  [#std.metadata("block") <block-start>]
   let title = ""
   let body = none
   if args.pos().len() == 2 {
@@ -57,7 +57,7 @@
     number = pos.at(1)
   }
 
-  [#metadata("solution") <solution>]
+  [#std.metadata("solution") <solution>]
 
   let number-content = if number == auto {
     context {
