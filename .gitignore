@@ -1,37 +1,40 @@
-# Build artifacts
-templates/build/
-output.pdf
-content/**/*.pdf
+# General
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
 *.zip
-.build_settings.json
-
-# Typst cache
-.typst-cache/
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
+venv/
+.venv/
+.env
 
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
+# Editor/IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Temporary files
-*.tmp
-*.log
+# Project Specific
+templates/build/
+templates/systemconfig/
+exports/
+.build_settings.json
+build_settings.json
+.indexignore
 extract_hierarchy.typ
 
-.indexignore
-build_settings.json
+# PDFs
+# Ignore all PDFs in content directory
+content/**/*.pdf
 
-# Exports
-exports/
+# Ignore all PDFs at root except tutor.pdf
+/*.pdf
+!/tutor.pdf
 
+# Tests
 tests/
