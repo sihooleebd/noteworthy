@@ -837,7 +837,12 @@
 
   if obj.at("label", default: none) != none {
     // Place label at the end of the domain (right side)
-    let t-end = obj.domain.at(1)
+    // Clamp to visible x-domain for standard functions to avoid drawing labels far off-screen
+    let t-end = if obj.func-type == "standard" and x-domain != auto {
+      calc.min(obj.domain.at(1), x-domain.at(1))
+    } else {
+      obj.domain.at(1)
+    }
 
     let pt = if obj.func-type == "standard" {
       (t-end, (obj.f)(t-end))
