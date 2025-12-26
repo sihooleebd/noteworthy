@@ -23,7 +23,8 @@
     let fallback-pages = {
       let result = (:)
       for (i, ch) in hierarchy.enumerate() {
-        result.insert(str(i), range(1, ch.pages.len() + 1).map(j => str(j)))
+        // Use 0-based range to match file array indexing behavior
+        result.insert(str(i), range(ch.pages.len()).map(j => str(j)))
       }
       result
     }

@@ -473,12 +473,20 @@ def run_build_process(scr, hierarchy, opts):
         if opts['frontmatter'] and config.get('display-outline', True):
             ui.set_task('Regenerating TOC')
             out = BUILD_DIR / '02_outline.pdf'
+            
+            # Build folder_flags to pass chapter/page folder data
+            ch_folders = opts.get('ch_folders', [])
+            pg_folders = opts.get('pg_folders', {})
+            folder_flags = list(flags)
+            folder_flags.extend(['--input', f'chapter-folders={json.dumps(ch_folders)}'])
+            folder_flags.extend(['--input', f'page-folders={json.dumps(pg_folders)}'])
+            
             compile_target(
                 'outline', 
                 out, 
                 page_offset=page_map.get('outline', 0), 
                 page_map=page_map, 
-                extra_flags=flags, 
+                extra_flags=folder_flags, 
                 callback=ui.refresh, 
                 log_callback=ui.log_typst
             )
