@@ -19,7 +19,7 @@
   ..objects,
 ) = {
   let stroke-col = theme.at("plot", default: (:)).at("stroke", default: black)
-  let bg-col = theme.at("background", default: white)
+  let bg-col = theme.at("page-fill", default: white)
 
   // Flatten input - vec-add/vec-project return arrays
   let flat-objs = ()

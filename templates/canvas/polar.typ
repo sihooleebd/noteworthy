@@ -46,6 +46,7 @@
       x-max: effective-radius,
       y-min: -effective-radius,
       y-max: effective-radius,
+      legend-style: (fill: theme.at("page-fill", default: white), stroke: stroke-col),
 
       {
         // Workaround for cetz-plot crash: initialize data bounds

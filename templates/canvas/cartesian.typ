@@ -4,7 +4,7 @@
 
 #import "@preview/cetz:0.4.2"
 #import "@preview/cetz-plot:0.1.3": plot
-#import "draw.typ": draw-data-series-obj, draw-func-obj, draw-geo
+#import "draw.typ": draw-data-series-obj, draw-func-obj, draw-geo, format-label
 
 /// Create a Cartesian (rectangular) coordinate canvas
 /// Renders geometry objects with x-y axes.
@@ -76,6 +76,8 @@
       y-min: y-domain.at(0),
       y-max: y-domain.at(1),
 
+      legend-style: (fill: theme.at("page-fill", default: white), stroke: stroke-col),
+
       {
         // Workaround for cetz-plot annotation crash: initialize data bounds
         plot.add(((0, 0),), style: (stroke: none), mark: none)
@@ -90,6 +92,22 @@
               draw-func-obj(obj, theme, x-domain: x-domain, y-domain: y-domain, size: size)
             } else if t == "data-series" {
               draw-data-series-obj(obj, theme, x-domain: x-domain, y-domain: y-domain)
+            } else if t == "curve" {
+              // Draw curve via annotate, but add label to legend
+              let aspect = (x-domain, y-domain, size.at(0), size.at(1))
+              plot.annotate({ draw-geo(obj + (label: none), theme, bounds: bounds, aspect: aspect) })
+              // Add legend entry if label present
+              if obj.at("label", default: none) != none {
+                let pts = obj.points
+                let last = if pts.len() > 0 {
+                  let p = pts.last()
+                  if type(p) == dictionary { (p.x, p.y) } else { (p.at(0), p.at(1)) }
+                } else { (0, 0) }
+                let stroke-col = if obj.style != auto and obj.style != none and "stroke" in obj.style {
+                  obj.style.stroke
+                } else { theme.at("plot", default: (:)).at("stroke", default: black) }
+                plot.add((last,), style: (stroke: stroke-col), mark: none, label: format-label(obj, obj.label))
+              }
             } else if t == "vector" and is-handled(obj) {
               // Skip - handled by vec-add/vec-project
             } else if t != none {
@@ -191,6 +209,8 @@
       x-max: x-domain.at(1),
       y-min: y-domain.at(0),
       y-max: y-domain.at(1),
+
+      legend-style: (fill: theme.at("page-fill", default: white), stroke: stroke-col),
 
       {
         let bounds = (x: x-domain, y: y-domain)

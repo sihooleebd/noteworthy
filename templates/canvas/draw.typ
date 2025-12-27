@@ -286,7 +286,7 @@
   }
 
   if obj.label != none {
-    let bg-col = theme.at("background", default: white)
+    let bg-col = theme.at("page-fill", default: white)
     let stroke-col = theme.at("plot", default: (:)).at("stroke", default: black)
 
     // Smart anchor selection - prefer south, but use label-anchor if specified
@@ -314,7 +314,7 @@
   line(p1, p2, stroke: style.stroke)
 
   if obj.at("label", default: none) != none {
-    let bg-col = theme.at("background", default: white)
+    let bg-col = theme.at("page-fill", default: white)
 
     // For 2D segments, use smart positioning with angle-aware anchors
     if p1.len() == 2 {
@@ -471,7 +471,7 @@
   }
 
   if obj.at("label", default: none) != none {
-    let bg-col = theme.at("background", default: white)
+    let bg-col = theme.at("page-fill", default: white)
 
     // Configurable label angle (default 45°, can override with label-angle)
     let ang = obj.at("label-angle", default: 45deg)
@@ -605,7 +605,7 @@
     } else {
       obj.radius * 1.5
     }
-    let bg-col = theme.at("background", default: white)
+    let bg-col = theme.at("page-fill", default: white)
     content(
       (obj.vertex.x + label-r * calc.cos(mid-ang), obj.vertex.y + label-r * calc.sin(mid-ang)),
       text(fill: stroke-col, format-label(obj, obj.label)),
@@ -661,7 +661,7 @@
   line(..coords, close: true, stroke: style.stroke, fill: final-fill)
 
   if obj.at("label", default: none) != none {
-    let bg-col = theme.at("background", default: white)
+    let bg-col = theme.at("page-fill", default: white)
 
     // Calculate centroid for primary position, or use label-position override
     let pos-type = obj.at("label-position", default: "centroid")
@@ -755,7 +755,7 @@
   )
 
   if obj.at("label", default: none) != none {
-    let bg-col = theme.at("background", default: white)
+    let bg-col = theme.at("page-fill", default: white)
 
     // For 2D vectors, use smart label positioning with fallbacks
     if start.len() == 2 {
@@ -1204,42 +1204,18 @@
     }
   }
 
-  // Draw label if present
+  // Draw label in legend if present
   if obj.at("label", default: none) != none and data.len() > 0 {
-    // Place label near the last VISIBLE point
-    let last-pt = none
-
-    if bounds != none {
-      // Find last point inside bounds
-      for i in range(data.len() - 1, -1, step: -1) {
-        let pt = data.at(i)
-        if (
-          pt.at(0) >= bounds.x.at(0)
-            and pt.at(0) <= bounds.x.at(1)
-            and pt.at(1) >= bounds.y.at(0)
-            and pt.at(1) <= bounds.y.at(1)
-        ) {
-          last-pt = pt
-          break
-        }
-      }
-      // If no points inside but we have lines, maybe label intersection?
-      // For now, simpliest is last visible point.
-    } else {
-      last-pt = data.last()
-    }
-
-    if last-pt != none {
-      plot.annotate({
-        import cetz.draw: *
-        content(
-          (last-pt.at(0) + 0.3, last-pt.at(1)),
-          text(fill: stroke-col, obj.label),
-          anchor: "west",
-          padding: 0.05,
-        )
-      })
-    }
+    // Add an invisible point with label - creates legend entry
+    let last-pt = data.last()
+    plot.add(
+      (last-pt,),
+      style: (stroke: stroke-col),
+      mark: "o",
+      mark-style: (fill: fill-col, stroke: none),
+      mark-size: 0.001, // Invisible but triggers legend
+      label: obj.label,
+    )
   }
 }
 
