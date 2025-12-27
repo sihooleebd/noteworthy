@@ -1,55 +1,75 @@
 #import "../../templates/templater.typ": *
 
-= Canvas System Overview
+= Points & Lines
 
-The Noteworthy canvas system provides unified object-oriented plotting.
+The Shape module provides 2D geometric primitives.
 
-== Canvas Types
+== Creating Points
 
-Noteworthy provides four canvas types:
-
-#definition("cartesian-canvas")[
-  Standard 2D Cartesian coordinate system with axes,grids, and labels.
+#definition("point")[
+  Creates a point at coordinates $(x, y)$.
+  ```typst
+  point(x, y, label: "A", style: auto)
+  ```
 ]
-
-#definition("blank-canvas")[
-  Canvas without axes - useful for diagrams and geometric constructions.
-]
-
-#definition("polar-canvas")[
-  Polar coordinate system for circular plots.
-]
-
-#definition("space-canvas")[
-  3D coordinate system with perspective projection.
-]
-
-== Basic Example
-
-A simple Cartesian canvas with a point and line:
-
-#let A = point(1, 1, label: "A")
-#let B = point(3, 2, label: "B")
 
 #cartesian-canvas(
-  x-domain: (0, 4),
-  y-domain: (0, 3),
-  A,
-  B,
-  segment(A, B, label: "AB"),
+  x-tick: 1,
+  y-tick: 1,
+  point(2, 3, label: "A"),
+  point(-1, 2, label: "B"),
+  point(3, -1, label: "C"),
 )
 
-== Blank Canvas
+== Creating Lines
 
-For diagrams without coordinate axes:
+#definition("line")[
+  Creates an infinite line through two points.
+  ```typst
+  line(p1, p2, label: none, style: auto)
+  ```
+]
 
-#let P = point(0, 0, label: "P")
-#let Q = point(2, 0, label: "Q")
-#let R = point(1, 1.5, label: "R")
-
-#blank-canvas(
-  P,
-  Q,
-  R,
-  triangle(P, Q, R),
+#cartesian-canvas(
+  x-tick: 1,
+  y-tick: 1,
+  line(point(-2, -1), point(3, 2), label: $ell$),
 )
+
+== Line Segments
+
+Use `segment` for lines with definite endpoints:
+
+#definition("segment")[
+  Creates a finite line segment between two points.
+  ```typst
+  segment(p1, p2, label: none, style: auto)
+  ```
+]
+
+#cartesian-canvas(
+  x-tick: 1,
+  y-tick: 1,
+  point(-2, 1, label: "A"),
+  point(3, 2, label: "B"),
+  segment(point(-2, 1), point(3, 2)),
+)
+
+== Combining Points and Lines
+
+#example("Triangle Vertices")[
+  #let A = point(0, 0, label: "A")
+  #let B = point(4, 0, label: "B")
+  #let C = point(2, 3, label: "C")
+
+  #cartesian-canvas(
+    x-tick: 1,
+    y-tick: 1,
+    A,
+    B,
+    C,
+    segment(A, B),
+    segment(B, C),
+    segment(C, A),
+  )
+]

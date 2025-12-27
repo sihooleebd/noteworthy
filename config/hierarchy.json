@@ -1,49 +1,112 @@
 [
     {
-        "title": "Getting Started",
-        "summary": "Introduction to Noteworthy basics.",
-        "pages": [
-            {
-                "title": "Welcome"
-            },
-            {
-                "title": "Quick Start"
-            }
-        ]
-    },
-    {
-        "title": "Content Blocks",
-        "summary": "Semantic blocks for structuring educational content: definitions, theorems, proofs, examples, and solutions.",
+        "title": "Architecture & Modules",
+        "summary": "Understanding Noteworthy's modular structure and file organization.",
         "pages": [
             {
                 "title": "Introduction"
             },
             {
-                "title": "Content Blocks"
+                "title": "File Structure"
             },
             {
-                "title": "Layout Elements"
+                "title": "Module Overview"
             }
         ]
     },
     {
-        "title": "Geometry & Visualization",
-        "summary": "Powerful plotting system for Euclidean geometry, vectors, and 3D space.",
+        "title": "Block Module",
+        "summary": "Semantic content blocks for educational documents.",
         "pages": [
             {
-                "title": "Introduction"
+                "title": "Block Fundamentals"
             },
             {
-                "title": "Geometry (Geoplot)"
+                "title": "All Block Types"
+            }
+        ]
+    },
+    {
+        "title": "Shape Module",
+        "summary": "2D geometric primitives: points, lines, circles, polygons.",
+        "pages": [
+            {
+                "title": "Points & Lines"
             },
             {
-                "title": "Vectors (Vectorplot)"
+                "title": "Circles & Polygons"
             },
             {
-                "title": "3D Space (Spaceplot)"
+                "title": "Intersections & Constructions"
+            }
+        ]
+    },
+    {
+        "title": "Graph Module",
+        "summary": "Functions, vectors, and calculus operations.",
+        "pages": [
+            {
+                "title": "Function Plotting"
             },
             {
-                "title": "Custom Plots"
+                "title": "Vectors"
+            }
+        ]
+    },
+    {
+        "title": "Canvas Module",
+        "summary": "Plotting canvases for rendering shapes and graphs.",
+        "pages": [
+            {
+                "title": "Cartesian Canvas"
+            },
+            {
+                "title": "Polar & Trig Canvas"
+            },
+            {
+                "title": "3D Space Canvas"
+            }
+        ]
+    },
+    {
+        "title": "Data Module",
+        "summary": "Data visualization: tables, series, and curves.",
+        "pages": [
+            {
+                "title": "Tables"
+            },
+            {
+                "title": "Data Series & CSV"
+            },
+            {
+                "title": "Smooth Curves"
+            }
+        ]
+    },
+    {
+        "title": "Cover Module",
+        "summary": "Document covers and title pages.",
+        "pages": [
+            {
+                "title": "Cover Templates"
+            }
+        ]
+    },
+    {
+        "title": "Layout Module",
+        "summary": "Page layouts, outlines, and configuration.",
+        "pages": [
+            {
+                "title": "Layout & Config"
+            }
+        ]
+    },
+    {
+        "title": "Combi Module",
+        "summary": "Combinatorics visualizations: permutations, combinations, and counting.",
+        "pages": [
+            {
+                "title": "Combinatorics Visualizations"
             }
         ]
     }

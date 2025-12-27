@@ -1,43 +1,78 @@
 #import "../../templates/templater.typ": *
 
-= Proofs & Solutions
+= All Block Types
 
-Special blocks for mathematical reasoning and worked examples.
+A complete reference of every block type in the Block module.
 
-== Proof Block
+== Primary Blocks
 
-The `#proof` block automatically adds a QED symbol at the end.
+#definition("Definition Block")[
+  Use `#definition("Title")[...]` to define concepts.
+]
 
-#theorem("Sum of First n Integers")[
-  $ sum_(k=1)^n k = (n(n+1))/2 $
+#theorem("Theorem Block")[
+  Use `#theorem("Title")[...]` to state theorems.
+]
+
+#equation("Equation Block")[
+  Use `#equation("Title")[...]` for named equations:
+  $ E = m c^2 $
+]
+
+== Supporting Blocks
+
+#note("Note Block")[
+  Use `#note("Title")[...]` for important notes and tips.
+]
+
+#notation("Notation Block")[
+  Use `#notation("Title")[...]` to explain mathematical notation and symbols.
+]
+
+#analysis("Analysis Block")[
+  Use `#analysis("Title")[...]` for analysis, discussion, and elaboration.
+]
+
+== Proofs and Examples
+
+#proof("Simple Proof")[
+  Use `#proof[...]` or `#proof("Title")[...]` for mathematical proofs.
+
+  The proof block has a special QED marker at the end.
+]
+
+#example("Example with Solution")[
+  Use `#example("Title")[...]` for worked examples.
+
+  Solutions can be nested inside examples:
+
+  #solution[
+    Use `#solution[...]` for solutions.
+
+    Visibility is controlled by `show-solution` in `config/constants.json`.
+  ]
+]
+
+== Nesting Blocks
+
+Blocks can be nested for complex content:
+
+#theorem("Fundamental Theorem")[
+  A theorem statement here.
 
   #proof[
-    *Base case:* When $n = 1$: $sum_(k=1)^1 k = 1 = (1 dot 2)/2$. ✓
+    The proof of the theorem.
+  ]
 
-    *Inductive step:* Assume true for $n$. Then:
-    $ sum_(k=1)^(n+1) k = sum_(k=1)^n k + (n+1) = (n(n+1))/2 + (n+1) $
-    $ = (n+1)(n/2 + 1) = (n+1)(n+2)/2 $
+  #example("Application")[
+    An example applying the theorem.
 
-    Thus true for $n+1$. $therefore$ By induction, the formula holds for all $n >= 1$.
+    #solution[
+      The worked solution.
+    ]
   ]
 ]
 
-== Example & Solution Blocks
+== Styling
 
-#example("Derivative of $x^3$")[
-  Find $d/(d x) x^3$ using the power rule.
-  #solution[
-    Using the power rule $d/(d x) x^n = n x^(n-1)$:
-    $ d/(d x) x^3 = 3x^2 $
-  ]
-]
-
-
-#example("Integration")[
-  Evaluate $integral_0^2 x^2 dif x$.
-
-  #solution[
-    $ integral_0^2 x^2 dif x = [x^3/3]_0^2 = 8/3 - 0 = 8/3 $
-  ]
-]
-
+Block colors are determined by your active theme. See `config/schemes/` to customize.

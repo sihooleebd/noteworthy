@@ -1,53 +1,69 @@
 #import "../../templates/templater.typ": *
 
-= Quick Start Guide
+= File Structure
 
-Get started with Noteworthy in minutes.
+Understanding the project layout helps you navigate and extend Noteworthy.
 
-== Block Syntax Overview
+== Project Root
 
-All blocks follow the pattern: `#blockname("Title")[content]`
-
-#definition("Definition Block")[
-  Use `#definition("Title")[...]` for definitions.
+#notation("Directory Legend")[
+  - 📁 = Directory
+  - 📄 = File
 ]
 
-#theorem("Theorem Block")[
-  Use `#theorem("Title")[...]` for theorems.
+```
+noteworthy/
+├── 📁 config/          # Configuration files
+│   ├── hierarchy.json  # Chapter/page structure
+│   ├── metadata.json   # Title, authors, etc.
+│   ├── constants.json  # Display settings
+│   └── schemes/        # Color themes
+├── 📁 content/         # Your document pages
+│   ├── 0/, 1/, 2/...   # Chapter folders
+│   └── images/         # Embedded images
+├── 📁 templates/       # The template system
+│   ├── templater.typ   # Main entry point
+│   ├── core/           # Core utilities
+│   └── module/         # Feature modules
+└── output.pdf          # Compiled document
+```
+
+== Templates Directory
+
+The `templates/` folder contains the template system:
+
+#definition("templater.typ")[
+  The single entry point that re-exports all modules. Content files only need to import this one file.
 ]
 
-#equation("Equation Block")[
-  Use `#equation("Title")[...]` for named equations:
-  $ E = m c^2 $
+#definition("core/")[
+  Core utilities shared across all modules:
+  - `setup.typ` — Configuration loading and theme definition
+  - `scheme.typ` — Color scheme management
+  - `parser.typ` — Content parsing for builds
+  - `scanner.typ` — Content discovery
 ]
 
-#note("Note Block")[
-  Use `#note("Title")[...]` for important notes.
+#definition("module/")[
+  Feature modules, each in its own folder with a `mod.typ` entry point:
+  - `block/` — Content blocks
+  - `geometry/` — 2D primitives
+  - `canvas/` — Plotting canvases
+  - `data/` — Tables and data
+  - `cover/` — Document covers
+  - `layout/` — Page layouts
 ]
 
-#notation("Notation Block")[
-  Use `#notation("Title")[...]` to explain notation.
+== Module Pattern
+
+Each module follows the same pattern:
+
+#example("Module Structure")[
+  ```
+  module/block/
+  ├── mod.typ      # Entry point (exports themed wrappers)
+  └── block.typ    # Implementation
+  ```
+
+  The `mod.typ` file imports the implementation, applies theming, and exports ready-to-use functions.
 ]
-
-#analysis("Analysis Block")[
-  Use `#analysis("Title")[...]` for analysis and discussion.
-]
-
-#proof[
-  Use `#proof[...]` for proofs.
-]
-
-== Proof & Solution Blocks
-
-These blocks have special formatting:
-
-#example("Example Block")[
-  Use `#example("Title")[...]` for examples.
-  #solution[
-    Use `#solution[...]` for solutions. Visibility controlled by `show-solution` config.
-    #note("")[
-      Although not mandatory, solutions are suggested to be used inside of example blocks for clarity.
-    ]
-  ]
-]
-

@@ -1,114 +1,97 @@
 #import "../../templates/templater.typ": *
 
-= Geometry (Geoplot)
+= Circles & Polygons
 
-Create Euclidean geometry constructions with the geometry object system.
-
-== Points & Labels
-
-#let A = point(0, 0, label: "A")
-#let B = point(3, 0, label: "B")
-#let C = point(1.5, 2.5, label: "C")
-
-#cartesian-canvas(
-  x-domain: (-0.5, 4),
-  y-domain: (-0.5, 3),
-  A,
-  B,
-  C,
-)
-
-== Lines & Segments
-
-#cartesian-canvas(
-  x-domain: (-0.5, 4),
-  y-domain: (-0.5, 3),
-  A,
-  B,
-  C,
-  segment(A, B, label: "c"),
-  segment(B, C, label: "a"),
-  segment(C, A, label: "b"),
-)
-
-== Triangles
-
-The `triangle` object draws all three sides:
-
-#cartesian-canvas(
-  x-domain: (-0.5, 4),
-  y-domain: (-0.5, 3),
-  triangle(A, B, C, label: "△ABC"),
-  A,
-  B,
-  C,
-)
+Create circles and multi-sided shapes.
 
 == Circles
 
-#let center = point(2, 1.5, label: "O")
+#definition("circle")[
+  Creates a circle from center and radius, or center and a point on the circle.
+  ```typst
+  circle(center, radius: r, label: none, style: auto)
+  circle(center, through: point, label: none, style: auto)
+  ```
+]
+
+#let O = point(0, 0, label: "O")
+#cartesian-canvas(
+  x-tick: 1,
+  y-tick: 1,
+  circle(O, radius: 2, label: $C$),
+  O,
+)
+
+== Circle Through Point
+
+#let O = point(1, 1, label: "O")
+#let P = point(3, 2, label: "P")
 
 #cartesian-canvas(
-  x-domain: (-0.5, 5),
-  y-domain: (-0.5, 4),
-  center,
-  circle(center, 1.5, label: "r = 1.5"),
+  x-tick: 1,
+  y-tick: 1,
+  O,
+  P,
+  circle(O, through: P),
 )
+
+== Polygons
+
+#definition("polygon")[
+  Creates a closed polygon from vertices.
+  ```typst
+  polygon(p1, p2, p3, ..., label: none, style: auto)
+  ```
+]
+
+#let A = point(0, 0, label: "A")
+#let B = point(4, 0, label: "B")
+#let C = point(4, 3, label: "C")
+#let D = point(0, 3, label: "D")
+
+#cartesian-canvas(
+  x-tick: 1,
+  y-tick: 1,
+  polygon(A, B, C, D, label: "Rectangle"),
+)
+
+== Regular Polygons
+
+#example("Regular Shapes")[
+  #grid(
+    columns: (1fr, 1fr),
+    gutter: 1em,
+    cartesian-canvas(
+      width: 4cm,
+      polygon(point(0, 0), point(2, 0), point(1, 1.73)),
+    ),
+    cartesian-canvas(
+      width: 4cm,
+      polygon(point(0, 0), point(2, 0), point(2, 2), point(0, 2)),
+    ),
+  )
+]
 
 == Angles
 
-#let origin = point(0, 0, label: "O")
-#let p1 = point(2, 0)
-#let p2 = point(1.5, 1.5)
+#definition("angle")[
+  Creates an angle marker between three points.
+  ```typst
+  angle(p1, vertex, p2, label: $theta$, style: auto)
+  ```
+]
+
+#let O = point(0, 0, label: "O")
+#let A = point(3, 0, label: "A")
+#let B = point(2, 2, label: "B")
 
 #cartesian-canvas(
-  x-domain: (-0.5, 3),
-  y-domain: (-0.5, 2.5),
-  origin,
-  segment(origin, p1),
-  segment(origin, p2),
-  angle(p1, origin, p2, label: "{angle}"),
-)
-
-== Curves
-
-Connect points with polylines or smooth splines:
-
-#let pts = ((0, 0), (1, 2), (2, 0.5), (3, 1.5), (4, 0))
-
-=== Polyline (curve-through)
-
-#cartesian-canvas(
-  x-domain: (-0.5, 5),
-  y-domain: (-0.5, 3),
-  curve-through(..pts, label: "Polyline"),
-  point(0, 0),
-  point(1, 2),
-  point(2, 0.5),
-  point(3, 1.5),
-  point(4, 0),
-)
-
-=== Smooth Spline (smooth-curve)
-
-#cartesian-canvas(
-  x-domain: (-0.5, 5),
-  y-domain: (-0.5, 3),
-  smooth-curve(..pts, label: "Spline", style: (stroke: blue)),
-  point(0, 0),
-  point(1, 2),
-  point(2, 0.5),
-  point(3, 1.5),
-  point(4, 0),
-)
-
-=== Tension Control
-
-Higher tension creates tighter curves:
-
-#cartesian-canvas(
-  x-domain: (-0.5, 5),
-  y-domain: (-0.5, 3),
-  smooth-curve(..pts, label: "t=0", style: (stroke: blue)),
-  smooth-curve(..pts, tension: 0.5, label: "t=0.5", style: (stroke: red)),
+  x-tick: 1,
+  y-tick: 1,
+  O,
+  A,
+  B,
+  segment(O, A),
+  segment(O, B),
+  angle(A, O, B, label: $theta$),
 )

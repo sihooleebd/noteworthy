@@ -1,60 +1,94 @@
 #import "../../templates/templater.typ": *
 
-= Vectors (Vectorplot)
+= Intersections & Constructions
 
-Visualize vectors with automatic scaling and labeling.
+Find intersections and construct derived objects.
 
-== Basic Vectors
+== Line-Line Intersection
 
-#let u = vector(3, 2, label: $arrow(u)$)
-#let v = vector(1, 3, label: $arrow(v)$, style: (stroke: red))
+#definition("intersect-ll")[
+  Finds the intersection of two lines.
+  ```typst
+  intersect-ll(line1, line2, label: "P")
+  ```
+]
 
-#blank-canvas(u, v)
-
-== Vector Addition
-
-The parallelogram method:
-
-#let a = vector(3, 0, label: $arrow(a)$)
-#let b = vector(1, 2, label: $arrow(b)$)
-
-#blank-canvas(
-  a,
-  b,
-  vec-add(a, b, helplines: true),
-)
-
-== Vector with Custom Origin
-
-#let origin-vec = vector(2, 1, origin: (1, 1), label: $arrow(w)$)
+#let l1 = line(point(-2, -1), point(3, 2), label: $ell_1$)
+#let l2 = line(point(-1, 3), point(2, -2), label: $ell_2$)
 
 #cartesian-canvas(
-  x-domain: (0, 4),
-  y-domain: (0, 3),
-  origin-vec,
+  x-tick: 1,
+  y-tick: 1,
+  l1,
+  l2,
+  intersect-ll(l1, l2, label: "P"),
 )
 
-== Multiple Vectors
+== Line-Circle Intersection
 
-#let v1 = vector(2, 0, label: $hat(i)$, style: (stroke: red))
-#let v2 = vector(0, 2, label: $hat(j)$, style: (stroke: green))
-#let v3 = vector(2, 2, label: $hat(i) + hat(j)$, style: (stroke: blue))
-
-#blank-canvas(v1, v2, v3)
-
-== Vector Projection
-
-Project vector $arrow(a)$ onto $arrow(b)$:
-
-#let proj-a = vector(8, 6, label: $arrow(a)$)
-#let proj-b = vector(10, 0, label: $arrow(b)$)
-
-#blank-canvas(
-  proj-a,
-  proj-b,
-  vec-project(proj-a, proj-b, label: $"proj"_(arrow(a)) arrow(b)$, helplines: true),
-)
-
-#note("Vector Notation")[
-  Vectors are defined by `vector(dx, dy, ...)` where `dx` and `dy` are the components.
+#definition("intersect-lc")[
+  Finds intersections of a line and circle.
+  ```typst
+  intersect-lc(line, circle, labels: ("A", "B"))
+  ```
 ]
+
+#let c = circle(point(0, 0), radius: 2)
+#let l = line(point(-3, 1), point(3, 1))
+
+#cartesian-canvas(
+  x-tick: 1,
+  y-tick: 1,
+  c,
+  l,
+  intersect-lc(l, c, labels: ("A", "B")),
+)
+
+== Constructions
+
+#definition("midpoint")[
+  Constructs the midpoint of a segment.
+  ```typst
+  midpoint(p1, p2, label: "M")
+  ```
+]
+
+#let A = point(1, 1, label: "A")
+#let B = point(5, 3, label: "B")
+
+#cartesian-canvas(
+  x-tick: 1,
+  y-tick: 1,
+  A,
+  B,
+  segment(A, B),
+  midpoint(A, B, label: "M"),
+)
+
+== Perpendicular & Parallel
+
+#definition("perpendicular")[
+  Constructs a line perpendicular to a given line through a point.
+  ```typst
+  perpendicular(line, point, label: none)
+  ```
+]
+
+#definition("parallel")[
+  Constructs a line parallel to a given line through a point.
+  ```typst
+  parallel(line, point, label: none)
+  ```
+]
+
+#let l = line(point(0, 0), point(4, 2), label: $ell$)
+#let P = point(1, 3, label: "P")
+
+#cartesian-canvas(
+  x-tick: 1,
+  y-tick: 1,
+  l,
+  P,
+  perpendicular(l, P),
+  parallel(l, P),
+)

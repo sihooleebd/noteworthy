@@ -1,37 +1,69 @@
 #import "../../templates/templater.typ": *
 
-= Content Blocks Overview
+= Block Fundamentals
 
-Noteworthy provides 9 semantic block types for structuring educational content.
+The Block module provides semantic content containers for educational documents.
 
-== The Block Types
+== What is a Block?
 
-=== Definition & Theorem
-
-#definition("Limit")[
-  The limit of $f(x)$ as $x$ approaches $a$ is $L$ if for every $epsilon > 0$ there exists $delta > 0$ such that $|f(x) - L| < epsilon$ whenever $0 < |x - a| < delta$.
+#definition("Block")[
+  A styled container that gives semantic meaning to content. Blocks help readers identify the type of information they're reading.
 ]
 
-#theorem("Squeeze Theorem")[
-  If $g(x) <= f(x) <= h(x)$ for all $x$ near $a$, and $lim_(x -> a) g(x) = lim_(x -> a) h(x) = L$, then $lim_(x -> a) f(x) = L$.
+== Block Syntax
+
+All blocks follow the same pattern:
+
+```typst
+#blockname("Optional Title")[
+  Content goes here...
+]
+```
+
+Some blocks (like `proof` and `solution`) don't require a title:
+
+```typst
+#proof[
+  Content without a title...
+]
+```
+
+== Block Categories
+
+Blocks are organized into three categories:
+
+#note("Primary Blocks")[
+  - `definition` — Define concepts
+  - `theorem` — State theorems
+  - `equation` — Named equations
 ]
 
-=== Equation & Notation
-
-#equation("Euler's Identity")[
-  $ e^(i pi) + 1 = 0 $
+#note("Supporting Blocks")[
+  - `note` — Important information
+  - `notation` — Explain symbols
+  - `analysis` — Discussion and analysis
 ]
 
-#notation("Big-O Notation")[
-  $O(n)$ denotes an upper bound on the growth rate of an algorithm.
+#note("Proofs & Examples")[
+  - `proof` — Mathematical proofs
+  - `example` — Worked examples
+  - `solution` — Solutions (visibility controlled by config)
 ]
 
-=== Note & Analysis
+== Your First Block
 
-#note("Remember")[
-  Limits describe behavior as we approach a point, not necessarily at the point itself.
-]
+#example("Creating a Definition")[
+  ```typst
+  #definition("Velocity")[
+    The rate of change of position with respect to time:
+    $ v = dif x / dif t $
+  ]
+  ```
 
-#analysis("Convergence")[
-  The sequence $a_n = 1/n$ converges to 0 because for any $epsilon > 0$, choosing $N > 1/epsilon$ ensures $|a_n| < epsilon$ for all $n > N$.
+  Renders as:
+
+  #definition("Velocity")[
+    The rate of change of position with respect to time:
+    $ v = dif x / dif t $
+  ]
 ]
