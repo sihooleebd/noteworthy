@@ -286,7 +286,7 @@
   }
 
   if obj.label != none {
-    let bg-col = theme.at("page-fill", default: white)
+    let bg-col = theme.at("page-fill", default: none)
     let stroke-col = theme.at("plot", default: (:)).at("stroke", default: black)
 
     // Smart anchor selection - prefer south, but use label-anchor if specified
@@ -314,7 +314,7 @@
   line(p1, p2, stroke: style.stroke)
 
   if obj.at("label", default: none) != none {
-    let bg-col = theme.at("page-fill", default: white)
+    let bg-col = theme.at("page-fill", default: none)
 
     // For 2D segments, use smart positioning with angle-aware anchors
     if p1.len() == 2 {
@@ -471,7 +471,7 @@
   }
 
   if obj.at("label", default: none) != none {
-    let bg-col = theme.at("page-fill", default: white)
+    let bg-col = theme.at("page-fill", default: none)
 
     // Configurable label angle (default 45°, can override with label-angle)
     let ang = obj.at("label-angle", default: 45deg)
@@ -605,7 +605,7 @@
     } else {
       obj.radius * 1.5
     }
-    let bg-col = theme.at("page-fill", default: white)
+    let bg-col = theme.at("page-fill", default: none)
     content(
       (obj.vertex.x + label-r * calc.cos(mid-ang), obj.vertex.y + label-r * calc.sin(mid-ang)),
       text(fill: stroke-col, format-label(obj, obj.label)),
@@ -661,7 +661,7 @@
   line(..coords, close: true, stroke: style.stroke, fill: final-fill)
 
   if obj.at("label", default: none) != none {
-    let bg-col = theme.at("page-fill", default: white)
+    let bg-col = theme.at("page-fill", default: none)
 
     // Calculate centroid for primary position, or use label-position override
     let pos-type = obj.at("label-position", default: "centroid")
@@ -755,7 +755,7 @@
   )
 
   if obj.at("label", default: none) != none {
-    let bg-col = theme.at("page-fill", default: white)
+    let bg-col = theme.at("page-fill", default: none)
 
     // For 2D vectors, use smart label positioning with fallbacks
     if start.len() == 2 {
@@ -955,7 +955,7 @@
 
   // Draw empty holes (open circles) using plot markers for proper aspect ratio
   if obj.at("hole", default: ()).len() > 0 {
-    let page-fill = theme.at("page-fill", default: white)
+    let page-fill = theme.at("page-fill", default: none)
     let hole-pts = ()
     for h in obj.hole {
       // Evaluate f(h) approx (limit) since f(h) is likely undefined or 0/0

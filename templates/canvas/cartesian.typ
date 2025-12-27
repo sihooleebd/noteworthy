@@ -76,7 +76,7 @@
       y-min: y-domain.at(0),
       y-max: y-domain.at(1),
 
-      legend-style: (fill: theme.at("page-fill", default: white), stroke: stroke-col),
+      legend-style: (fill: theme.at("page-fill", default: none), stroke: stroke-col),
 
       {
         // Workaround for cetz-plot annotation crash: initialize data bounds
@@ -210,7 +210,7 @@
       y-min: y-domain.at(0),
       y-max: y-domain.at(1),
 
-      legend-style: (fill: theme.at("page-fill", default: white), stroke: stroke-col),
+      legend-style: (fill: theme.at("page-fill", default: none), stroke: stroke-col),
 
       {
         let bounds = (x: x-domain, y: y-domain)
