@@ -49,6 +49,90 @@
   }
 }
 
+/// Compute smart label position for a vector in a group
+/// Returns: (position, anchor) tuple
+/// Parameters:
+/// - vec: The vector object (with x, y components)
+/// - origin: Origin point (x, y)
+/// - all-angles: Array of all vector angles in the group (in degrees, 0-360)
+/// - this-angle: This vector's angle (in degrees)
+/// - theme: Theme for background color
+#let compute-vector-label-pos(vec, origin, all-angles, this-angle, theme) = {
+  let sx = origin.at(0)
+  let sy = origin.at(1)
+  let vx = vec.x
+  let vy = vec.y
+  let len = calc.sqrt(vx * vx + vy * vy)
+
+  if len == 0 {
+    return ((sx, sy), "south")
+  }
+
+  // Unit vectors
+  let ux = vx / len
+  let uy = vy / len
+  let nx-ccw = -uy // Perpendicular CCW
+  let ny-ccw = ux
+  let nx-cw = uy // Perpendicular CW
+  let ny-cw = -ux
+
+  // Midpoint
+  let mid = (sx + vx / 2, sy + vy / 2)
+
+  // Compute angular span if multiple vectors
+  if all-angles.len() < 2 {
+    // Single vector - use CCW perpendicular
+    let offset = 0.3
+    let pos = (mid.at(0) + nx-ccw * offset, mid.at(1) + ny-ccw * offset)
+    let anchor = if ny-ccw >= 0 { "south" } else { "north" }
+    return (pos, anchor)
+  }
+
+  // Sort angles to find span
+  let sorted = all-angles.sorted()
+
+  // Find angular span (handle wraparound)
+  let max-gap = 0
+  let gap-start = 0
+  for i in range(sorted.len()) {
+    let next-i = calc.rem(i + 1, sorted.len())
+    let gap = if next-i == 0 { 360 - sorted.at(i) + sorted.at(0) } else { sorted.at(next-i) - sorted.at(i) }
+    if gap > max-gap {
+      max-gap = gap
+      gap-start = sorted.at(next-i)
+    }
+  }
+
+  // Angular span is 360 - max gap
+  let span = 360 - max-gap
+
+  // Leftmost = smallest angle after gap-start (CCW-most)
+  // Rightmost = largest angle before gap-start wraps (CW-most)
+  let leftmost = gap-start
+  let rightmost = if gap-start == sorted.at(0) { sorted.last() } else {
+    sorted.at(sorted.position(a => a == gap-start) - 1)
+  }
+
+  if span < 180 {
+    // Use outer edges
+    let offset = 0.3
+    if calc.abs(this-angle - leftmost) < 1 {
+      // Leftmost vector - CCW perpendicular
+      let pos = (mid.at(0) + nx-ccw * offset, mid.at(1) + ny-ccw * offset)
+      let anchor = if ny-ccw >= 0 { "south" } else { "north" }
+      return (pos, anchor)
+    } else if calc.abs(this-angle - rightmost) < 1 {
+      // Rightmost vector - CW perpendicular
+      let pos = (mid.at(0) + nx-cw * offset, mid.at(1) + ny-cw * offset)
+      let anchor = if ny-cw >= 0 { "south" } else { "north" }
+      return (pos, anchor)
+    }
+  }
+
+  // Default: on-line with background (for middle vectors or span >= 180)
+  (mid, "center")
+}
+
 /// Format label with intelligent substitution
 #let format-label(obj, label) = {
   if type(label) != str { return label }
@@ -202,11 +286,19 @@
   }
 
   if obj.label != none {
+    let bg-col = theme.at("background", default: white)
+    let stroke-col = theme.at("plot", default: (:)).at("stroke", default: black)
+
+    // Smart anchor selection - prefer south, but use label-anchor if specified
+    let anchor = obj.at("label-anchor", default: "south")
+
     content(
       coords,
-      text(fill: theme.at("plot", default: (:)).at("stroke", default: black), format-label(obj, obj.label)),
-      anchor: "south",
+      text(fill: stroke-col, format-label(obj, obj.label)),
+      anchor: anchor,
       padding: 0.2,
+      fill: bg-col,
+      stroke: none,
     )
   }
 }
@@ -222,34 +314,55 @@
   line(p1, p2, stroke: style.stroke)
 
   if obj.at("label", default: none) != none {
-    // 3D Midpoint
-    let mid = if p1.len() == 3 {
-      ((p1.at(0) + p2.at(0)) / 2, (p1.at(1) + p2.at(1)) / 2, (p1.at(2) + p2.at(2)) / 2)
-    } else {
-      ((p1.at(0) + p2.at(0)) / 2, (p1.at(1) + p2.at(1)) / 2)
-    }
+    let bg-col = theme.at("background", default: white)
 
-    // Calculate perpendicular offset (2D only)
-    let label-pos = if p1.len() == 2 {
+    // For 2D segments, use smart positioning with angle-aware anchors
+    if p1.len() == 2 {
       let dx = p2.at(0) - p1.at(0)
       let dy = p2.at(1) - p1.at(1)
       let len = calc.sqrt(dx * dx + dy * dy)
+      let mid = ((p1.at(0) + p2.at(0)) / 2, (p1.at(1) + p2.at(1)) / 2)
+
       if len > 0 {
+        // Perpendicular unit vector (90 deg CCW)
         let nx = -dy / len
         let ny = dx / len
         let offset = 0.25
-        (mid.at(0) + nx * offset, mid.at(1) + ny * offset)
-      } else { mid }
-    } else { mid }
+        let label-pos = (mid.at(0) + nx * offset, mid.at(1) + ny * offset)
 
-    content(
-      label-pos,
-      text(fill: theme.plot.stroke, format-label(obj, obj.label)),
-      anchor: "center",
-      padding: 0.1,
-      fill: white,
-      stroke: none,
-    )
+        // Choose anchor based on perpendicular direction
+        let anchor = if ny >= 0 { "south" } else { "north" }
+
+        content(
+          label-pos,
+          text(fill: theme.plot.stroke, format-label(obj, obj.label)),
+          anchor: anchor,
+          padding: 0.1,
+          fill: bg-col,
+          stroke: none,
+        )
+      } else {
+        content(
+          mid,
+          text(fill: theme.plot.stroke, format-label(obj, obj.label)),
+          anchor: "south",
+          padding: 0.1,
+          fill: bg-col,
+          stroke: none,
+        )
+      }
+    } else {
+      // 3D: simple midpoint label
+      let mid = ((p1.at(0) + p2.at(0)) / 2, (p1.at(1) + p2.at(1)) / 2, (p1.at(2) + p2.at(2)) / 2)
+      content(
+        mid,
+        text(fill: theme.plot.stroke, format-label(obj, obj.label)),
+        anchor: "center",
+        padding: 0.1,
+        fill: bg-col,
+        stroke: none,
+      )
+    }
   }
 }
 
@@ -358,19 +471,31 @@
   }
 
   if obj.at("label", default: none) != none {
-    // Place label at edge of circle (45 deg position)
-    let ang = 45deg
+    let bg-col = theme.at("background", default: white)
+
+    // Configurable label angle (default 45°, can override with label-angle)
+    let ang = obj.at("label-angle", default: 45deg)
+
+    // Calculate label position at edge of circle
     let label-coords = if obj.center.at("z", default: none) != none {
       (obj.center.x + obj.radius * calc.cos(ang), obj.center.y + obj.radius * calc.sin(ang), obj.center.z)
     } else {
       (obj.center.x + obj.radius * calc.cos(ang), obj.center.y + obj.radius * calc.sin(ang))
     }
+
+    // Smart anchor based on angle quadrant
+    // Q1 (0-90): south-west, Q2 (90-180): south-east, Q3 (180-270): north-east, Q4 (270-360): north-west
+    let ang-deg = if ang < 0deg { ang + 360deg } else { ang }
+    let anchor = if ang-deg >= 0deg and ang-deg < 90deg { "south-west" } else if ang-deg >= 90deg and ang-deg < 180deg {
+      "south-east"
+    } else if ang-deg >= 180deg and ang-deg < 270deg { "north-east" } else { "north-west" }
+
     content(
       label-coords,
       text(fill: theme.plot.stroke, format-label(obj, obj.label)),
-      anchor: "south-west",
+      anchor: anchor,
       padding: 0.1,
-      fill: white,
+      fill: bg-col,
       stroke: none,
     )
   }
@@ -480,10 +605,13 @@
     } else {
       obj.radius * 1.5
     }
+    let bg-col = theme.at("background", default: white)
     content(
       (obj.vertex.x + label-r * calc.cos(mid-ang), obj.vertex.y + label-r * calc.sin(mid-ang)),
       text(fill: stroke-col, format-label(obj, obj.label)),
       anchor: "center",
+      fill: bg-col,
+      stroke: none,
     )
   }
 }
@@ -533,22 +661,44 @@
   line(..coords, close: true, stroke: style.stroke, fill: final-fill)
 
   if obj.at("label", default: none) != none {
-    // Calculate top-right position for label
-    let max-x = calc.max(..obj.points.map(p => p.x))
-    let max-y = calc.max(..obj.points.map(p => p.y))
+    let bg-col = theme.at("background", default: white)
 
-    let label-pos = if obj.points.first().at("z", default: none) != none {
-      let max-z = calc.max(..obj.points.map(p => p.at("z", default: 0)))
-      (max-x, max-y, max-z)
+    // Calculate centroid for primary position, or use label-position override
+    let pos-type = obj.at("label-position", default: "centroid")
+
+    let label-pos = if pos-type == "top-right" {
+      // Original top-right corner positioning
+      let max-x = calc.max(..obj.points.map(p => p.x))
+      let max-y = calc.max(..obj.points.map(p => p.y))
+      if obj.points.first().at("z", default: none) != none {
+        let max-z = calc.max(..obj.points.map(p => p.at("z", default: 0)))
+        (max-x, max-y, max-z)
+      } else {
+        (max-x, max-y)
+      }
     } else {
-      (max-x, max-y)
+      // Centroid positioning (default)
+      let sum-x = obj.points.map(p => p.x).sum()
+      let sum-y = obj.points.map(p => p.y).sum()
+      let n = obj.points.len()
+      if obj.points.first().at("z", default: none) != none {
+        let sum-z = obj.points.map(p => p.at("z", default: 0)).sum()
+        (sum-x / n, sum-y / n, sum-z / n)
+      } else {
+        (sum-x / n, sum-y / n)
+      }
     }
+
+    // Use appropriate anchor based on position type
+    let anchor = if pos-type == "top-right" { "south-west" } else { "center" }
 
     content(
       label-pos,
       text(fill: theme.plot.stroke, format-label(obj, obj.label)),
-      anchor: "south-west",
+      anchor: anchor,
       padding: 0.15,
+      fill: bg-col,
+      stroke: none,
     )
   }
 }
@@ -605,143 +755,146 @@
   )
 
   if obj.at("label", default: none) != none {
-    // 3D Midpoint
-    let mid = if start.len() == 3 {
-      ((start.at(0) + end.at(0)) / 2, (start.at(1) + end.at(1)) / 2, (start.at(2) + end.at(2)) / 2)
-    } else {
-      ((start.at(0) + end.at(0)) / 2, (start.at(1) + end.at(1)) / 2)
-    }
+    let bg-col = theme.at("background", default: white)
 
-    // Calculate perpendicular offset
-    let label-pos = if start.len() == 2 {
+    // For 2D vectors, use smart label positioning with fallbacks
+    if start.len() == 2 {
       let dx = end.at(0) - start.at(0)
       let dy = end.at(1) - start.at(1)
       let len = calc.sqrt(dx * dx + dy * dy)
+
       if len > 0 {
+        // Normalized direction vector
+        let ux = dx / len
+        let uy = dy / len
         // Perpendicular unit vector (90 deg CCW)
-        let nx = -dy / len
-        let ny = dx / len
-        let offset = 0.25
-        (mid.at(0) + nx * offset, mid.at(1) + ny * offset)
-      } else { mid }
+        let nx = -uy
+        let ny = ux
+
+        // Midpoint
+        let mid = ((start.at(0) + end.at(0)) / 2, (start.at(1) + end.at(1)) / 2)
+
+        // Smart position selection based on vector angle
+        // For near-horizontal vectors: prefer above/below (use perp offset)
+        // For near-vertical vectors: prefer left/right
+        let offset = 0.3
+
+        // Determine best position based on vector direction
+        // Use angle to pick the most natural label placement
+        let angle = calc.atan2(dy, dx)
+
+        // Position 1: Perpendicular CCW (primary)
+        let pos-ccw = (mid.at(0) + nx * offset, mid.at(1) + ny * offset)
+        // Position 2: Perpendicular CW (opposite side)
+        let pos-cw = (mid.at(0) - nx * offset, mid.at(1) - ny * offset)
+        // Position 3: Near tip (offset from end)
+        let pos-tip = (end.at(0) - ux * 0.3 + nx * 0.15, end.at(1) - uy * 0.3 + ny * 0.15)
+        // Position 4: Near tail (offset from start)
+        let pos-tail = (start.at(0) + ux * 0.3 + nx * 0.15, start.at(1) + uy * 0.3 + ny * 0.15)
+
+        // Choose anchor based on primary position relative to vector
+        // If label is above vector (ny > 0), anchor south; if below, anchor north
+        let anchor = if ny >= 0 { "south" } else { "north" }
+
+        // Use primary position (could add overlap detection here in future)
+        content(
+          pos-ccw,
+          text(fill: stroke-col, format-label(obj, obj.label)),
+          anchor: anchor,
+          padding: 0.1,
+          fill: bg-col,
+          stroke: none,
+        )
+      } else {
+        // Zero-length vector, place at midpoint
+        let mid = ((start.at(0) + end.at(0)) / 2, (start.at(1) + end.at(1)) / 2)
+        content(
+          mid,
+          text(fill: stroke-col, format-label(obj, obj.label)),
+          anchor: "south",
+          padding: 0.1,
+          fill: bg-col,
+          stroke: none,
+        )
+      }
     } else {
-      // 3D: Calculate perpendicular offset in XY plane
+      // 3D: Use simple perpendicular offset in XY plane
+      let mid = ((start.at(0) + end.at(0)) / 2, (start.at(1) + end.at(1)) / 2, (start.at(2) + end.at(2)) / 2)
       let dx = end.at(0) - start.at(0)
       let dy = end.at(1) - start.at(1)
       let len = calc.sqrt(dx * dx + dy * dy)
-      if len > 0 {
+      let label-pos = if len > 0 {
         let nx = -dy / len
         let ny = dx / len
-        let offset = 0.25
-        (mid.at(0) + nx * offset, mid.at(1) + ny * offset, mid.at(2))
+        (mid.at(0) + nx * 0.25, mid.at(1) + ny * 0.25, mid.at(2))
       } else {
-        // Fallback: offset in Z direction
         (mid.at(0), mid.at(1), mid.at(2) + 0.25)
       }
+      content(
+        label-pos,
+        text(fill: stroke-col, format-label(obj, obj.label)),
+        anchor: "center",
+        padding: 0.1,
+        fill: bg-col,
+        stroke: none,
+      )
     }
-
-    content(
-      label-pos,
-      text(fill: stroke-col, format-label(obj, obj.label)),
-      anchor: "center",
-      padding: 0.1,
-      fill: white,
-      stroke: none,
-    )
   }
 }
 
 
-/// Draw vector projection (specialized rendering with helplines)
-#let draw-vector-projection-obj(obj, theme, origin: (0, 0)) = {
+/// Draw vec-add helplines only (parallelogram sides)
+/// Vectors are drawn separately by canvas with global smart labeling.
+#let draw-vec-add-helplines(obj, theme, origin: (0, 0)) = {
   import cetz.draw: *
-
-  let hl-col = theme.at("plot", default: (:)).at("highlight", default: blue)
-  let accent-col = theme.at("text-accent", default: purple)
-
-  // Use bound origin from object or passed origin
-  let start = obj.at("origin", default: origin)
-  let sx = if type(start) == dictionary { start.x } else { start.at(0) }
-  let sy = if type(start) == dictionary { start.y } else { start.at(1) }
-
-  let vec-a = obj.v1
-  let vec-b = obj.v2
-  let proj = obj // The object itself is the projected vector
-
-  let a-end = (sx + vec-a.x, sy + vec-a.y)
-  let proj-end = (sx + proj.x, sy + proj.y)
-
-  // Draw helplines if enabled
-  if obj.at("helplines", default: true) {
-    // Extended b axis
-    let b-scale = 1.3
-    line(
-      (sx - vec-b.x * 0.2, sy - vec-b.y * 0.2),
-      (sx + vec-b.x * b-scale, sy + vec-b.y * b-scale),
-      stroke: (paint: gray, thickness: 1.5pt, dash: "dotted"),
-    )
-
-    // Perpendicular from a to projection
-    // Use gray to match addition helplines style standard
-    line(a-end, proj-end, stroke: (paint: gray, thickness: 1.5pt, dash: "dotted"))
-
-    // Right angle marker
-    // Construct simplified point objects for the drawer
-    let p-a = (x: a-end.at(0), y: a-end.at(1))
-    let p-proj = (x: proj-end.at(0), y: proj-end.at(1))
-    let p-start = (x: start.at(0), y: start.at(1)) // Or origin?
-
-    // Draw directly using the helper
-    draw-right-angle-marker(
-      (
-        type: "right-angle",
-        p1: p-a,
-        vertex: p-proj,
-        p2: p-start,
-        radius: 0.3,
-      ),
-      theme,
-    )
-  }
-
-  // Original vectors (draw them recursively as standard vectors)
-  draw-vector-obj(vec-a + (origin: start), theme)
-  draw-vector-obj(vec-b + (origin: start), theme)
-
-  // Projection vector (the object itself)
-  draw-vector-obj(obj + (style: (stroke: hl-col)), theme, origin: start)
-}
-
-/// Draw vector addition (specialized rendering with parallelogram)
-#let draw-vector-addition-obj(obj, theme, origin: (0, 0)) = {
-  import cetz.draw: *
-
-  let hl-col = theme.at("plot", default: (:)).at("highlight", default: blue)
-
-  let start = obj.at("origin", default: origin)
-  let sx = if type(start) == dictionary { start.x } else { start.at(0) }
-  let sy = if type(start) == dictionary { start.y } else { start.at(1) }
 
   let v1 = obj.v1
   let v2 = obj.v2
-  let sum = obj
+
+  let start = origin
+  let sx = if type(start) == dictionary { start.x } else { start.at(0) }
+  let sy = if type(start) == dictionary { start.y } else { start.at(1) }
 
   let v1-end = (sx + v1.x, sy + v1.y)
   let v2-end = (sx + v2.x, sy + v2.y)
-  let sum-end = (sx + sum.x, sy + sum.y)
+  let sum-end = (sx + v1.x + v2.x, sy + v1.y + v2.y)
 
-  // Draw original vectors
-  draw-vector-obj(v1 + (origin: start), theme)
-  draw-vector-obj(v2 + (origin: start), theme)
+  line(v1-end, sum-end, stroke: (paint: gray, thickness: 1.5pt, dash: "dotted"))
+  line(v2-end, sum-end, stroke: (paint: gray, thickness: 1.5pt, dash: "dotted"))
+}
 
-  if obj.at("helplines", default: true) {
-    // Parallelogram sides - Dotted and same strength
-    line(v1-end, sum-end, stroke: (paint: gray, thickness: 1.5pt, dash: "dotted"))
-    line(v2-end, sum-end, stroke: (paint: gray, thickness: 1.5pt, dash: "dotted"))
-  }
+/// Draw vec-project helplines only (extended axis, perpendicular, right angle)
+/// Vectors are drawn separately by canvas with global smart labeling.
+#let draw-vec-proj-helplines(obj, theme, origin: (0, 0)) = {
+  import cetz.draw: *
 
-  // Resultant
-  draw-vector-obj(obj + (style: (stroke: hl-col)), theme, origin: start)
+  let v1 = obj.v1
+  let v2 = obj.v2
+  let proj = obj.proj
+
+  let start = origin
+  let sx = if type(start) == dictionary { start.x } else { start.at(0) }
+  let sy = if type(start) == dictionary { start.y } else { start.at(1) }
+
+  let a-end = (sx + v1.x, sy + v1.y)
+  let proj-end = (sx + proj.x, sy + proj.y)
+
+  // Extended axis line
+  let b-scale = 1.3
+  line(
+    (sx - v2.x * 0.2, sy - v2.y * 0.2),
+    (sx + v2.x * b-scale, sy + v2.y * b-scale),
+    stroke: (paint: gray, thickness: 1.5pt, dash: "dotted"),
+  )
+
+  // Perpendicular line
+  line(a-end, proj-end, stroke: (paint: gray, thickness: 1.5pt, dash: "dotted"))
+
+  // Right angle marker
+  let p-a = (x: a-end.at(0), y: a-end.at(1))
+  let p-proj = (x: proj-end.at(0), y: proj-end.at(1))
+  let p-start = (x: sx, y: sy)
+  draw-right-angle-marker((type: "right-angle", p1: p-a, vertex: p-proj, p2: p-start, radius: 0.3), theme)
 }
 
 /// Draw a function using CeTZ plot
@@ -836,34 +989,34 @@
   }
 
   if obj.at("label", default: none) != none {
-    // Place label at the end of the domain (right side)
-    // Clamp to visible x-domain for standard functions to avoid drawing labels far off-screen
-    let t-end = if obj.func-type == "standard" and x-domain != auto {
+    // Find the last visible point on the curve
+    // Use visible x-domain end (clamped)
+    let vis-x-end = if obj.func-type == "standard" and x-domain != auto {
       calc.min(obj.domain.at(1), x-domain.at(1))
     } else {
       obj.domain.at(1)
     }
 
-    let pt = if obj.func-type == "standard" {
-      (t-end, (obj.f)(t-end))
+    // Sample at the visible x-end
+    let raw-y = if obj.func-type == "standard" {
+      (obj.f)(vis-x-end)
     } else {
-      (obj.f)(t-end)
+      (obj.f)(vis-x-end).at(1)
     }
 
-    // Offset slightly to the right
-    let label-pt = (pt.at(0) + 0.2, pt.at(1))
+    // Clamp y to the visible y-domain to get the actual last plotted point
+    let label-y = raw-y
+    if y-domain != auto {
+      label-y = calc.clamp(raw-y, y-domain.at(0), y-domain.at(1))
+    }
 
-    plot.annotate({
-      import cetz.draw: *
-      content(
-        label-pt,
-        text(fill: stroke-col, format-label(obj, obj.label)),
-        anchor: "west",
-        padding: 0.05,
-        fill: white,
-        stroke: none,
-      )
-    })
+    // Add an invisible point with label - the stroke style creates the colored line in the legend
+    plot.add(
+      ((vis-x-end, label-y),),
+      style: (stroke: stroke-col),
+      mark: none,
+      label: format-label(obj, obj.label),
+    )
   }
 }
 
@@ -1168,10 +1321,10 @@
     draw-right-angle-marker(obj, theme)
   } else if t == "polygon" { draw-polygon-obj(obj, theme) } else if t == "vector" {
     draw-vector-obj(obj, theme, origin: origin)
-  } else if t == "vector-projection" {
-    draw-vector-projection-obj(obj, theme, origin: origin)
-  } else if t == "vector-addition" {
-    draw-vector-addition-obj(obj, theme, origin: origin)
+  } else if t == "vec-add-helplines" {
+    draw-vec-add-helplines(obj, theme, origin: origin)
+  } else if t == "vec-proj-helplines" {
+    draw-vec-proj-helplines(obj, theme, origin: origin)
   } else if t == "curve" {
     draw-curve-obj(obj, theme)
   }

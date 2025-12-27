@@ -20,7 +20,7 @@ Plot mathematical functions with `graph`:
 #cartesian-canvas(
   x-domain: (-2, 2),
   y-domain: (-2, 4),
-  graph(x => calc.pow(x, 2), label: $x^2$),
+  graph(x => calc.pow(x, 2), domain: (-2, 2), label: $x^2$),
   graph(x => calc.pow(x, 3), domain: (-2, 2), label: $x^3$, style: (stroke: red)),
   graph(x => calc.abs(x), label: $|x|$, style: (stroke: green)),
 )
@@ -69,13 +69,35 @@ Load data from CSV files:
 )
 ```
 This can be then used to draw the data series:
-#let my-data = csv-series(
+
+#let my-data-1 = csv-series(
+  read("../data/sample.csv"),
+  plot-type: "line",
+  has-header: true,
+)
+#let my-data-2 = csv-series(
   read("../data/sample.csv"),
   plot-type: "scatter",
+  has-header: true,
+)
+#let my-data-3 = csv-series(
+  read("../data/sample.csv"),
+  plot-type: "both",
   has-header: true,
 )
 #cartesian-canvas(
   x-domain: (-0.5, 5),
   y-domain: (-1, 18),
-  my-data,
+  my-data-1,
+)
+
+#cartesian-canvas(
+  x-domain: (-0.5, 5),
+  y-domain: (-1, 18),
+  my-data-2,
+)
+#cartesian-canvas(
+  x-domain: (-0.5, 5),
+  y-domain: (-1, 18),
+  my-data-3,
 )

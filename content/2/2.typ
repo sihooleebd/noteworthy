@@ -69,3 +69,46 @@ The `triangle` object draws all three sides:
   segment(origin, p2),
   angle(p1, origin, p2, label: "{angle}"),
 )
+
+== Curves
+
+Connect points with polylines or smooth splines:
+
+#let pts = ((0, 0), (1, 2), (2, 0.5), (3, 1.5), (4, 0))
+
+=== Polyline (curve-through)
+
+#cartesian-canvas(
+  x-domain: (-0.5, 5),
+  y-domain: (-0.5, 3),
+  curve-through(..pts, label: "Polyline"),
+  point(0, 0),
+  point(1, 2),
+  point(2, 0.5),
+  point(3, 1.5),
+  point(4, 0),
+)
+
+=== Smooth Spline (smooth-curve)
+
+#cartesian-canvas(
+  x-domain: (-0.5, 5),
+  y-domain: (-0.5, 3),
+  smooth-curve(..pts, label: "Spline", style: (stroke: blue)),
+  point(0, 0),
+  point(1, 2),
+  point(2, 0.5),
+  point(3, 1.5),
+  point(4, 0),
+)
+
+=== Tension Control
+
+Higher tension creates tighter curves:
+
+#cartesian-canvas(
+  x-domain: (-0.5, 5),
+  y-domain: (-0.5, 3),
+  smooth-curve(..pts, label: "t=0", style: (stroke: blue)),
+  smooth-curve(..pts, tension: 0.5, label: "t=0.5", style: (stroke: red)),
+)

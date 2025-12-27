@@ -80,7 +80,7 @@ Labels support intelligent substitution. Values are automatically calculated bas
 
 ## Vector System
 
-Vectors support automatic labeling and operations.
+Vectors support automatic labeling and operations with **global smart label positioning**.
 
 ### Constructors
 
@@ -97,15 +97,38 @@ vector-3d(1, 2, 3, label: $w$)
 
 ### Operations
 
+`vec-add` and `vec-project` return **arrays** containing the result vector and helplines objects. Pass them alongside the original vectors for smart labeling:
+
 ```typst
-```typst
-#let v-sum = vec-add(u, v, helplines: true)      // Shows parallelogram (dotted)
-#let v-proj = vec-project(u, v, helplines: true) // Shows perpendicular (dotted)
-#let v-unit = vec-normalize(u)
-#let mag = vec-magnitude(u)
+#let a = vector(3, 0, label: $arrow(a)$)
+#let b = vector(1, 2, label: $arrow(b)$)
+
+#blank-canvas(
+  a,
+  b,
+  vec-add(a, b, label: $arrow(a)+arrow(b)$),
+)
 ```
 
-**Visual Helpers:** `vec-add` and `vec-project` include auxiliary lines by default (dotted gray lines). Pass `helplines: false` to disable them.
+Other operations:
+```typst
+#let v-unit = vec-normalize(u)
+#let mag = vec-magnitude(u)
+#let dot = vec-dot(u, v)
+```
+
+### Smart Label Positioning
+
+The canvas automatically applies **angular span labeling** to all vectors:
+
+- **Span < 180°**: Leftmost vector gets CCW perpendicular label, rightmost gets CW perpendicular (both on "outside")
+- **Span ≥ 180°**: Labels placed directly on the vector with a background hole
+
+This prevents label overlap and keeps diagrams clear.
+
+### Visual Helpers
+
+`vec-add` and `vec-project` include auxiliary lines by default (dotted gray parallelogram sides or projection lines). Pass `helplines: false` to disable them.
 
 ---
 

@@ -44,42 +44,37 @@
 
 /// Check if object is a vector
 #let is-vector(obj) = {
-  (
-    type(obj) == dictionary
-      and (
-        obj.at("type", default: none) == "vector"
-          or obj.at("type", default: none) == "vector-addition"
-          or obj.at("type", default: none) == "vector-projection"
-      )
-  )
+  type(obj) == dictionary and obj.at("type", default: none) == "vector"
 }
 
 // =====================================================
 // Vector Operations
 // =====================================================
 
-/// Add two vectors
-#let vec-add(v1, v2, helplines: true) = {
-  let res = if v1.z != none or v2.z != none {
-    let z1 = v1.at("z", default: 0)
-    let z2 = v2.at("z", default: 0)
-    let z = if z1 == none { 0 } else { z1 }
-    let z2v = if z2 == none { 0 } else { z2 }
-    vector-3d(v1.x + v2.x, v1.y + v2.y, z + z2v)
+/// Add two vectors - returns array: (result-vector, helplines-object)
+/// The helplines object draws the parallelogram, result is a simple vector.
+#let vec-add(v1, v2, label: none, helplines: true) = {
+  let result = if v1.z != none or v2.z != none {
+    let z1 = if v1.z == none { 0 } else { v1.z }
+    let z2 = if v2.z == none { 0 } else { v2.z }
+    vector-3d(v1.x + v2.x, v1.y + v2.y, z1 + z2, label: label)
   } else {
-    vector(v1.x + v2.x, v1.y + v2.y)
+    vector(v1.x + v2.x, v1.y + v2.y, label: label)
   }
 
-  // Return specialized object with metadata
-  (
-    res
-      + (
-        type: "vector-addition",
+  // Return array: result vector + helplines object
+  if helplines {
+    (
+      result,
+      (
+        type: "vec-add-helplines",
         v1: v1,
         v2: v2,
-        helplines: helplines,
-      )
-  )
+      ),
+    )
+  } else {
+    (result,)
+  }
 }
 
 /// Subtract two vectors (v1 - v2)
@@ -147,22 +142,29 @@
 /// Alias for normalize
 #let vec-unit = vec-normalize
 
-/// Project v1 onto v2
+/// Project v1 onto v2 - returns array: (projection-vector, helplines-object)
 #let vec-project(v1, v2, label: none, helplines: true) = {
   let dot = vec-dot(v1, v2)
   let mag-sq = vec-dot(v2, v2)
-  if mag-sq == 0 { vector(0, 0, label: label) } else {
-    let res = vec-scale(v2, dot / mag-sq)
-    (
-      res
-        + (
-          type: "vector-projection",
+  if mag-sq == 0 {
+    (vector(0, 0, label: label),)
+  } else {
+    let proj = vec-scale(v2, dot / mag-sq)
+    let result = proj + (label: label)
+
+    if helplines {
+      (
+        result,
+        (
+          type: "vec-proj-helplines",
           v1: v1,
           v2: v2,
-          label: label,
-          helplines: helplines,
-        )
-    )
+          proj: result,
+        ),
+      )
+    } else {
+      (result,)
+    }
   }
 }
 
