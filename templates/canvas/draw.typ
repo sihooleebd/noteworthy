@@ -955,6 +955,7 @@
 
   // Draw empty holes (open circles) using plot markers for proper aspect ratio
   if obj.at("hole", default: ()).len() > 0 {
+    let page-fill = theme.at("page-fill", default: white)
     let hole-pts = ()
     for h in obj.hole {
       // Evaluate f(h) approx (limit) since f(h) is likely undefined or 0/0
@@ -966,7 +967,7 @@
       hole-pts,
       style: (stroke: none),
       mark: "o",
-      mark-style: (fill: white, stroke: style.stroke),
+      mark-style: (fill: page-fill, stroke: style.stroke),
       mark-size: 0.16,
     )
   }
