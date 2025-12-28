@@ -283,6 +283,64 @@
 // DRAW COUNTING TREE
 // =====================================================
 
+// Helper to calculate total vertical extent occupied by a node at a given level
+#let calc-extent(level-idx, levels, base-v-spacing) = {
+  if level-idx >= levels.len() - 1 {
+    // Leaf node occupies base spacing
+    return base-v-spacing
+  }
+
+  let children-count = levels.at(level-idx + 1).len()
+  let next-level-extent = calc-extent(level-idx + 1, levels, base-v-spacing)
+
+  // Total extent is sum of extents of all children
+  // Each child needs 'next-level-extent' of space
+  return children-count * next-level-extent
+}
+
+#let layout-node(level-idx, ox, oy, levels, base-v-spacing, h-spacing, objects) = {
+  // Recursion base case
+  if level-idx >= levels.len() - 1 { return objects }
+
+  let next-level = levels.at(level-idx + 1)
+  let n = next-level.len()
+
+  // Calculate extent needed for ONE child
+  let child-extent = calc-extent(level-idx + 1, levels, base-v-spacing)
+
+  let new-objects = objects
+
+  // Total height covers center-to-center distance from first to last child
+  // If each child occupies 'child-extent', and we pack them tightly:
+  // Top of box is oy + total_extent/2
+  // Center of first child is Top - child_extent/2
+  // Center of last child is Bottom + child_extent/2
+  // Distance first-to-last center = (N-1) * child-extent
+
+  let layout-height = (n - 1) * child-extent
+
+  for i in range(n) {
+    let y = oy + layout-height / 2 - i * child-extent
+    let x = ox + h-spacing
+
+    // Line to child
+    new-objects.lines.push(((ox, oy), (x, y)))
+
+    // Child node
+    new-objects.nodes.push((
+      pos: (x, y),
+      label: str(next-level.at(i)),
+      radius: 0.28,
+      text-size: 10pt,
+    ))
+
+    // Recursively layout grandchildren
+    new-objects = layout-node(level-idx + 1, x, y, levels, base-v-spacing, h-spacing, new-objects)
+  }
+
+  return new-objects
+}
+
 #let draw-counting-tree(obj, theme) = {
   import cetz.draw: *
 
@@ -295,53 +353,69 @@
   let stroke-col = theme.at("plot", default: (:)).at("stroke", default: black)
   let highlight-col = theme.at("plot", default: (:)).at("highlight", default: blue)
 
-  let h-spacing = 1.8
-  let v-spacing = 0.7
+  let h-spacing = 2.0
+  let base-v-spacing = 0.8 // Space for a leaf (node diam 0.56 + gap)
 
-  // Root
-  circle((ox, oy), radius: 0.08, fill: stroke-col)
+  // Object collection
+  let objects = (lines: (), nodes: ())
 
-  if levels.len() >= 1 {
+  // Add Root Node
+  objects.nodes.push((
+    pos: (ox, oy),
+    label: "",
+    radius: 0.1,
+    text-size: 0pt, // Root is small dot
+  ))
+
+  // Start recursion if we have levels
+  if levels.len() > 0 {
+    // Process Level 0 manually
     let first-level = levels.at(0)
     let n1 = first-level.len()
 
+    // Similar logic to layout-node
+    let child-extent = calc-extent(0, levels, base-v-spacing)
+    let layout-height = (n1 - 1) * child-extent
+
     for i in range(n1) {
-      let y1 = oy + (n1 - 1) / 2 * v-spacing - i * v-spacing
-      let x1 = ox + h-spacing
+      let y = oy + layout-height / 2 - i * child-extent
+      let x = ox + h-spacing
 
-      // Branch
-      line((ox, oy), (x1, y1), stroke: stroke-col)
+      objects.lines.push(((ox, oy), (x, y)))
+      objects.nodes.push((
+        pos: (x, y),
+        label: str(first-level.at(i)),
+        radius: 0.28,
+        text-size: 10pt,
+      ))
 
-      // Node
-      circle((x1, y1), radius: 0.18, fill: highlight-col.lighten(70%), stroke: stroke-col)
+      objects = layout-node(0, x, y, levels, base-v-spacing, h-spacing, objects)
+    }
+  }
+
+  // DRAW PASS 1: LINES
+  for line-seg in objects.lines {
+    line(line-seg.at(0), line-seg.at(1), stroke: stroke-col)
+  }
+
+  // DRAW PASS 2: NODES
+  for node in objects.nodes {
+    let fill-col = if node.label == "" { stroke-col } else { highlight-col.lighten(70%) }
+    let stroke-style = stroke-col
+
+    // Special handling for root dot
+    if node.label == "" {
+      circle(node.pos, radius: node.radius, fill: fill-col)
+    } else {
+      circle(node.pos, radius: node.radius, fill: fill-col, stroke: stroke-style)
       content(
-        (x1, y1),
-        text(fill: stroke-col, size: 9pt, weight: "bold", str(first-level.at(i))),
+        node.pos,
+        text(fill: stroke-col, size: node.text-size, weight: "bold", node.label),
         anchor: "center",
       )
-
-      // Second level
-      if levels.len() >= 2 {
-        let second-level = levels.at(1)
-        let n2 = second-level.len()
-
-        for j in range(n2) {
-          let y2 = y1 + (n2 - 1) / 2 * v-spacing * 0.5 - j * v-spacing * 0.5
-          let x2 = x1 + h-spacing
-
-          line((x1, y1), (x2, y2), stroke: stroke-col)
-          circle((x2, y2), radius: 0.14, fill: highlight-col.lighten(85%), stroke: stroke-col)
-          content(
-            (x2, y2),
-            text(fill: stroke-col, size: 8pt, str(second-level.at(j))),
-            anchor: "center",
-          )
-        }
-      }
     }
   }
 }
-
 // =====================================================
 // DRAW PARTITION (Ferrers Diagram)
 // =====================================================

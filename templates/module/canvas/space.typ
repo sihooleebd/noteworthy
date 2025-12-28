@@ -145,12 +145,25 @@
   )
 
   if label != none {
+    let bg-col = theme.at("page-fill", default: white)
     let mid = (
       (start.at(0) + end.at(0)) / 2,
       (start.at(1) + end.at(1)) / 2,
-      (start.at(2) + end.at(2)) / 2 + 0.3,
+      (start.at(2) + end.at(2)) / 2,
     )
-    content(mid, text(fill: stroke-col, label))
+
+    // Use screen-space pill background for 3D
+    content(
+      mid,
+      box(
+        inset: (x: 4pt, y: 2pt),
+        radius: 3pt,
+        fill: bg-col,
+        stroke: (paint: stroke-col, thickness: 0.5pt),
+        text(fill: stroke-col, weight: "bold", label),
+      ),
+      anchor: "center",
+    )
   }
 }
 

@@ -253,17 +253,21 @@
   let style = get-point-style(obj, theme)
   let coords = if obj.at("z", default: none) != none { (obj.x, obj.y, obj.z) } else { (obj.x, obj.y) }
 
-  // 3D Point: Draw as a filled circle in the XY plane at Z
+  // 3D Point: Use screen-space content to avoid perspective distortion
   if obj.at("z", default: none) != none {
-    // Use a small radius (same visual size as 2D points)
-    let r = style.radius
-    let steps = 16
-    let pts = ()
-    for i in range(steps) {
-      let a = i / steps * 360deg
-      pts.push((obj.x + r * calc.cos(a), obj.y + r * calc.sin(a), obj.z))
-    }
-    line(..pts, close: true, fill: style.fill, stroke: style.stroke)
+    // Calculate point size in pts (convert from plot units)
+    let size = 6pt
+    content(
+      coords,
+      box(
+        width: size,
+        height: size,
+        radius: size / 2, // Makes it circular
+        fill: style.fill,
+        stroke: style.stroke,
+      ),
+      anchor: "center",
+    )
   } else {
     // 2D Point: Calculate aspect-corrected radii to render as true circles on screen
     let (rx, ry) = if aspect != none {
@@ -821,92 +825,51 @@
   )
 
   if obj.at("label", default: none) != none {
-    let bg-col = theme.at("page-fill", default: none)
+    let bg-col = theme.at("page-fill", default: white)
 
-    // For 2D vectors, use smart label positioning with fallbacks
-    if start.len() == 2 {
-      let dx = end.at(0) - start.at(0)
-      let dy = end.at(1) - start.at(1)
-      let len = calc.sqrt(dx * dx + dy * dy)
-
-      if len > 0 {
-        // Normalized direction vector
-        let ux = dx / len
-        let uy = dy / len
-        // Perpendicular unit vector (90 deg CCW)
-        let nx = -uy
-        let ny = ux
-
-        // Midpoint
-        let mid = ((start.at(0) + end.at(0)) / 2, (start.at(1) + end.at(1)) / 2)
-
-        // Smart position selection based on vector angle
-        // For near-horizontal vectors: prefer above/below (use perp offset)
-        // For near-vertical vectors: prefer left/right
-        let offset = 0.3
-
-        // Determine best position based on vector direction
-        // Use angle to pick the most natural label placement
-        let angle = calc.atan2(dy, dx)
-
-        // Position 1: Perpendicular CCW (primary)
-        let pos-ccw = (mid.at(0) + nx * offset, mid.at(1) + ny * offset)
-        // Position 2: Perpendicular CW (opposite side)
-        let pos-cw = (mid.at(0) - nx * offset, mid.at(1) - ny * offset)
-        // Position 3: Near tip (offset from end)
-        let pos-tip = (end.at(0) - ux * 0.3 + nx * 0.15, end.at(1) - uy * 0.3 + ny * 0.15)
-        // Position 4: Near tail (offset from start)
-        let pos-tail = (start.at(0) + ux * 0.3 + nx * 0.15, start.at(1) + uy * 0.3 + ny * 0.15)
-
-        // Choose anchor based on primary position relative to vector
-        // If label is above vector (ny > 0), anchor south; if below, anchor north
-        let anchor = if ny >= 0 { "south" } else { "north" }
-
-        // Use primary position (could add overlap detection here in future)
-        content(
-          pos-ccw,
-          text(fill: stroke-col, format-label(obj, obj.label)),
-          anchor: anchor,
-          padding: 0.1,
-          fill: bg-col,
-          stroke: none,
-        )
-      } else {
-        // Zero-length vector, place at midpoint
-        let mid = ((start.at(0) + end.at(0)) / 2, (start.at(1) + end.at(1)) / 2)
-        content(
-          mid,
-          text(fill: stroke-col, format-label(obj, obj.label)),
-          anchor: "south",
-          padding: 0.1,
-          fill: bg-col,
-          stroke: none,
-        )
-      }
+    // Calculate midpoint
+    let mid = if start.len() == 3 {
+      ((start.at(0) + end.at(0)) / 2, (start.at(1) + end.at(1)) / 2, (start.at(2) + end.at(2)) / 2)
     } else {
-      // 3D: Use simple perpendicular offset in XY plane
-      let mid = ((start.at(0) + end.at(0)) / 2, (start.at(1) + end.at(1)) / 2, (start.at(2) + end.at(2)) / 2)
-      let dx = end.at(0) - start.at(0)
-      let dy = end.at(1) - start.at(1)
-      let len = calc.sqrt(dx * dx + dy * dy)
-      let label-pos = if len > 0 {
-        let nx = -dy / len
-        let ny = dx / len
-        (mid.at(0) + nx * 0.25, mid.at(1) + ny * 0.25, mid.at(2))
-      } else {
-        (mid.at(0), mid.at(1), mid.at(2) + 0.25)
-      }
-      content(
-        label-pos,
-        text(fill: stroke-col, format-label(obj, obj.label)),
-        anchor: "center",
-        padding: 0.1,
+      ((start.at(0) + end.at(0)) / 2, (start.at(1) + end.at(1)) / 2)
+    }
+
+    // Calculate pill width based on label length
+    let label-str = format-label(obj, obj.label)
+    let label-len = if type(label-str) == str { label-str.len() } else { 3 } // Default for non-string content
+    let pill-half-width = calc.max(0.2, label-len * 0.08 + 0.1)
+
+    // Draw background pill for label (covers the vector line)
+    if start.len() == 2 {
+      rect(
+        (mid.at(0) - pill-half-width, mid.at(1) - 0.15),
+        (mid.at(0) + pill-half-width, mid.at(1) + 0.15),
         fill: bg-col,
-        stroke: none,
+        stroke: (paint: stroke-col, thickness: 0.5pt),
+        radius: 0.1,
+      )
+      content(
+        mid,
+        text(fill: stroke-col, weight: "bold", label-str),
+        anchor: "center",
+      )
+    } else {
+      // For 3D, use screen-space box with pill styling
+      content(
+        mid,
+        box(
+          inset: (x: 4pt, y: 2pt),
+          radius: 3pt,
+          fill: bg-col,
+          stroke: (paint: stroke-col, thickness: 0.5pt),
+          text(fill: stroke-col, weight: "bold", label-str),
+        ),
+        anchor: "center",
       )
     }
   }
 }
+
 
 
 /// Draw vec-add helplines only (parallelogram sides)

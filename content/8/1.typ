@@ -44,7 +44,7 @@ Distribute balls into boxes:
 
 #example("Identical Balls")[
   #blank-canvas(
-    balls-boxes(6, 3, distribution: (3, 2, 1), balls-identical: true),
+    balls-boxes(3, 3, distribution: (3, 2, 1), balls-identical: true),
   )
 ]
 
@@ -61,7 +61,7 @@ Highlight a subset of elements:
 Visualize multiplication principle:
 
 #blank-canvas(
-  counting-tree((("R", "B"), ("S", "M", "L"))),
+  counting-tree((("R", "B"), ("S", "M", "L"), ("L", "R"))),
 )
 
 == Partition Diagrams

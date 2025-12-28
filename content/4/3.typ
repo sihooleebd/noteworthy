@@ -48,7 +48,6 @@ Use `vec()` with 3 components for 3D vectors:
   width: 10cm,
   vec((2, 1, 2), label: $arrow(v)$),
   vec((1, 3, 1), label: $arrow(w)$),
-  vec-project(vec((2, 1, 2)), onto: vec((1, 3, 1))),
 )
 
 == Coordinate Axes

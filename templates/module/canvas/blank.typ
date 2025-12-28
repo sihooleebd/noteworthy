@@ -6,6 +6,8 @@
 #import "draw.typ": draw-geo
 #import "../combi/draw.typ": draw-combi
 #import "../combi/combi.typ": is-combi-obj
+#import "../trees/mod.typ": draw-tree, is-tree
+#import "../dsa/mod.typ": draw-dsa, is-dsa-obj
 
 /// Create a blank canvas for diagrams
 /// No axes or grid, just a drawing area.
@@ -67,6 +69,10 @@
       if type(obj) == dictionary and obj.at("type", default: none) != none {
         if is-combi-obj(obj) {
           draw-combi(obj, theme)
+        } else if is-tree(obj) {
+          draw-tree(obj, theme)
+        } else if is-dsa-obj(obj) {
+          draw-dsa(obj, theme)
         } else {
           draw-geo(obj, theme, bounds: bounds)
         }
@@ -75,28 +81,47 @@
       }
     }
 
-    // Draw vectors without labels, then add smart labels
+    // Draw vectors with centered pill labels
     for va in sorted {
       let v = va.vec
-      // Draw vector without label
-      draw-geo(v + (label: none), theme, bounds: bounds)
-    }
+      let v-col = if v.style != auto and v.style != none and "stroke" in v.style { v.style.stroke } else {
+        stroke-col
+      }
 
-    // Add smart labels for all vectors
-    for va in sorted {
-      let v = va.vec
+      // Get vector origin and endpoint
+      let origin = v.at("origin", default: (0, 0))
+      let sx = if type(origin) == dictionary { origin.x } else { origin.at(0) }
+      let sy = if type(origin) == dictionary { origin.y } else { origin.at(1) }
+      let ex = sx + v.x
+      let ey = sy + v.y
+
+      // Draw vector
+      line(
+        (sx, sy),
+        (ex, ey),
+        stroke: (paint: v-col, thickness: 1.5pt),
+        mark: (end: "stealth", fill: v-col),
+      )
+
+      // Draw label with pill background at midpoint
       if v.at("label", default: none) != none {
-        let (pos, anchor) = compute-vector-label-pos(v, (0, 0), all-angles, va.angle, theme)
-        let v-col = if v.style != auto and v.style != none and "stroke" in v.style { v.style.stroke } else {
-          stroke-col
-        }
-        content(
-          pos,
-          text(fill: v-col, format-label(v, v.label)),
-          anchor: anchor,
-          padding: 0.1,
+        let mx = (sx + ex) / 2
+        let my = (sy + ey) / 2
+        let pill-half-width = 0.3
+
+        // Background pill
+        rect(
+          (mx - pill-half-width, my - 0.18),
+          (mx + pill-half-width, my + 0.18),
           fill: bg-col,
-          stroke: none,
+          stroke: (paint: v-col, thickness: 0.5pt),
+          radius: 0.1,
+        )
+
+        content(
+          (mx, my),
+          text(fill: v-col, weight: "bold", format-label(v, v.label)),
+          anchor: "center",
         )
       }
     }

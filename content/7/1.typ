@@ -2,69 +2,24 @@
 
 = Layout & Config
 
-The Layout module handles table of contents and page structure. Configuration options control project-wide settings.
+The Layout module manages document structure, outlining, and global configuration.
 
-== Table of Contents
+== Document Hierarchy
 
-#definition("outline")[
-  Automatically generated table of contents based on your `hierarchy.json`.
+#definition("hierarchy.json")[
+  Located in `config/hierarchy.json`, this file defines the structure of your document, including chapters, summaries, and page titles.
 ]
 
-The outline displays:
-- Chapter numbers and titles
-- Page numbers and titles
-- Correct page numbering
+== Configuration
 
-Controlled by `display-outline` in `constants.json`.
-
-== Heading Numbering
-
-#notation("Numbering Format")[
-  Configure in `constants.json`:
-  ```json
-  {
-    "heading-numbering": "1.1",
-    "pad-chapter-id": true,
-    "pad-page-id": true
-  }
-  ```
+#definition("constants.json")[
+  Located in `config/constants.json`, this file controls global display flags:
+  - `display-cover`: Show the main document cover.
+  - `display-outline`: Show the table of contents.
+  - `display-chap-cover`: Show individual chapter covers.
+  - `display-mode`: Set the active theme (e.g., "noteworthy-light").
 ]
 
-- `heading-numbering` — Format for section headings
-- `pad-chapter-id` — Zero-pad chapter numbers (01, 02...)
-- `pad-page-id` — Zero-pad page numbers (01.01, 01.02...)
+== Usage
 
-== Solutions Visibility
-
-#note("Show/Hide Solutions")[
-  Control solution block visibility:
-  ```json
-  {
-    "show-solution": true,
-    "solutions-text": "Solutions",
-    "problems-text": "Problems"
-  }
-  ```
-]
-
-When `show-solution` is `false`, all `#solution[...]` blocks are hidden.
-
-== Font Configuration
-
-```json
-{
-  "font": "Linux Libertine",
-  "title-font": "Inter"
-}
-```
-
-== Building Your Document
-
-Use the Noteworthy TUI:
-```bash
-python3 noteworthy.py
-```
-
-Select *Builder* → Choose chapters → Press *Enter* to build.
-
-The output PDF is saved to `output.pdf`.
+This module is primarily automated via the build system and requires little manual interaction in `.typ` files. content/ files are automatically mapped to chapters based on their directory numbering.

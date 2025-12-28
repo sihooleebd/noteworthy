@@ -109,5 +109,26 @@
                 "title": "Combinatorics Visualizations"
             }
         ]
+    },
+    {
+        "title": "Trees Module",
+        "summary": "Visualizations for hierarchical data structures.",
+        "pages": [
+            {
+                "title": "Trees and Hierarchies"
+            }
+        ]
+    },
+    {
+        "title": "CS & Algorithms",
+        "summary": "Visualizations for data structures and algorithms.",
+        "pages": [
+            {
+                "title": "CS Data Structures"
+            },
+            {
+                "title": "Algorithms"
+            }
+        ]
     }
 ]

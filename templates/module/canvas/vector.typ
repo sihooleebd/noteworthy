@@ -42,23 +42,28 @@
   )
 
   if vec.label != none {
-    let mx = sx + (ex - sx) * label-pos
-    let my = sy + (ey - sy) * label-pos
+    let bg-col = theme.at("page-fill", default: white)
 
-    let dx = ex - sx
-    let dy = ey - sy
-    let len = calc.sqrt(dx * dx + dy * dy)
+    // Midpoint of vector
+    let mx = (sx + ex) / 2
+    let my = (sy + ey) / 2
 
-    if len > 0 {
-      // Perpendicular offset
-      let ox = -dy / len * label-dist
-      let oy = dx / len * label-dist
-      content((mx + ox, my + oy), text(fill: stroke-col, vec.label))
-    } else {
-      content((mx, my), text(fill: stroke-col, vec.label))
-    }
+    // Calculate pill width based on label (approximate for content)
+    let pill-half-width = 0.3
+
+    // Draw background pill for label (covers the vector line)
+    rect(
+      (mx - pill-half-width, my - 0.15),
+      (mx + pill-half-width, my + 0.15),
+      fill: bg-col,
+      stroke: (paint: stroke-col, thickness: 0.5pt),
+      radius: 0.1,
+    )
+
+    content((mx, my), text(fill: stroke-col, weight: "bold", vec.label), anchor: "center")
   }
 }
+
 
 /// Draw vector components (dashed projections)
 #let draw-vector-components(

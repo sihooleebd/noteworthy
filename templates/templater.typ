@@ -34,3 +34,9 @@
 
 // Combinatorics module (permutations, combinations, balls-and-boxes)
 #import "./module/combi/mod.typ": *
+
+// Trees module (horizontal/vertical trees, path highlighting, node highlighting)
+#import "./module/trees/mod.typ": *
+
+// DSA module (Data Structures & Algorithms)
+#import "./module/dsa/mod.typ": *

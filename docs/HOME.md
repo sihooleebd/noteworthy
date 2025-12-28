@@ -2,36 +2,29 @@
 
 Welcome to the Noteworthy documentation hub.
 
-## Reference Guides
+## Core Documentation
 
-### [Theming & Styling](THEMING.md)
-Learn how to customize the look of your documents.
-- Color Schemes
-- Smart Labels (Placeholders)
-- Stroke/Fill Styles
-- Theme Preview Library
+### [System Architecture](ARCHITECTURE.md)
+Understand how the Python build system interacts with Typst.
 
-### [Plotting & Geometry](PLOTTING.md)
-Comprehensive guide to the plotting system.
-- **2D Geometry**: Points, Lines, Polygons, Circles
-- **Functions**: Cartesian, Polar, Parametric
-- **Calculus**: Derivatives, Integrals, Tangents
-- **Vectors**: 2D/3D Vectors and Operations
-- **3D Space**: 3D Points, Lines, Shapes
-- **Data Visualization**: CSV Data Series
+### [Templates & Modules](TEMPLATES.md)
+Explore the available Typst modules and features.
 
-### [Workflow & Tools](TOOLS.md)
-Master the TUI and build system.
-- TUI Editors (Config, Snippets)
-- Hierarchy Synchronization
-- Build Process
-- Directory Structure
+## Module Reference
 
-### [Components & Blocks](COMPONENTS.md)
-Layout blocks for educational content.
-- Theorems, Definitions, Examples
-- Proofs & Solutions
-- Callouts & Notes
+-   **[Canvas Module](modules/canvas.md)**: Drawing primitives (points, lines, shapes, vectors).
+-   **[Graph Module](modules/graph.md)**: Function plotting and calculus.
+-   **[Geometry Module](modules/geometry.md)**: Geometric constructions and intersections.
+-   **[DSA Module](modules/dsa.md)**: Data structures (Stacks, Queues) and Graphs.
+-   **[Trees Module](modules/trees.md)**: Tree visualizations.
+-   **[Layout & Covers](modules/layout.md)**: Outlines, covers, prefaces.
+-   **[Other Modules](modules/others.md)**: Blocks, tables, combinatorics.
+
+## Guides
+
+-   **[Theming & Styling](THEMING.md)**: How to customize the look of your document.
+-   **[Previous Plotting Guide](PLOTTING.md)**: (Legacy/High-level overview of plotting).
+-   **[Workflow & Tools](TOOLS.md)**: How to use the TUI and CLI.
 
 ---
 

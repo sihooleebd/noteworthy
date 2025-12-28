@@ -63,10 +63,10 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
 ## Documentation
 
 **[Go to Documentation Hub](docs/HOME.md)**
-- [Plotting & Geometry](docs/PLOTTING.md)
+- [Architecture & Build](docs/ARCHITECTURE.md)
+- [Modules & Templates](docs/TEMPLATES.md)
 - [Theming & Styling](docs/THEMING.md)
 - [Workflow & Tools](docs/TOOLS.md)
-- [Components & Blocks](docs/COMPONENTS.md)
 
 ## Quick Start
 
