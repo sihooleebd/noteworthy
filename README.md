@@ -62,11 +62,11 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
 
 ## Documentation
 
-**[Go to Documentation Hub](https://github.com/sihooleebd/noteworthy/blob/documentation/docs/HOME.md)**
-- [System Architecture](https://github.com/sihooleebd/noteworthy/blob/documentation/docs/ARCHITECTURE.md)
-- [Modules & Templates](https://github.com/sihooleebd/noteworthy/blob/documentation/docs/TEMPLATES.md)
-- [Theming & Styling](https://github.com/sihooleebd/noteworthy/blob/documentation/docs/THEMING.md)
-- [Workflow & Tools](https://github.com/sihooleebd/noteworthy/blob/documentation/docs/TOOLS.md)
+**[Go to Documentation Hub](https://github.com/sihooleebd/noteworthy/blob/documentation/HOME.md)**
+- [System Architecture](https://github.com/sihooleebd/noteworthy/blob/documentation/ARCHITECTURE.md)
+- [Modules & Templates](https://github.com/sihooleebd/noteworthy/blob/documentation/TEMPLATES.md)
+- [Theming & Styling](https://github.com/sihooleebd/noteworthy/blob/documentation/THEMING.md)
+- [Workflow & Tools](https://github.com/sihooleebd/noteworthy/blob/documentation/TOOLS.md)
 
 ## Quick Start
 
