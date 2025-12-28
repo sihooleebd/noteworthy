@@ -148,17 +148,17 @@
 ///
 /// Parameters:
 /// - center: Center point (origin of rotation)
-/// - angle: Counterclockwise angle from baseline (or positive x-axis if no baseline)
+/// - angle: Counterclockwise angle from the reference point (or positive x-axis if none)
 /// - radius: Distance from center
-/// - baseline: Optional point defining the 0° direction from center
+/// - from: Optional reference point defining the 0° direction from center
 /// - label: Optional label
-#let point-at-angle(center, angle, radius, baseline: none, label: none) = {
+#let point-at-angle(center, angle, radius, from: none, label: none) = {
   let c = if is-point(center) { center } else { point(center.at(0), center.at(1)) }
 
-  // Calculate base angle from baseline point, or use 0 (positive x-axis)
+  // Calculate base angle from reference point, or use 0 (positive x-axis)
   // Note: calc.atan2 takes (x, y) in Typst (not standard y, x)
-  let base-angle = if baseline != none {
-    let b = if is-point(baseline) { baseline } else { point(baseline.at(0), baseline.at(1)) }
+  let base-angle = if from != none {
+    let b = if is-point(from) { from } else { point(from.at(0), from.at(1)) }
     calc.atan2(b.x - c.x, b.y - c.y)
   } else {
     0deg

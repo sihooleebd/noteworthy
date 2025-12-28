@@ -62,3 +62,24 @@
   result.style = style
   result
 }
+
+/// Calculate the Euclidean distance between two points
+///
+/// Parameters:
+/// - p1: First point (point object or (x, y) tuple)
+/// - p2: Second point (point object or (x, y) tuple)
+/// Returns: The distance as a float
+#let distance(p1, p2) = {
+  let pt1 = if is-point(p1) { p1 } else { point(p1.at(0), p1.at(1)) }
+  let pt2 = if is-point(p2) { p2 } else { point(p2.at(0), p2.at(1)) }
+
+  let dx = pt2.x - pt1.x
+  let dy = pt2.y - pt1.y
+
+  if pt1.z != none and pt2.z != none {
+    let dz = pt2.z - pt1.z
+    calc.sqrt(dx * dx + dy * dy + dz * dz)
+  } else {
+    calc.sqrt(dx * dx + dy * dy)
+  }
+}

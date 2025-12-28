@@ -106,15 +106,15 @@ Create circles and multi-sided shapes.
 #definition("point-at-angle")[
   Creates a point at a given angle and radius from a center.
   ```typst
-  point-at-angle(center, angle, radius, baseline: none, label: none)
+  point-at-angle(center, angle, radius, from: none, label: none)
   ```
-  When `baseline` is specified, the angle is measured counterclockwise from the center→baseline direction.
+  When `from` is specified, the angle is measured counterclockwise from the center→from direction.
 ]
 
 #example("67° Arc")[
   #let O = point(0, 0, label: "O")
   #let A = point(2, 0, label: "A")
-  #let B = point-at-angle(O, 67deg, 2, baseline: A, label: "B")
+  #let B = point-at-angle(O, 67deg, 2, from: A, label: "B")
 
   #cartesian-canvas(
     x-tick: 1,

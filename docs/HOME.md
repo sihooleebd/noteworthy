@@ -28,4 +28,4 @@ Explore the available Typst modules and features.
 
 ---
 
-*Return to [Main README]([../README.md](https://github.com/sihooleebd/noteworthy/blob/master/README.md))*
+*Return to [Main README](../README.md)*

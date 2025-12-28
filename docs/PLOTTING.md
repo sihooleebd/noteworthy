@@ -37,7 +37,7 @@ polygon(p1, p2, p3, stroke: blue)
 arc(center, p1, p2)  // Arc from p1 to p2, centered at center
 semicircle(center, start-point)  // 180° arc from start-point
 regular-polygon(center, first-vertex, n)  // n-sided polygon
-point-at-angle(center, angle, radius, baseline: p)  // Point at angle from baseline
+point-at-angle(center, angle, radius, from: p)  // Point at angle from reference point
 
 // Curves
 // Connected straight lines (Polyline)
