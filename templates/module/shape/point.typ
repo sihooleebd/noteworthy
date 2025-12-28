@@ -83,3 +83,21 @@
     calc.sqrt(dx * dx + dy * dy)
   }
 }
+
+/// Get the x-coordinate of a point
+#let x(p) = {
+  let pt = if is-point(p) { p } else { point(p.at(0), p.at(1)) }
+  pt.x
+}
+
+/// Get the y-coordinate of a point
+#let y(p) = {
+  let pt = if is-point(p) { p } else { point(p.at(0), p.at(1)) }
+  pt.y
+}
+
+/// Get the z-coordinate of a point (returns none for 2D points)
+#let z(p) = {
+  let pt = if is-point(p) { p } else { point(p.at(0), p.at(1)) }
+  pt.z
+}
