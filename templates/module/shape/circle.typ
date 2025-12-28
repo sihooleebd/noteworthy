@@ -70,22 +70,31 @@
   circle(point(ux, uy), r, label: label, style: style)
 }
 
-/// Create an arc (portion of a circle)
+/// Create an arc (portion of a circle) from a center and two points
 ///
 /// Parameters:
-/// - center: Center point
-/// - radius: Arc radius
-/// - start-angle: Starting angle (radians or degrees)
-/// - end-angle: Ending angle
+/// - center: Center point of the arc
+/// - p1: Start point on the arc
+/// - p2: End point on the arc
 /// - label: Optional label
 /// - style: Optional style overrides
-#let arc(center, radius, start-angle, end-angle, label: none, style: auto) = {
-  let pt = if is-point(center) { center } else { point(center.at(0), center.at(1)) }
+#let arc(center, p1, p2, label: none, style: auto) = {
+  let c = if is-point(center) { center } else { point(center.at(0), center.at(1)) }
+  let pt1 = if is-point(p1) { p1 } else { point(p1.at(0), p1.at(1)) }
+  let pt2 = if is-point(p2) { p2 } else { point(p2.at(0), p2.at(1)) }
+
+  // Calculate radius from center to p1
+  let r = calc.sqrt(calc.pow(pt1.x - c.x, 2) + calc.pow(pt1.y - c.y, 2))
+
+  // Calculate angles from center to p1 and p2
+  // Note: calc.atan2 takes (x, y) in Typst (not standard y, x)
+  let start-angle = calc.atan2(pt1.x - c.x, pt1.y - c.y)
+  let end-angle = calc.atan2(pt2.x - c.x, pt2.y - c.y)
 
   (
     type: "arc",
-    center: pt,
-    radius: radius,
+    center: c,
+    radius: r,
     start: start-angle,
     end: end-angle,
     label: label,
@@ -93,9 +102,26 @@
   )
 }
 
-/// Create a semicircle
-#let semicircle(center, radius, start-angle: 0deg, label: none, style: auto) = {
-  arc(center, radius, start-angle, start-angle + 180deg, label: label, style: style)
+/// Create a semicircle from a center and a point on the arc
+/// The semicircle will be drawn 180° counterclockwise from the start point
+///
+/// Parameters:
+/// - center: Center point
+/// - start-point: Starting point on the semicircle
+/// - label: Optional label
+/// - style: Optional style overrides
+#let semicircle(center, start-point, label: none, style: auto) = {
+  let c = if is-point(center) { center } else { point(center.at(0), center.at(1)) }
+  let pt = if is-point(start-point) { start-point } else { point(start-point.at(0), start-point.at(1)) }
+
+  // Calculate the end point (180° from start)
+  // Vector from center to start
+  let dx = pt.x - c.x
+  let dy = pt.y - c.y
+  // Rotate 180° (negate)
+  let end-pt = point(c.x - dx, c.y - dy)
+
+  arc(c, pt, end-pt, label: label, style: style)
 }
 
 /// Check if object is a circle
@@ -113,6 +139,35 @@
   point(
     circ.center.x + circ.radius * calc.cos(angle),
     circ.center.y + circ.radius * calc.sin(angle),
+    label: label,
+  )
+}
+
+/// Create a point at a given angle and radius from a center
+/// Useful for creating arcs with precise angles (e.g., 67°)
+///
+/// Parameters:
+/// - center: Center point (origin of rotation)
+/// - angle: Counterclockwise angle from baseline (or positive x-axis if no baseline)
+/// - radius: Distance from center
+/// - baseline: Optional point defining the 0° direction from center
+/// - label: Optional label
+#let point-at-angle(center, angle, radius, baseline: none, label: none) = {
+  let c = if is-point(center) { center } else { point(center.at(0), center.at(1)) }
+
+  // Calculate base angle from baseline point, or use 0 (positive x-axis)
+  // Note: calc.atan2 takes (x, y) in Typst (not standard y, x)
+  let base-angle = if baseline != none {
+    let b = if is-point(baseline) { baseline } else { point(baseline.at(0), baseline.at(1)) }
+    calc.atan2(b.x - c.x, b.y - c.y)
+  } else {
+    0deg
+  }
+
+  let total-angle = base-angle + angle
+  point(
+    c.x + radius * calc.cos(total-angle),
+    c.y + radius * calc.sin(total-angle),
     label: label,
   )
 }

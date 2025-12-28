@@ -584,6 +584,7 @@
       radius: obj.radius,
       stroke: style.stroke,
       mode: "OPEN",
+      anchor: "origin", // Anchor at center, not arc start
     )
   } else {
     // 3D Arc

@@ -66,16 +66,16 @@
   )
 }
 
-/// Create a line from point and angle
+/// Create a line from a point in the direction of another point
 ///
 /// Parameters:
 /// - p: Point on the line
-/// - angle: Direction angle
+/// - direction: Point indicating the direction (line passes through p toward direction)
 /// - style: Optional style overrides
-#let line-through-angle(p, angle, style: auto) = {
+#let line-through-direction(p, direction, style: auto) = {
   let pt = if is-point(p) { p } else { point(p.at(0), p.at(1)) }
-  let p2 = point(pt.x + calc.cos(angle), pt.y + calc.sin(angle))
-  line(pt, p2, style: style)
+  let dir = if is-point(direction) { direction } else { point(direction.at(0), direction.at(1)) }
+  line(pt, dir, style: style)
 }
 
 /// Check if object is a segment

@@ -50,17 +50,23 @@
   polygon(p1, p2, p3, p4, label: label, fill: fill, style: style)
 }
 
-/// Create a regular polygon
+/// Create a regular polygon from center and first vertex
 ///
 /// Parameters:
 /// - center: Center point
-/// - radius: Circumradius (distance from center to vertex)
+/// - first-vertex: Position of the first vertex (defines radius and orientation)
 /// - n: Number of sides
-/// - start-angle: Angle of first vertex (default: 90° = top)
 /// - label: Optional label
 /// - fill: Optional fill color
-#let regular-polygon(center, radius, n, start-angle: 90deg, label: none, fill: none, style: auto) = {
+#let regular-polygon(center, first-vertex, n, label: none, fill: none, style: auto) = {
   let c = if is-point(center) { center } else { point(center.at(0), center.at(1)) }
+  let fv = if is-point(first-vertex) { first-vertex } else { point(first-vertex.at(0), first-vertex.at(1)) }
+
+  // Calculate radius and start angle from first-vertex
+  let dx = fv.x - c.x
+  let dy = fv.y - c.y
+  let radius = calc.sqrt(dx * dx + dy * dy)
+  let start-angle = calc.atan2(dx, dy)
 
   let pts = range(n).map(i => {
     let angle = start-angle + (360deg / n) * i

@@ -62,11 +62,7 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
 
 ## Documentation
 
-**[Go to Documentation Hub](https://github.com/sihooleebd/noteworthy/blob/documentation/HOME.md)**
-- [System Architecture](https://github.com/sihooleebd/noteworthy/blob/documentation/ARCHITECTURE.md)
-- [Modules & Templates](https://github.com/sihooleebd/noteworthy/blob/documentation/TEMPLATES.md)
-- [Theming & Styling](https://github.com/sihooleebd/noteworthy/blob/documentation/THEMING.md)
-- [Workflow & Tools](https://github.com/sihooleebd/noteworthy/blob/documentation/TOOLS.md)
+**[Go to Documentation Hub](./docs/HOME.md)**
 
 ## Quick Start
 
@@ -175,13 +171,11 @@ The noteworthy system guides you through the initialization, the configuration, 
 
 ```bash
 # Compile full document with folder info
-eval "typst compile templates/parser.typ output.pdf --root . $(python3 noteworthy.py --print-inputs)"
+eval "typst compile templates/core/parser.typ output.pdf --root . $(python3 noteworthy.py --print-inputs)"
 
 # Compile specific section
-typst compile templates/parser.typ section.pdf --root . --input target=0/0
+typst compile templates/core/parser.typ section.pdf --root . --input target=0/0
 ```
-
-## Contributing
 
 ## Contributing
 
