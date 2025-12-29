@@ -83,15 +83,17 @@ class HierarchyEditor(ListEditor):
 
     def save(self):
         try:
+            from ...core.fs_sync import ensure_content_structure
+            
             HIERARCHY_FILE.write_text(json.dumps(self.hierarchy, indent=4))
             self.modified = False
             
-            from ...core.fs_sync import ensure_content_structure, cleanup_extra_files
+            # Only create missing files, never delete or validate
             ensure_content_structure(self.hierarchy)
-            cleanup_extra_files(self.hierarchy)
             
             return True
-        except: return False
+        except Exception:
+            return False
 
     def refresh(self):
         h, w = TUI.get_dims(self.scr)
