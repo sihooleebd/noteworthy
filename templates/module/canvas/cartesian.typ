@@ -64,12 +64,12 @@
   let stroke-col = theme.at("plot", default: (:)).at("stroke", default: black)
   let grid-col = theme.at("plot", default: (:)).at("grid", default: gray)
   let objs = objects.pos() + objects.named().at("children", default: ())
-
   // Color palette for multiple series
-  let palette = theme
-    .at("plot", default: (:))
-    .at("palette", default: (
-      black, // black (first)
+  let palette = if "palette" in theme.at("plot", default: (:)) {
+    theme.plot.palette
+  } else {
+    (
+      theme.at("plot", default: (:)).at("highlight", default: black),
       rgb("#e41a1c"), // red
       rgb("#377eb8"), // blue
       rgb("#4daf4a"), // green
@@ -77,7 +77,8 @@
       rgb("#ff7f00"), // orange
       rgb("#a65628"), // brown
       rgb("#f781bf"), // pink
-    ))
+    )
+  }
 
   // Count plottable items (func, data-series, curve) to assign colors
   let get-color-index(objs) = {
@@ -307,10 +308,11 @@
   let stroke-col = theme.at("plot", default: (:)).at("stroke", default: black)
 
   // Color palette for multiple series
-  let palette = theme
-    .at("plot", default: (:))
-    .at("palette", default: (
-      black, // black (first)
+  let palette = if "palette" in theme.at("plot", default: (:)) {
+    theme.plot.palette
+  } else {
+    (
+      theme.at("plot", default: (:)).at("highlight", default: black),
       rgb("#e41a1c"), // red
       rgb("#377eb8"), // blue
       rgb("#4daf4a"), // green
@@ -318,7 +320,8 @@
       rgb("#ff7f00"), // orange
       rgb("#a65628"), // brown
       rgb("#f781bf"), // pink
-    ))
+    )
+  }
 
   // Count plottable items to assign colors
   let objs = objects.pos()
