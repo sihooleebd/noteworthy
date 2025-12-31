@@ -68,6 +68,7 @@
   import cetz.draw: *
 
   let items = obj.items
+  let labels = obj.at("labels", default: none)
   let radius = obj.at("radius", default: 1.5)
   let highlight = obj.at("highlight", default: ())
   let show-arrows = obj.at("show-arrows", default: false)
@@ -75,6 +76,7 @@
 
   let n = items.len()
   let item-radius = 0.35
+  let label-offset = 0.55
 
   let ox = if type(origin) == array { origin.at(0) } else { origin.x }
   let oy = if type(origin) == array { origin.at(1) } else { origin.y }
@@ -108,6 +110,17 @@
       text(fill: stroke-col, size: 11pt, weight: "bold", item-content),
       anchor: "center",
     )
+
+    // Position label outside the circle
+    if labels != none and i < labels.len() {
+      let lx = ox + (radius + item-radius + label-offset) * calc.cos(angle)
+      let ly = oy + (radius + item-radius + label-offset) * calc.sin(angle)
+      content(
+        (lx, ly),
+        text(fill: stroke-col.lighten(30%), size: 8pt, labels.at(i)),
+        anchor: "center",
+      )
+    }
   }
 }
 

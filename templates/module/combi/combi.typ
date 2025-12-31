@@ -5,27 +5,44 @@
 // that can be rendered in blank-canvas.
 
 // =====================================================
+// PERMUTATION OBJECT
+// =====================================================
+
+/// Create a permutation data object that can be reused
+/// across linear-perm and circular-perm visualizations.
+///
+/// Parameters:
+/// - names: Array of item names/values to display (strings, numbers, or content)
+/// - labels: Optional array of position labels (e.g., ("1st", "2nd", ...))
+#let permutation(
+  names,
+  labels: none,
+) = (
+  type: "permutation",
+  names: names,
+  labels: labels,
+)
+
+// =====================================================
 // LINEAR PERMUTATION OBJECT
 // =====================================================
 
 /// Create a linear permutation visualization object
 ///
 /// Parameters:
-/// - items: Array of items to display (strings, numbers, or content)
-/// - labels: Optional array of position labels (e.g., ("1st", "2nd", ...))
+/// - perm: A permutation object created with permutation()
 /// - highlight: Optional indices to highlight
 /// - origin: Position to place the visualization
 /// - style: Optional style overrides
 #let linear-perm(
-  items,
-  labels: none,
+  perm,
   highlight: (),
   origin: (0, 0),
   style: auto,
 ) = (
   type: "linear-perm",
-  items: items,
-  labels: labels,
+  items: perm.names,
+  labels: perm.labels,
   highlight: highlight,
   origin: origin,
   style: style,
@@ -38,14 +55,14 @@
 /// Create a circular permutation visualization object
 ///
 /// Parameters:
-/// - items: Array of items to display
+/// - perm: A permutation object created with permutation()
 /// - radius: Circle radius (default: 1.5)
 /// - highlight: Optional indices to highlight
 /// - show-arrows: Show direction arrows
 /// - origin: Center position
 /// - style: Optional style overrides
 #let circular-perm(
-  items,
+  perm,
   radius: 1.5,
   highlight: (),
   show-arrows: false,
@@ -53,7 +70,8 @@
   style: auto,
 ) = (
   type: "circular-perm",
-  items: items,
+  items: perm.names,
+  labels: perm.labels,
   radius: radius,
   highlight: highlight,
   show-arrows: show-arrows,
@@ -201,6 +219,7 @@
 // TYPE CHECKERS
 // =====================================================
 
+#let is-permutation(obj) = type(obj) == dictionary and obj.at("type", default: none) == "permutation"
 #let is-linear-perm(obj) = type(obj) == dictionary and obj.at("type", default: none) == "linear-perm"
 #let is-circular-perm(obj) = type(obj) == dictionary and obj.at("type", default: none) == "circular-perm"
 #let is-balls-boxes(obj) = type(obj) == dictionary and obj.at("type", default: none) == "balls-boxes"

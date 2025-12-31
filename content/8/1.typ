@@ -9,13 +9,13 @@ Visual representations for counting problems.
 Arrange items in a row:
 
 #blank-canvas(
-  linear-perm(("A", "B", "C", "D"), labels: ("1st", "2nd", "3rd", "4th")),
+  linear-perm(permutation(("A", "B", "C", "D"), labels: ("1st", "2nd", "3rd", "4th"))),
 )
 
 Highlight specific positions:
 
 #blank-canvas(
-  linear-perm(("1", "2", "3", "4", "5"), highlight: (0, 2, 4)),
+  linear-perm(permutation(("1", "2", "3", "4", "5")), highlight: (0, 2, 4)),
 )
 
 == Circular Permutations
@@ -23,7 +23,7 @@ Highlight specific positions:
 Arrange items in a circle:
 
 #blank-canvas(
-  circular-perm(("A", "B", "C", "D", "E"), radius: 1.5),
+  circular-perm(permutation(("A", "B", "C", "D", "E")), radius: 1.5),
 )
 
 == Balls and Boxes
