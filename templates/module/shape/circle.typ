@@ -33,6 +33,7 @@
     center: pt,
     radius: r,
     label: named.at("label", default: none),
+    label-anchor: named.at("label-anchor", default: none),
     fill: named.at("fill", default: none),
     style: named.at("style", default: auto),
   )
@@ -76,9 +77,9 @@
 /// - center: Center point of the arc
 /// - p1: Start point on the arc
 /// - p2: End point on the arc
-/// - label: Optional label
+/// - label-anchor: Optional anchor for label positioning
 /// - style: Optional style overrides
-#let arc(center, p1, p2, label: none, style: auto) = {
+#let arc(center, p1, p2, label: none, label-anchor: none, style: auto) = {
   let c = if is-point(center) { center } else { point(center.at(0), center.at(1)) }
   let pt1 = if is-point(p1) { p1 } else { point(p1.at(0), p1.at(1)) }
   let pt2 = if is-point(p2) { p2 } else { point(p2.at(0), p2.at(1)) }
@@ -98,6 +99,7 @@
     start: start-angle,
     end: end-angle,
     label: label,
+    label-anchor: label-anchor,
     style: style,
   )
 }
@@ -108,9 +110,9 @@
 /// Parameters:
 /// - center: Center point
 /// - start-point: Starting point on the semicircle
-/// - label: Optional label
+/// - label-anchor: Optional anchor for label positioning
 /// - style: Optional style overrides
-#let semicircle(center, start-point, label: none, style: auto) = {
+#let semicircle(center, start-point, label: none, label-anchor: none, style: auto) = {
   let c = if is-point(center) { center } else { point(center.at(0), center.at(1)) }
   let pt = if is-point(start-point) { start-point } else { point(start-point.at(0), start-point.at(1)) }
 
@@ -121,7 +123,7 @@
   // Rotate 180° (negate)
   let end-pt = point(c.x - dx, c.y - dy)
 
-  arc(c, pt, end-pt, label: label, style: style)
+  arc(c, pt, end-pt, label: label, label-anchor: label-anchor, style: style)
 }
 
 /// Check if object is a circle

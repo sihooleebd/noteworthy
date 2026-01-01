@@ -300,8 +300,8 @@
     let bg-col = theme.at("page-fill", default: none)
     let stroke-col = theme.at("plot", default: (:)).at("stroke", default: black)
 
-    // Smart anchor selection - prefer south, but use label-anchor if specified
-    let anchor = obj.at("label-anchor", default: "south")
+    // Use label-anchor if specified, otherwise default to north
+    let anchor = obj.at("label-anchor", default: "north")
 
     content(
       coords,
@@ -326,54 +326,19 @@
 
   if obj.at("label", default: none) != none {
     let bg-col = theme.at("page-fill", default: none)
-
-    // For 2D segments, use smart positioning with angle-aware anchors
-    if p1.len() == 2 {
-      let dx = p2.at(0) - p1.at(0)
-      let dy = p2.at(1) - p1.at(1)
-      let len = calc.sqrt(dx * dx + dy * dy)
-      let mid = ((p1.at(0) + p2.at(0)) / 2, (p1.at(1) + p2.at(1)) / 2)
-
-      if len > 0 {
-        // Perpendicular unit vector (90 deg CCW)
-        let nx = -dy / len
-        let ny = dx / len
-        let offset = 0.25
-        let label-pos = (mid.at(0) + nx * offset, mid.at(1) + ny * offset)
-
-        // Choose anchor based on perpendicular direction
-        let anchor = if ny >= 0 { "south" } else { "north" }
-
-        content(
-          label-pos,
-          text(fill: theme.plot.stroke, format-label(obj, obj.label)),
-          anchor: anchor,
-          padding: 0.1,
-          fill: bg-col,
-          stroke: none,
-        )
-      } else {
-        content(
-          mid,
-          text(fill: theme.plot.stroke, format-label(obj, obj.label)),
-          anchor: "south",
-          padding: 0.1,
-          fill: bg-col,
-          stroke: none,
-        )
-      }
+    let mid = if p1.len() == 2 {
+      ((p1.at(0) + p2.at(0)) / 2, (p1.at(1) + p2.at(1)) / 2)
     } else {
-      // 3D: simple midpoint label
-      let mid = ((p1.at(0) + p2.at(0)) / 2, (p1.at(1) + p2.at(1)) / 2, (p1.at(2) + p2.at(2)) / 2)
-      content(
-        mid,
-        text(fill: theme.plot.stroke, format-label(obj, obj.label)),
-        anchor: "center",
-        padding: 0.1,
-        fill: bg-col,
-        stroke: none,
-      )
+      ((p1.at(0) + p2.at(0)) / 2, (p1.at(1) + p2.at(1)) / 2, (p1.at(2) + p2.at(2)) / 2)
     }
+    let anchor = obj.at("label-anchor", default: "north")
+
+    content(
+      mid,
+      text(fill: theme.plot.stroke, format-label(obj, obj.label)),
+      anchor: anchor,
+      padding: 0.1,
+    )
   }
 }
 
@@ -464,10 +429,11 @@
   if obj.at("label", default: none) != none {
     let bg-col = theme.at("page-fill", default: none)
     let mid = ((p1.at(0) + p2.at(0)) / 2, (p1.at(1) + p2.at(1)) / 2)
+    let anchor = obj.at("label-anchor", default: "north")
     content(
       mid,
       text(fill: theme.plot.stroke, obj.label),
-      anchor: "south",
+      anchor: anchor,
       padding: 0.1,
       fill: bg-col,
       stroke: none,
@@ -475,7 +441,7 @@
   }
 }
 
-/// Draw a ray
+/// Draw a ray, clipped to the canvas bounds
 #let draw-ray(obj, theme, bounds) = {
   import cetz.draw: *
   let style = get-line-style(obj, theme)
@@ -489,23 +455,96 @@
   let len = calc.sqrt(dx * dx + dy * dy + dz * dz)
   if len == 0 { return }
 
-  let start = if is-3d { (obj.origin.x, obj.origin.y, obj.origin.z) } else { (obj.origin.x, obj.origin.y) }
-
-  // Extend
-  let extend = 20
-  if not is-3d {
-    let (x-min, x-max) = bounds.at("x", default: (-10, 10))
-    let (y-min, y-max) = bounds.at("y", default: (-10, 10))
-    extend = calc.max(x-max - x-min, y-max - y-min) * 2
+  // 3D: Fallback to extended line (clipping in 3D is complex)
+  if is-3d {
+    let extend = 20
+    let start = (obj.origin.x, obj.origin.y, obj.origin.z)
+    let p2 = (start.at(0) + dx / len * extend, start.at(1) + dy / len * extend, start.at(2) + dz / len * extend)
+    line(start, p2, stroke: style.stroke)
+    return
   }
 
-  let p2 = if is-3d {
-    (start.at(0) + dx / len * extend, start.at(1) + dy / len * extend, start.at(2) + dz / len * extend)
+  // 2D: Clip ray to bounds using parametric intersection
+  // Ray: P(t) = origin + t * direction, for t >= 0
+  let (x-min, x-max) = bounds.at("x", default: (-10, 10))
+  let (y-min, y-max) = bounds.at("y", default: (-10, 10))
+
+  let ox = obj.origin.x
+  let oy = obj.origin.y
+
+  // Find t values where ray intersects each boundary (only t > 0)
+  let t-values = ()
+
+  // Left boundary (x = x-min)
+  if dx != 0 {
+    let t = (x-min - ox) / dx
+    if t > 0 {
+      let y = oy + t * dy
+      if y >= y-min and y <= y-max {
+        t-values.push(t)
+      }
+    }
+  }
+
+  // Right boundary (x = x-max)
+  if dx != 0 {
+    let t = (x-max - ox) / dx
+    if t > 0 {
+      let y = oy + t * dy
+      if y >= y-min and y <= y-max {
+        t-values.push(t)
+      }
+    }
+  }
+
+  // Bottom boundary (y = y-min)
+  if dy != 0 {
+    let t = (y-min - oy) / dy
+    if t > 0 {
+      let x = ox + t * dx
+      if x >= x-min and x <= x-max {
+        t-values.push(t)
+      }
+    }
+  }
+
+  // Top boundary (y = y-max)
+  if dy != 0 {
+    let t = (y-max - oy) / dy
+    if t > 0 {
+      let x = ox + t * dx
+      if x >= x-min and x <= x-max {
+        t-values.push(t)
+      }
+    }
+  }
+
+  // No intersections with positive t means ray doesn't enter/exit bounds in forward direction
+  if t-values.len() == 0 { return }
+
+  // Sort t values
+  let sorted-t = t-values.sorted()
+
+  // Determine start and end points
+  let origin-inside = ox >= x-min and ox <= x-max and oy >= y-min and oy <= y-max
+
+  if origin-inside {
+    // Origin is inside: draw from origin to first exit point
+    let t-exit = sorted-t.first()
+    let p1 = (ox, oy)
+    let p2 = (ox + t-exit * dx, oy + t-exit * dy)
+    line(p1, p2, stroke: style.stroke)
   } else {
-    (start.at(0) + dx / len * extend, start.at(1) + dy / len * extend)
+    // Origin is outside: need entry and exit points (if ray passes through bounds)
+    if sorted-t.len() >= 2 {
+      let t-entry = sorted-t.first()
+      let t-exit = sorted-t.last()
+      let p1 = (ox + t-entry * dx, oy + t-entry * dy)
+      let p2 = (ox + t-exit * dx, oy + t-exit * dy)
+      line(p1, p2, stroke: style.stroke)
+    }
+    // If only 1 intersection and origin outside, ray just touches boundary - skip drawing
   }
-
-  line(start, p2, stroke: style.stroke)
 }
 
 /// Draw a circle
@@ -553,12 +592,7 @@
       (obj.center.x + obj.radius * calc.cos(ang), obj.center.y + obj.radius * calc.sin(ang))
     }
 
-    // Smart anchor based on angle quadrant
-    // Q1 (0-90): south-west, Q2 (90-180): south-east, Q3 (180-270): north-east, Q4 (270-360): north-west
-    let ang-deg = if ang < 0deg { ang + 360deg } else { ang }
-    let anchor = if ang-deg >= 0deg and ang-deg < 90deg { "south-west" } else if ang-deg >= 90deg and ang-deg < 180deg {
-      "south-east"
-    } else if ang-deg >= 180deg and ang-deg < 270deg { "north-east" } else { "north-west" }
+    let anchor = obj.at("label-anchor", default: "north")
 
     content(
       label-coords,
@@ -760,8 +794,7 @@
       }
     }
 
-    // Use appropriate anchor based on position type
-    let anchor = if pos-type == "top-right" { "south-west" } else { "center" }
+    let anchor = obj.at("label-anchor", default: "north")
 
     content(
       label-pos,
