@@ -127,3 +127,12 @@ def extract_hierarchy():
         sys.exit(1)
     finally:
         temp_file.unlink(missing_ok=True)
+
+def load_json_safe(file_path):
+    """Safely load JSON file, returning empty dict on failure."""
+    try:
+        if file_path.exists():
+            return json.loads(file_path.read_text())
+    except:
+        pass
+    return {}

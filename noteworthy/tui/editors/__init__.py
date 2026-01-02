@@ -5,10 +5,12 @@ from .hierarchy import HierarchyEditor
 from .schemes import SchemeEditor
 from .snippets import SnippetsEditor
 from .indexignore import IndexignoreEditor
+from .module_config import ModuleConfigEditor
 
 def show_editor_menu(scr):
     options = [
         ("c", "General Settings", "Edit configuration"),
+        ("m", "Module Config", "Manage packages"),
         ("h", "Chapter Structure", "Edit document structure"),
         ("s", "Color Themes", "Edit color themes"),
         ("p", "Code Snippets", "Edit custom snippets"),
@@ -47,6 +49,8 @@ def show_editor_menu(scr):
             sel = options[cur][0]
             if sel == 'c':
                 ConfigEditor(scr).run()
+            elif sel == 'm':
+                ModuleConfigEditor(scr).run()
             elif sel == 'h':
                 HierarchyEditor(scr).run()
             elif sel == 's':
@@ -57,6 +61,8 @@ def show_editor_menu(scr):
                 IndexignoreEditor(scr).run()
         elif k == ord('c'):
             ConfigEditor(scr).run()
+        elif k == ord('m'):
+            ModuleConfigEditor(scr).run()
         elif k == ord('h'):
             HierarchyEditor(scr).run()
         elif k == ord('s'):

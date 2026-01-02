@@ -12,6 +12,7 @@ HIERARCHY_FILE = BASE_DIR / 'config/hierarchy.json'
 PREFACE_FILE = BASE_DIR / 'config/preface.typ'
 SNIPPETS_FILE = BASE_DIR / 'config/snippets.typ'
 SCHEMES_DIR = BASE_DIR / 'config/schemes'
+MODULES_CONFIG_FILE = BASE_DIR / 'config/modules.json'
 SETUP_FILE = BASE_DIR / 'templates/core/setup.typ'
 
 LOGO = ['         ,--. ', "       ,--.'| ", '   ,--,:  : | ', ",`--.'`|  ' : ", '|   :  :  | | ', ':   |   \\ | : ', "|   : '  '; | ", "'   ' ;.    ; ", '|   | | \\   | ', "'   : |  ; .' ", "|   | '`--'   ", "'   : |       ", ";   |.'       ", "'---'         "]

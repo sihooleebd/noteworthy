@@ -1,0 +1,57 @@
+{
+    "meta": {
+        "commit": "f4e3f55c4bb6707eaa618ad4d80fcf5aff8e5716"
+    },
+    "modules": {
+        "layout": {
+            "source": "remote",
+            "version": "0.1.0",
+            "status": "global"
+        },
+        "trees": {
+            "source": "remote",
+            "version": "0.1.0",
+            "status": "global"
+        },
+        "shape": {
+            "source": "remote",
+            "version": "0.1.0",
+            "status": "global"
+        },
+        "data": {
+            "source": "remote",
+            "version": "0.1.0",
+            "status": "global"
+        },
+        "graph": {
+            "source": "remote",
+            "version": "0.1.0",
+            "status": "global"
+        },
+        "block": {
+            "source": "remote",
+            "version": "0.1.0",
+            "status": "global"
+        },
+        "canvas": {
+            "source": "remote",
+            "version": "0.1.0",
+            "status": "global"
+        },
+        "dsa": {
+            "source": "remote",
+            "version": "0.1.0",
+            "status": "global"
+        },
+        "cover": {
+            "source": "remote",
+            "version": "0.1.0",
+            "status": "global"
+        },
+        "combi": {
+            "source": "remote",
+            "version": "0.1.0",
+            "status": "global"
+        }
+    }
+}

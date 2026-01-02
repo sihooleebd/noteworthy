@@ -8,35 +8,9 @@
 #import "core/scheme.typ": *
 
 // =====================================================
-// MODULE IMPORTS
+// MODULE IMPORTS (Managed by Module Config)
 // =====================================================
+// Modules (Managed by Module Config)
+// Modules (Managed by Module Config)
+#import "core/imports.typ": *
 
-// Shape module (points, lines, circles, polygons, angles)
-#import "./module/shape/mod.typ": *
-
-// Graph module (vectors, functions, calculus)
-#import "./module/graph/mod.typ": *
-
-// Data module (data series, tables, curves)
-#import "./module/data/mod.typ": *
-
-// Canvas module (cartesian, polar, space, blank canvases + vector/combi helpers)
-#import "./module/canvas/mod.typ": *
-
-// Block module (definition, theorem, example, solution, etc.)
-#import "./module/block/mod.typ": *
-
-// Cover module (cover, chapter-cover, preface, project)
-#import "./module/cover/mod.typ": *
-
-// Layout module (outline)
-#import "./module/layout/mod.typ": *
-
-// Combinatorics module (permutations, combinations, balls-and-boxes)
-#import "./module/combi/mod.typ": *
-
-// Trees module (horizontal/vertical trees, path highlighting, node highlighting)
-#import "./module/trees/mod.typ": *
-
-// DSA module (Data Structures & Algorithms)
-#import "./module/dsa/mod.typ": *
