@@ -22,6 +22,7 @@ venv/
 # Project Specific
 templates/build/
 templates/systemconfig/
+templates/module/
 exports/
 .build_settings.json
 build_settings.json
