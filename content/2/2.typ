@@ -9,8 +9,8 @@ Create circles and multi-sided shapes.
 #definition("circle")[
   Creates a circle from center and radius, or center and a point on the circle.
   ```typst
-  circle(center, radius: r, label: none, label-anchor: "north", style: auto)
-  circle(center, through: point, label: none, label-anchor: "north", style: auto)
+  circle(center, radius: r, label: none, label-anchor: "north", label-distance: 0.15)
+  circle(center, through: point, label: none, label-anchor: "north", label-distance: 0.15)
   ```
 ]
 
@@ -40,7 +40,7 @@ Create circles and multi-sided shapes.
 #definition("polygon")[
   Creates a closed polygon from vertices.
   ```typst
-  polygon(p1, p2, p3, ..., label: none, label-anchor: "north", style: auto)
+  polygon(p1, p2, p3, ..., label: none, label-anchor: "north", label-distance: 0.15)
   ```
 ]
 
@@ -60,7 +60,7 @@ Create circles and multi-sided shapes.
 #definition("regular-polygon")[
   Creates a regular n-sided polygon from a center and first vertex.
   ```typst
-  regular-polygon(center, first-vertex, n, label: none, label-anchor: "north", style: auto)
+  regular-polygon(center, first-vertex, n, label: none, label-anchor: "north", label-distance: 0.15)
   ```
   The vertex position defines both the radius and orientation.
 ]
@@ -83,7 +83,7 @@ Create circles and multi-sided shapes.
 #definition("arc")[
   Creates an arc from a center and two points on the arc.
   ```typst
-  arc(center, p1, p2, label: none, label-anchor: "north", style: auto)
+  arc(center, p1, p2, label: none, label-anchor: "north", label-distance: 0.15)
   ```
   The arc is drawn from `p1` to `p2`. The radius is derived from the center-to-p1 distance.
 ]
@@ -106,7 +106,7 @@ Create circles and multi-sided shapes.
 #definition("point-at-angle")[
   Creates a point at a given angle and radius from a center.
   ```typst
-  point-at-angle(center, angle, radius, from: none, label: none)
+  point-at-angle(center, angle, radius, from: none, label: none, label-anchor: "north", label-distance: 0.2)
   ```
   When `from` is specified, the angle is measured counterclockwise from the center→from direction.
 ]
@@ -147,7 +147,7 @@ Create circles and multi-sided shapes.
 #definition("angle")[
   Creates an angle marker between three points.
   ```typst
-  angle(p1, vertex, p2, label: $theta$, style: auto)
+  angle(p1, vertex, p2, label: $theta$, label-anchor: "center", label-distance: none)
   ```
 ]
 

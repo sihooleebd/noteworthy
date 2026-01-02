@@ -13,8 +13,8 @@ Find intersections and construct derived objects.
   ```
 ]
 
-#let l1 = line(point(-2, -1), point(3, 2), label: $ell_1$)
-#let l2 = line(point(-1, 3), point(2, -2), label: $ell_2$)
+#let l1 = line(point(-2, -1), point(3, 2), label: $ell_1$, label-anchor: "south")
+#let l2 = line(point(-1, 3), point(2, -2), label: $ell_2$, label-anchor: "west")
 
 #cartesian-canvas(
   x-tick: 1,
@@ -49,12 +49,12 @@ Find intersections and construct derived objects.
 #definition("midpoint")[
   Constructs the midpoint of a segment.
   ```typst
-  midpoint(p1, p2, label: "M")
+  midpoint(p1, p2, label: "M", label-anchor: "south", label-distance: 0.2)
   ```
 ]
 
-#let A = point(1, 1, label: "A")
-#let B = point(5, 3, label: "B")
+#let A = point(1, 1, label: "A", label-anchor: "south-west")
+#let B = point(5, 3, label: "B", label-anchor: "north-east")
 
 #cartesian-canvas(
   x-tick: 1,
@@ -62,7 +62,7 @@ Find intersections and construct derived objects.
   A,
   B,
   segment(A, B),
-  midpoint(A, B, label: "M"),
+  midpoint(A, B, label: "M", label-anchor: "south"),
 )
 
 == Perpendicular & Parallel
@@ -81,8 +81,8 @@ Find intersections and construct derived objects.
   ```
 ]
 
-#let l = line(point(0, 0), point(4, 2), label: $ell$)
-#let P = point(1, 3, label: "P")
+#let l = line(point(0, 0), point(4, 2), label: $ell$, label-anchor: "south")
+#let P = point(1, 3, label: "P", label-anchor: "east")
 
 #cartesian-canvas(
   x-tick: 1,

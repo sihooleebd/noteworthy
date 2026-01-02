@@ -133,6 +133,50 @@
   (mid, "center")
 }
 
+/// Compute label layout (dx, dy, anchor) based on user direction
+/// Returns: (dx, dy, cetz-anchor)
+/// Uses typical Euclidean distance 0.5 for diagonals to prevent collapsing
+#let compute-label-layout(anchor, user-dist) = {
+  // Defaults
+  // Vertical: 0.5
+  // Horizontal: 0.15
+  // Diagonal: 0.5 (was 0.2/0.35, user requested clear 45deg)
+  let dist-v = 0.5
+  let dist-h = 0.15
+  // Diagonals use 0.5 dist with cosine/sine components
+  let dist-d = 0.5
+
+  if anchor == "north" {
+    let d = if user-dist != none { user-dist } else { dist-v }
+    (0, d, "south")
+  } else if anchor == "south" {
+    let d = if user-dist != none { user-dist } else { dist-v }
+    (0, -d, "north")
+  } else if anchor == "east" {
+    let d = if user-dist != none { user-dist } else { dist-h }
+    (d, 0, "west")
+  } else if anchor == "west" {
+    let d = if user-dist != none { user-dist } else { dist-h }
+    (-d, 0, "east")
+  } else if anchor == "north-east" {
+    let d = if user-dist != none { user-dist } else { dist-d }
+    (d * 0.707, d * 0.707, "center")
+  } else if anchor == "north-west" {
+    let d = if user-dist != none { user-dist } else { dist-d }
+    (-d * 0.707, d * 0.707, "center")
+  } else if anchor == "south-east" {
+    let d = if user-dist != none { user-dist } else { dist-d }
+    (d * 0.707, -d * 0.707, "center")
+  } else if anchor == "south-west" {
+    let d = if user-dist != none { user-dist } else { dist-d }
+    (-d * 0.707, -d * 0.707, "center")
+  } else {
+    // Default to north behavior if unknown
+    let d = if user-dist != none { user-dist } else { dist-v }
+    (0, d, "south")
+  }
+}
+
 /// Format label with intelligent substitution
 #let format-label(obj, label) = {
   if type(label) != str { return label }
@@ -300,14 +344,29 @@
     let bg-col = theme.at("page-fill", default: none)
     let stroke-col = theme.at("plot", default: (:)).at("stroke", default: black)
 
-    // Use label-anchor if specified, otherwise default to north
-    let anchor = obj.at("label-anchor", default: "north")
+    // Get anchor direction for label placement (where label goes relative to point)
+    let anchor-raw = obj.at("label-anchor", default: none)
+    let anchor = if anchor-raw == none { "north" } else { anchor-raw }
+
+    // Get distance
+    let dist-raw = obj.at("label-distance", default: none)
+
+    // Compute layout using helper
+    let (dx, dy, cetz-anchor) = compute-label-layout(anchor, dist-raw)
+    let label-x = coords.at(0) + dx
+    let label-y = coords.at(1) + dy
+
+    let label-coords = if coords.len() == 2 {
+      (label-x, label-y)
+    } else {
+      (label-x, label-y, coords.at(2))
+    }
 
     content(
-      coords,
+      label-coords,
       text(fill: stroke-col, format-label(obj, obj.label)),
-      anchor: anchor,
-      padding: 0.2,
+      anchor: cetz-anchor,
+      padding: 0.05,
       fill: bg-col,
       stroke: none,
     )
@@ -331,13 +390,28 @@
     } else {
       ((p1.at(0) + p2.at(0)) / 2, (p1.at(1) + p2.at(1)) / 2, (p1.at(2) + p2.at(2)) / 2)
     }
-    let anchor = obj.at("label-anchor", default: "north")
+
+    let anchor-raw = obj.at("label-anchor", default: none)
+    let anchor = if anchor-raw == none { "north" } else { anchor-raw }
+    let dist-raw = obj.at("label-distance", default: none)
+    // Compute layout using helper
+    let (dx, dy, cetz-anchor) = compute-label-layout(anchor, dist-raw)
+    let label-x = mid.at(0) + dx
+    let label-y = mid.at(1) + dy
+
+    let label-pos = if p1.len() == 2 {
+      (label-x, label-y)
+    } else {
+      (label-x, label-y, mid.at(2))
+    }
 
     content(
-      mid,
+      label-pos,
       text(fill: theme.plot.stroke, format-label(obj, obj.label)),
-      anchor: anchor,
-      padding: 0.1,
+      anchor: cetz-anchor,
+      padding: 0.05,
+      fill: bg-col,
+      stroke: none,
     )
   }
 }
@@ -429,12 +503,20 @@
   if obj.at("label", default: none) != none {
     let bg-col = theme.at("page-fill", default: none)
     let mid = ((p1.at(0) + p2.at(0)) / 2, (p1.at(1) + p2.at(1)) / 2)
-    let anchor = obj.at("label-anchor", default: "north")
+
+    let anchor-raw = obj.at("label-anchor", default: none)
+    let anchor = if anchor-raw == none { "north" } else { anchor-raw }
+    let dist-raw = obj.at("label-distance", default: none)
+    // Compute layout using helper
+    let (dx, dy, cetz-anchor) = compute-label-layout(anchor, dist-raw)
+    let label-x = mid.at(0) + dx
+    let label-y = mid.at(1) + dy
+
     content(
-      mid,
+      (label-x, label-y),
       text(fill: theme.plot.stroke, obj.label),
-      anchor: anchor,
-      padding: 0.1,
+      anchor: cetz-anchor,
+      padding: 0.05,
       fill: bg-col,
       stroke: none,
     )
@@ -586,19 +668,31 @@
     let ang = obj.at("label-angle", default: 45deg)
 
     // Calculate label position at edge of circle
-    let label-coords = if obj.center.at("z", default: none) != none {
+    let base-coords = if obj.center.at("z", default: none) != none {
       (obj.center.x + obj.radius * calc.cos(ang), obj.center.y + obj.radius * calc.sin(ang), obj.center.z)
     } else {
       (obj.center.x + obj.radius * calc.cos(ang), obj.center.y + obj.radius * calc.sin(ang))
     }
 
-    let anchor = obj.at("label-anchor", default: "north")
+    let anchor-raw = obj.at("label-anchor", default: none)
+    let anchor = if anchor-raw == none { "north" } else { anchor-raw }
+    let dist-raw = obj.at("label-distance", default: none)
+    // Compute layout using helper
+    let (dx, dy, cetz-anchor) = compute-label-layout(anchor, dist-raw)
+    let label-x = base-coords.at(0) + dx
+    let label-y = base-coords.at(1) + dy
+
+    let label-coords = if base-coords.len() == 2 {
+      (label-x, label-y)
+    } else {
+      (label-x, label-y, base-coords.at(2))
+    }
 
     content(
       label-coords,
       text(fill: theme.plot.stroke, format-label(obj, obj.label)),
-      anchor: anchor,
-      padding: 0.1,
+      anchor: cetz-anchor,
+      padding: 0.05,
       fill: bg-col,
       stroke: none,
     )
@@ -714,7 +808,7 @@
     content(
       (obj.vertex.x + label-r * calc.cos(mid-ang), obj.vertex.y + label-r * calc.sin(mid-ang)),
       text(fill: stroke-col, format-label(obj, obj.label)),
-      anchor: "center",
+      anchor: obj.at("label-anchor", default: "center"),
       fill: bg-col,
       stroke: none,
     )
@@ -743,6 +837,27 @@
   let mid = (corner1.at(0) + r * dx2 / len2, corner1.at(1) + r * dy2 / len2)
 
   line(corner1, mid, corner2, stroke: (paint: stroke-col))
+
+  if obj.at("label", default: none) != none {
+    let bg-col = theme.at("page-fill", default: none)
+    // Position label diagonally out from mid
+    // mid is the corner of the square marker
+    // Let's go a bit further out along the diagonal from vertex to mid
+    let vx = mid.at(0) - obj.vertex.x
+    let vy = mid.at(1) - obj.vertex.y
+    let vlen = calc.sqrt(vx * vx + vy * vy)
+    let label-dist = if vlen > 0 { vlen + 0.15 } else { 0.5 } // slightly offset
+    let label-x = obj.vertex.x + vx / vlen * label-dist
+    let label-y = obj.vertex.y + vy / vlen * label-dist
+
+    content(
+      (label-x, label-y),
+      text(fill: stroke-col, format-label(obj, obj.label)),
+      anchor: obj.at("label-anchor", default: "center"),
+      fill: bg-col,
+      stroke: none,
+    )
+  }
 }
 
 /// Draw a polygon
@@ -794,13 +909,30 @@
       }
     }
 
-    let anchor = obj.at("label-anchor", default: "north")
+    let anchor-raw = obj.at("label-anchor", default: none)
+    let anchor = if anchor-raw == none { "north" } else { anchor-raw }
+    let dist-raw = obj.at("label-distance", default: none)
+    // Compute layout using helper
+    let (dx, dy, cetz-anchor) = compute-label-layout(anchor, dist-raw)
+    let label-x = label-pos.at(0) + dx
+    let label-y = label-pos.at(1) + dy
+
+    // Special case for 'center' passed as anchor to polygon
+    if anchor == "center" {
+      cetz-anchor = "center"
+    }
+
+    let final-label-pos = if label-pos.len() == 2 {
+      (label-x, label-y)
+    } else {
+      (label-x, label-y, label-pos.at(2))
+    }
 
     content(
-      label-pos,
+      final-label-pos,
       text(fill: theme.plot.stroke, format-label(obj, obj.label)),
-      anchor: anchor,
-      padding: 0.15,
+      anchor: cetz-anchor,
+      padding: 0.05,
       fill: bg-col,
       stroke: none,
     )

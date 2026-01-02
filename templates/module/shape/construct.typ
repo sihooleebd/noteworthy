@@ -16,6 +16,8 @@
   let pos = args.pos()
   let named = args.named()
   let label = named.at("label", default: none)
+  let label-anchor = named.at("label-anchor", default: none)
+  let label-distance = named.at("label-distance", default: none)
 
   if pos.len() == 1 {
     // Single argument: segment or array
@@ -25,6 +27,8 @@
         (obj.p1.x + obj.p2.x) / 2,
         (obj.p1.y + obj.p2.y) / 2,
         label: label,
+        label-anchor: label-anchor,
+        label-distance: label-distance,
       )
     } else if type(obj) == array and obj.len() == 2 {
       let pt1 = obj.at(0)
@@ -33,6 +37,8 @@
         (pt1.x + pt2.x) / 2,
         (pt1.y + pt2.y) / 2,
         label: label,
+        label-anchor: label-anchor,
+        label-distance: label-distance,
       )
     } else {
       panic("midpoint: expected segment or array of two points")
@@ -45,6 +51,8 @@
       (pt1.x + pt2.x) / 2,
       (pt1.y + pt2.y) / 2,
       label: label,
+      label-anchor: label-anchor,
+      label-distance: label-distance,
     )
   } else {
     panic("midpoint: expected 1 or 2 arguments")

@@ -13,23 +13,25 @@
 /// - label: Optional label to display
 /// - label-anchor: Optional anchor for label positioning (e.g., "north", "south", "east", "west")
 /// - style: Optional style overrides (stroke, fill, size)
-#let point(x, y, z: none, label: none, label-anchor: none, style: auto) = (
+#let point(x, y, z: none, label: none, label-anchor: none, label-distance: none, style: auto) = (
   type: "point",
   x: x,
   y: y,
   z: z,
   label: label,
   label-anchor: label-anchor,
+  label-distance: label-distance,
   style: style,
 )
 
 /// Alias for backward compatibility
-#let point-3d(x, y, z, label: none, label-anchor: none, style: auto) = point(
+#let point-3d(x, y, z, label: none, label-anchor: none, label-distance: none, style: auto) = point(
   x,
   y,
   z: z,
   label: label,
   label-anchor: label-anchor,
+  label-distance: label-distance,
   style: style,
 )
 
@@ -41,9 +43,9 @@
 /// - label: Optional label
 /// - label-anchor: Optional anchor for label positioning
 /// - style: Optional style overrides
-#let point-polar(r, theta, label: none, label-anchor: none, style: auto) = {
+#let point-polar(r, theta, label: none, label-anchor: none, label-distance: none, style: auto) = {
   let (x, y) = polar-to-cartesian(r, theta)
-  point(x, y, label: label, label-anchor: label-anchor, style: style)
+  point(x, y, label: label, label-anchor: label-anchor, label-distance: label-distance, style: style)
 }
 
 /// Check if object is a point

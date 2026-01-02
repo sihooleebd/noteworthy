@@ -188,6 +188,19 @@ Labels support placeholders for automatic value calculation:
 - `{area}`: The area of a polygon or circle.
 - `{circum}`: The circumference/perimeter.
 
+### Label Positioning
+
+All geometry objects support `label-anchor` and `label-distance` parameters:
+
+```typst
+point(0, 0, label: "O", label-anchor: "south", label-distance: 0.3)
+circle(O, radius: 2, label: $C$, label-anchor: "west", label-distance: 0.2)
+```
+
+**Anchors**: `"north"`, `"south"`, `"east"`, `"west"`, `"north-east"`, `"north-west"`, `"south-east"`, `"south-west"`, `"center"`
+
+The anchor specifies which edge of the label box is placed at the point. Distance is in coordinate units.
+
 ### Theme Integration
 The `theme` argument (usually passed as `active-theme`) controls:
 - **Stroke**: Default line color.

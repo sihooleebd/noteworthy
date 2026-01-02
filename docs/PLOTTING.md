@@ -24,26 +24,23 @@ Primitives are defined as objects and passed to the canvas.
 
 ```typst
 // Point
-point(x, y, label: "P", style: (fill: blue))
+point(x, y, label: "P", label-anchor: "south", label-distance: 0.3)
 
 // Segment & Line
-segment(p1, p2, label: "Segment")
+segment(p1, p2, label: "Segment", label-anchor: "north")
 line-through(p1, p2, style: (stroke: dashed))
 ray(origin, through)
 
 // Shapes
-circle(center, radius, label: "C", fill: red.transparentize(80%))
-polygon(p1, p2, p3, stroke: blue)
-arc(center, p1, p2)  // Arc from p1 to p2, centered at center
-semicircle(center, start-point)  // 180° arc from start-point
-regular-polygon(center, first-vertex, n)  // n-sided polygon
-point-at-angle(center, angle, radius, from: p)  // Point at angle from reference point
+circle(center, radius, label: "C", label-anchor: "south-west")
+polygon(p1, p2, p3, label: "△", label-anchor: "center")
+arc(center, p1, p2)  // Arc from p1 to p2
+semicircle(center, start-point)
+regular-polygon(center, first-vertex, n)
+point-at-angle(center, angle, radius, from: p, label-anchor: "east")
 
 // Curves
-// Connected straight lines (Polyline)
 curve-through((0,0), (1,1), (2,0), label: "Linear")
-
-// Smooth Spline (Catmull-Rom)
 smooth-curve((0,0), (1,1), (2,0), label: "Spline")
 ```
 
@@ -78,6 +75,25 @@ Labels support intelligent substitution. Values are automatically calculated bas
 | `{radius}`  | `circle`, `arc`     | Radius value             |
 | `{area}`    | `circle`, `polygon` | Area                     |
 | `{circum}`  | `circle`, `polygon` | Circumference            |
+
+### Label Positioning
+
+All geometry objects support precise label positioning:
+
+| Parameter        | Type   | Default    | Description                             |
+| ---------------- | ------ | ---------- | --------------------------------------- |
+| `label-anchor`   | string | `"north"`  | Which edge of label box is at the point |
+| `label-distance` | float  | `0.15-0.2` | Offset distance in coordinate units     |
+
+**Anchor values**: `"north"`, `"south"`, `"east"`, `"west"`, `"north-east"`, `"north-west"`, `"south-east"`, `"south-west"`, `"center"`
+
+```typst
+// Label below the point, 0.4 units away
+point(0, 0, label: "O", label-anchor: "south", label-distance: 0.4)
+
+// Label to the right of the circle
+circle(O, radius: 2, label: $C$, label-anchor: "west")
+```
 
 ---
 

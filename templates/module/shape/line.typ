@@ -13,7 +13,7 @@
 /// - label: Optional label
 /// - label-anchor: Optional anchor for label positioning
 /// - style: Optional style overrides
-#let segment(p1, p2, label: none, label-anchor: none, style: auto) = {
+#let segment(p1, p2, label: none, label-anchor: none, label-distance: none, style: auto) = {
   // Convert tuples to points if needed
   let pt1 = if is-point(p1) { p1 } else { point(p1.at(0), p1.at(1)) }
   let pt2 = if is-point(p2) { p2 } else { point(p2.at(0), p2.at(1)) }
@@ -24,6 +24,7 @@
     p2: pt2,
     label: label,
     label-anchor: label-anchor,
+    label-distance: label-distance,
     style: style,
   )
 }
@@ -37,7 +38,7 @@
 /// - label: Optional label
 /// - label-anchor: Optional anchor for label positioning
 /// - style: Optional style overrides
-#let line(p1, p2, label: none, label-anchor: none, style: auto) = {
+#let line(p1, p2, label: none, label-anchor: none, label-distance: none, style: auto) = {
   let pt1 = if is-point(p1) { p1 } else { point(p1.at(0), p1.at(1)) }
   let pt2 = if is-point(p2) { p2 } else { point(p2.at(0), p2.at(1)) }
 
@@ -47,6 +48,7 @@
     p2: pt2,
     label: label,
     label-anchor: label-anchor,
+    label-distance: label-distance,
     style: style,
   )
 }
@@ -60,7 +62,7 @@
 /// - label: Optional label
 /// - label-anchor: Optional anchor for label positioning
 /// - style: Optional style overrides
-#let ray(origin, through, label: none, label-anchor: none, style: auto) = {
+#let ray(origin, through, label: none, label-anchor: none, label-distance: none, style: auto) = {
   let pt1 = if is-point(origin) { origin } else { point(origin.at(0), origin.at(1)) }
   let pt2 = if is-point(through) { through } else { point(through.at(0), through.at(1)) }
 
@@ -70,6 +72,7 @@
     through: pt2,
     label: label,
     label-anchor: label-anchor,
+    label-distance: label-distance,
     style: style,
   )
 }

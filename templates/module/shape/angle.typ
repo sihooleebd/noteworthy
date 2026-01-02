@@ -14,7 +14,19 @@
 /// - label: Optional label (e.g., $theta$)
 /// - radius: Display radius for the arc marker (default: 0.5)
 /// - style: Optional style overrides (color, fill)
-#let angle(p1, vertex, p2, label: none, radius: 0.5, label-radius: auto, fill: auto, style: auto, reflex: "auto") = {
+#let angle(
+  p1,
+  vertex,
+  p2,
+  label: none,
+  label-anchor: none,
+  label-distance: none,
+  radius: 0.5,
+  label-radius: auto,
+  fill: auto,
+  style: auto,
+  reflex: "auto",
+) = {
   let pt1 = if is-point(p1) { p1 } else { point(p1.at(0), p1.at(1)) }
   let vtx = if is-point(vertex) { vertex } else { point(vertex.at(0), vertex.at(1)) }
   let pt2 = if is-point(p2) { p2 } else { point(p2.at(0), p2.at(1)) }
@@ -25,6 +37,8 @@
     vertex: vtx,
     p2: pt2,
     label: label,
+    "label-anchor": label-anchor,
+    "label-distance": label-distance,
     radius: radius,
     "label-radius": label-radius,
     fill: fill,
@@ -40,7 +54,7 @@
 /// - vertex: The vertex point
 /// - p2: Second point
 /// - radius: Size of the right angle marker (default: 0.3)
-#let right-angle(p1, vertex, p2, radius: 0.3, style: auto) = {
+#let right-angle(p1, vertex, p2, radius: 0.3, label: none, label-anchor: none, label-distance: none, style: auto) = {
   let pt1 = if is-point(p1) { p1 } else { point(p1.at(0), p1.at(1)) }
   let vtx = if is-point(vertex) { vertex } else { point(vertex.at(0), vertex.at(1)) }
   let pt2 = if is-point(p2) { p2 } else { point(p2.at(0), p2.at(1)) }
@@ -51,6 +65,9 @@
     vertex: vtx,
     p2: pt2,
     radius: radius,
+    label: label,
+    "label-anchor": label-anchor,
+    "label-distance": label-distance,
     style: style,
   )
 }
@@ -62,7 +79,7 @@
 /// - l2: Second line
 /// - label: Optional label
 /// - radius: Display radius
-#let angle-between-lines(l1, l2, label: none, radius: 0.5, style: auto) = {
+#let angle-between-lines(l1, l2, label: none, label-anchor: none, label-distance: none, radius: 0.5, style: auto) = {
   // Find intersection point (vertex)
   // For now, assume they share p1
   let vertex = l1.p1
@@ -71,7 +88,16 @@
   let pt1 = l1.p2
   let pt2 = l2.p2
 
-  angle(pt1, vertex, pt2, label: label, radius: radius, style: style)
+  angle(
+    pt1,
+    vertex,
+    pt2,
+    label: label,
+    label-anchor: label-anchor,
+    label-distance: label-distance,
+    radius: radius,
+    style: style,
+  )
 }
 
 /// Check if object is an angle

@@ -26,7 +26,7 @@ Vectors can start from any origin:
 #cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  point(1, 1, label: "A"),
+  point(1, 1, label: "A", label-anchor: "south"),
   vec((2, 1.5), origin: (1, 1), label: $arrow(v)$),
 )
 
