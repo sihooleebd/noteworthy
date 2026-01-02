@@ -26,6 +26,7 @@ class HierarchyEditor(ListEditor):
             self.items.append(("ch_summary", ci, None, ch))
             for pi, p in enumerate(ch.get("pages", [])):
                 self.items.append(("pg_title", ci, pi, p))
+                self.items.append(("pg_id", ci, pi, p)) # NEW: Editable ID
             self.items.append(("add_page", ci, None, None))
         self.items.append(("add_chapter", None, None, None))
     
@@ -34,6 +35,7 @@ class HierarchyEditor(ListEditor):
         if t == "ch_title": return self.hierarchy[ci]["title"]
         elif t == "ch_summary": return self.hierarchy[ci]["summary"]
         elif t == "pg_title": return self.hierarchy[ci]["pages"][pi]["title"]
+        elif t == "pg_id": return self.hierarchy[ci]["pages"][pi].get("id", str(pi)) # Show ID
         return ""
     
     def _set_value(self, val):
@@ -43,12 +45,14 @@ class HierarchyEditor(ListEditor):
         if t == "ch_title": self.hierarchy[ci]["title"] = val
         elif t == "ch_summary": self.hierarchy[ci]["summary"] = val
         elif t == "pg_title": self.hierarchy[ci]["pages"][pi]["title"] = val
+        elif t == "pg_id": self.hierarchy[ci]["pages"][pi]["id"] = val # Edit ID
         
         self.modified = True; self._build_items()
     
     def _add_chapter(self):
-        # No id field needed - position in array determines mapping
-        new_ch = {"title": "New Chapter", "summary": "", "pages": []}
+        # Default ID needed for new chapters if we use IDs
+        next_id = str(len(self.hierarchy))
+        new_ch = {"id": next_id, "title": "New Chapter", "summary": "", "pages": []}
         self.hierarchy.append(new_ch)
         self.modified = True
         self._build_items()
@@ -57,9 +61,10 @@ class HierarchyEditor(ListEditor):
                 self.cursor = i; break
     
     def _add_page(self, ci):
-        # No id field needed - position in array determines mapping
-        new_page = {"title": "New Page"}
-        self.hierarchy[ci]["pages"].append(new_page)
+        pages = self.hierarchy[ci]["pages"]
+        next_id = str(len(pages))
+        new_page = {"id": next_id, "title": "New Page"}
+        pages.append(new_page)
         self.modified = True
         self._build_items()
     
@@ -71,7 +76,7 @@ class HierarchyEditor(ListEditor):
                 self.modified = True
                 self._build_items()
                 self.cursor = min(self.cursor, len(self.items) - 1)
-        elif t == "pg_title":
+        elif t in ("pg_title", "pg_id"):
             del self.hierarchy[ci]["pages"][pi]
             self.modified = True
             self._build_items()
@@ -80,16 +85,19 @@ class HierarchyEditor(ListEditor):
     def _load(self):
         self.hierarchy = json.loads(HIERARCHY_FILE.read_text())
         self._build_items()
+        # Trigger Sync Wizard on load
+        from ..wizards.sync import SyncWizard
+        if SyncWizard(self.scr).run():
+            self._load() # Reload if changed by wizard
 
     def save(self):
         try:
-            from ...core.fs_sync import ensure_content_structure
-            
             HIERARCHY_FILE.write_text(json.dumps(self.hierarchy, indent=4))
             self.modified = False
             
-            # Only create missing files, never delete or validate
-            ensure_content_structure(self.hierarchy)
+            # Post-save sync check
+            from ..wizards.sync import SyncWizard
+            SyncWizard(self.scr).run()
             
             return True
         except Exception:
@@ -143,11 +151,8 @@ class HierarchyEditor(ListEditor):
         val_x = x + left_w + 2
         
         if t == "ch_title":
-            # Just show "Chapter" without number
             label = self.config.get("chapter-name", "Chapter")
-            
             TUI.safe_addstr(self.scr, y, x + 4, label[:left_w-6], curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
-            
             val = str(self._get_value(item))
             TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
             
@@ -157,10 +162,16 @@ class HierarchyEditor(ListEditor):
             TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
             
         elif t == "pg_title":
-            # Just show "Page" without number
-            TUI.safe_addstr(self.scr, y, x + 6, "Page", curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
+            # Page Title
+            TUI.safe_addstr(self.scr, y, x + 6, "Page Title", curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
             val = str(self._get_value(item))
             TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
+            
+        elif t == "pg_id":
+            # Page ID (Filename) - Indented slightly more or distinguished?
+            TUI.safe_addstr(self.scr, y, x + 8, "File ID", curses.color_pair(5 if selected else 4) | curses.A_DIM)
+            val = str(self._get_value(item)) + ".typ" # Show extension for clarity
+            TUI.safe_addstr(self.scr, y, val_x, val[:width-left_w-6], curses.color_pair(4) | (curses.A_BOLD if selected else curses.A_DIM))
             
         elif t == "add_page":
             TUI.safe_addstr(self.scr, y, x + 6, "+ Add page...", curses.color_pair(3 if selected else 4) | (curses.A_BOLD if selected else curses.A_DIM))
@@ -183,7 +194,9 @@ class HierarchyEditor(ListEditor):
                 new_val = TextEditor(self.scr, initial_text=curr_val, title="Edit Summary").run()
                 if new_val is not None: self._set_value(new_val)
             else:
-                new_val = LineEditor(self.scr, initial_value=curr_val, title="Edit Value").run()
+                title = "Edit Value"
+                if t == "pg_id": title = "Edit File ID (without .typ)"
+                new_val = LineEditor(self.scr, initial_value=curr_val, title=title).run()
                 if new_val is not None: self._set_value(new_val)
 
     def action_delete(self, ctx):
