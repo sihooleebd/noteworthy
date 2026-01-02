@@ -32,6 +32,33 @@
   segment(point(x1, y1), point(x2, y2), label: label, style: style)
 }
 
+/// Create a tangent line to function f at x
+///
+/// Parameters:
+/// - f: The function
+/// - x: The x-coordinate
+/// - length: Length of drawn line
+/// - label: Optional label
+/// - style: Style overrides
+#let tan-line(f, x, length: 2, label: none, style: auto) = {
+  let y = f(x)
+
+  if calc.abs(m-tangent) < 1e-10 {
+    // Horizontal tangent, vertical normal
+    let dy = length / 2
+    segment(point(x, y - dy), point(x, y + dy), label: label, style: style)
+  } else {
+    let m = derivative-at(f, x)
+    let dx = length / calc.sqrt(1 + m * m)
+    let x1 = x - dx
+    let y1 = y - m * dx
+    let x2 = x + dx
+    let y2 = y + m * dx
+
+    segment(point(x1, y1), point(x2, y2), label: label, style: style)
+  }
+}
+
 /// Create a normal line to function f at x
 ///
 /// Parameters:
@@ -152,3 +179,4 @@
 
   rects
 }
+
