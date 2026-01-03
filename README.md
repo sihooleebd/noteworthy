@@ -1,3 +1,15 @@
+> **CRITICAL SECURITY WARNING**
+>
+> **This is the ONLY official repository for Noteworthy.**
+> Noteworthy does not relate to repos other than sihooleebd/noteworthy, sihooleebd/noteworthy-website, sihooleebd/noteworthy-modules (this list is live updated). 
+> 
+> We are aware of unauthorized clones of this repository being used to spread malware.
+>
+> - **We NEVER distribute executable files (e.g., .exe, .msi, .dmg).**
+> - This project is released as **source code only**. If you downloaded a playable or runnable application claiming to be this project, **IT IS MALWARE**.
+> - Please uninstall any such files immediately and scan your system.
+> - Always verify that you are downloading from: `https://github.com/sihooleebd/noteworthy`.
+
 # Noteworthy
 
 ```
