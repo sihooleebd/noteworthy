@@ -56,3 +56,10 @@ templates/module/my-module/
     #import "./module/new-module/mod.typ": *
     ```
 5.  **Document**: Create a documentation file in `docs/modules/new-module.md`.
+
+## 4. Verification & Safety
+To ensure you are using the safe, malware-free version of Noteworthy:
+
+1.  **Verify the Source:** Ensure you cloned this from `https://github.com/[YOUR-USERNAME]/[REPO-NAME]`.
+2.  **Check Metadata:** PDFs generated with this tool automatically include a metadata link to the original repository.
+3.  **Report Clones:** If you find this code hosted elsewhere without a direct link back to this repository, please report it to us immediately.
