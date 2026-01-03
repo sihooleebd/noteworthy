@@ -1,7 +1,8 @@
 > **CRITICAL SECURITY WARNING**
 >
 > **This is the ONLY official repository for Noteworthy.**
->
+> Noteworthy does not relate to repos other than sihooleebd/noteworthy, sihooleebd/noteworthy-website, sihooleebd/noteworthy-modules (this list is live updated). 
+> 
 > We are aware of unauthorized clones of this repository being used to spread malware.
 >
 > - **We NEVER distribute executable files (e.g., .exe, .msi, .dmg).**
