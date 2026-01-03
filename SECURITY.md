@@ -2,7 +2,7 @@
 
 ## Official Source
 The only official source for this software is:
-https://github.com/your-username/noteworthy
+https://github.com/sihooleebd/noteworthy
 
 ## Verifying Integrity
 If you suspect you have downloaded a compromised version:
