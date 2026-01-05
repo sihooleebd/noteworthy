@@ -40,18 +40,16 @@ Say hi to **Noteworthy**, an academic parser and framework for creating massive 
 
 An example project is available at https://github.com/sihooleebd/math-noteworthy. 
 
-## Gallery
 
-<p align="center">
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/example-01.png" width="45%" alt="Cover Page"/>
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/example-02.png" width="45%" alt="Table of Contents"/>
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/example-03.png" width="45%" alt="Content Page"/>
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/example-04.png" width="45%" alt="Another Content Page"/>
-</p>
 
 ### Themes
 
-[View the Theme Catalogue (PDF)](https://raw.githubusercontent.com/sihooleebd/noteworthy/media/theme-library.pdf)
+You can generate a visual catalogue of all available themes (including block styles, typography, and plotting colors) by running:
+
+```bash
+cd images
+typst compile theme_catalogue.typ --root ..
+```
 
 ### Framework Components
 
@@ -155,9 +153,7 @@ python3 noteworthy_cli.py --debug
 
 The CLI builder uses the same build engine as the TUI but runs non-interactively, making it ideal for CI/CD pipelines and scripted builds. 
 
-<p align="center">
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/wizard_demo.gif" width="70%" alt="Setup Wizard Demo"/>
-</p>
+
 
 #### TUI Build Menu Features
 The build menu (`b` key from main menu or after setup) has been updated with a powerful grid interface:
@@ -182,33 +178,7 @@ The build menu (`b` key from main menu or after setup) has been updated with a p
 
 #### Interface Preview
 
-<p align="center">
-  <strong>Main Menu & Editor Selection</strong><br>
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/main.png" width="45%" />
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/editor-select.png" width="45%" />
-</p>
 
-<p align="center">
-  <strong>Editors</strong><br>
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/hierarchy.png" width="45%" />
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/scheme.png" width="45%" />
-</p>
-
-<p align="center">
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/config.png" width="45%" />
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/snippets.png" width="45%" />
-</p>
-
-<p align="center">
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/indexignore.png" width="45%" />
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/preface.png" width="45%" />
-</p>
-
-<p align="center">
-  <strong>Build Process</strong><br>
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/build.png" width="45%" />
-  <img src="https://github.com/sihooleebd/noteworthy/blob/media/building.png" width="45%" />
-</p>
 
 ### Standalone/Single File Compilation
 
