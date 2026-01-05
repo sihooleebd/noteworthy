@@ -124,7 +124,36 @@ You can force an update or switch branches using CLI flags:
 | `--force-update-nightly` | **Destructive**. Removes existing `noteworthy` and `templates` folders and reinstalls from `nightly`. |
 | `--print-inputs`         | Output Typst `--input` flags for content folder info. Use with `typst compile`.                       |
 
-The noteworthy system guides you through the initialization, the configuration, and the build. Upon first run, the template will load the necessary template files. 
+The noteworthy system guides you through the initialization, the configuration, and the build. Upon first run, the template will load the necessary template files.
+
+### CLI Builder (Lightweight)
+
+For users who prefer a simpler, non-interactive build experience, use `noteworthy_cli.py`:
+
+```bash
+# Build the entire document
+python3 noteworthy_cli.py
+
+# Build specific chapters (0-indexed)
+python3 noteworthy_cli.py -c 0 1 2
+
+# Skip frontmatter (cover, preface, TOC)
+python3 noteworthy_cli.py --no-frontmatter
+
+# Debug mode with verbose output
+python3 noteworthy_cli.py --debug
+```
+
+| Flag               | Description                                |
+| ------------------ | ------------------------------------------ |
+| `-c`, `--chapters` | Space-separated list of chapter indices    |
+| `--no-frontmatter` | Skip cover, preface, and table of contents |
+| `--leave-pdfs`     | Keep individual PDFs in build folder       |
+| `--debug`          | Enable verbose debug logging               |
+| `-t`, `--threads`  | Number of parallel compilation threads     |
+| `--flags`          | Additional Typst CLI flags                 |
+
+The CLI builder uses the same build engine as the TUI but runs non-interactively, making it ideal for CI/CD pipelines and scripted builds. 
 
 <p align="center">
   <img src="https://github.com/sihooleebd/noteworthy/blob/media/wizard_demo.gif" width="70%" alt="Setup Wizard Demo"/>
