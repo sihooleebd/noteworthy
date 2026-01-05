@@ -1,28 +1,112 @@
 import curses
 import json
-from ..base import TUI
-from ...config import METADATA_FILE, CONSTANTS_FILE, LOGO
+from pathlib import Path
+from ..base import TUI, LEFT_PAD, TOP_PAD
+from ...config import METADATA_FILE, CONSTANTS_FILE, MODULES_CONFIG_FILE
+from ...assets import LOGO
 from ...utils import load_config_safe, save_config, register_key, handle_key_event
 from ..editors.schemes import extract_themes
 from ..keybinds import KeyBind, NavigationBind, ConfirmBind
 
+
+# Core modules that are always enabled - don't show in selection
+CORE_MODULES = {'block', 'cover'}
+
+
+def get_available_modules():
+    """Scan local modules and fetch remote modules from GitHub."""
+    from ...core.pm import fetch_index
+    
+    modules = {}
+    module_dir = Path("templates/module")
+    
+    # First, scan local modules
+    if module_dir.exists():
+        for d in sorted(module_dir.iterdir()):
+            if d.is_dir() and not d.name.startswith('.') and d.name != 'core':
+                meta_path = d / "metadata.json"
+                if meta_path.exists():
+                    try:
+                        meta = json.loads(meta_path.read_text())
+                        modules[d.name] = {
+                            "name": d.name,
+                            "description": meta.get("description", ""),
+                            "dependencies": meta.get("dependencies", []),
+                            "source": "local"
+                        }
+                    except:
+                        modules[d.name] = {
+                            "name": d.name,
+                            "description": "",
+                            "dependencies": [],
+                            "source": "local"
+                        }
+                else:
+                    modules[d.name] = {
+                        "name": d.name,
+                        "description": "",
+                        "dependencies": [],
+                        "source": "local"
+                    }
+    
+    # Then fetch remote modules and merge (remote fills in missing)
+    try:
+        remote = fetch_index()
+        for name, data in remote.items():
+            # Skip core modules - they're always enabled
+            if name in CORE_MODULES:
+                continue
+            if name not in modules:
+                modules[name] = {
+                    "name": name,
+                    "description": data.get("description", ""),
+                    "dependencies": data.get("dependencies", []),
+                    "source": "remote"
+                }
+    except:
+        pass  # Offline
+    
+    return sorted(modules.values(), key=lambda m: m['name'])
+
+
 class InitWizard:
+    """Setup wizard with left-aligned design."""
 
     def __init__(self, scr):
         self.scr = scr
         themes = extract_themes()
-        self.config = {'title': '', 'subtitle': '', 'authors': [], 'affiliation': '', 'logo': None, 'show-solution': True, 'solutions-text': 'Solutions', 'problems-text': 'Problems', 'chapter-name': 'Chapter', 'subchap-name': 'Section', 'font': 'IBM Plex Serif', 'title-font': 'Noto Sans Adlam', 'display-cover': True, 'display-outline': True, 'display-chap-cover': True, 'box-margin': '5pt', 'box-inset': '15pt', 'render-sample-count': 5000, 'render-implicit-count': 100, 'display-mode': 'rose-pine', 'pad-chapter-id': True, 'pad-page-id': True, 'heading-numbering': None}
-        self.steps = [('title', 'Document Title', 'Enter the main title of your document:', 'str'), ('subtitle', 'Subtitle', 'Enter a subtitle (optional, press Enter to skip):', 'str'), ('authors', 'Authors', 'Enter author names (comma-separated):', 'list'), ('affiliation', 'Affiliation', 'Enter your organization/affiliation:', 'str'), ('display-mode', 'Color Theme', 'Use ←/→ to select, Enter to confirm:', 'choice', themes), ('font', 'Body Font', 'Enter body font name:', 'str'), ('title-font', 'Title Font', 'Enter title font name:', 'str'), ('chapter-name', 'Chapter Label', "What to call chapters (e.g., 'Chapter', 'Unit'):", 'str'), ('subchap-name', 'Section Label', "What to call sections (e.g., 'Section', 'Lesson'):", 'str')]
+        self.config = {
+            'title': '', 'subtitle': '', 'authors': [], 'affiliation': '',
+            'show-solution': True, 'chapter-name': 'Chapter', 'subchap-name': 'Section',
+            'font': 'IBM Plex Serif', 'title-font': 'Noto Sans Adlam',
+            'display-cover': True, 'display-outline': True, 'display-chap-cover': True,
+            'display-mode': 'rose-pine'
+        }
+        
+        self.steps = [
+            ('title', 'Document Title', 'Enter the main title:', 'str'),
+            ('subtitle', 'Subtitle', 'Enter a subtitle (optional):', 'str'),
+            ('authors', 'Authors', 'Enter author names (comma-separated):', 'list'),
+            ('affiliation', 'Affiliation', 'Enter your organization:', 'str'),
+            ('display-mode', 'Color Theme', 'Select theme:', 'choice', themes),
+            ('font', 'Body Font', 'Enter body font name:', 'str'),
+            ('chapter-name', 'Chapter Label', "What to call chapters:", 'str'),
+        ]
+        
         self.current_step = 0
         self.choice_index = 0
-        self.input_y = 0
-        self.input_x = 0
-        self.input_y = 0
-        self.input_x = 0
-        input_w = 50
+        self.input_value = ""
+        
+        # Module selection
+        self.available_modules = get_available_modules()
+        self.selected_modules = {m['name']: False for m in self.available_modules}  # All unchecked by default
+        self.module_cursor = 0
+        self.module_scroll = 0
+        self.in_module_step = False
+        
         TUI.init_colors()
-
-        # Load existing config to preserve values
+        
+        # Load existing config
         try:
             current = load_config_safe()
             if current:
@@ -31,39 +115,42 @@ class InitWizard:
             pass
         
         self.keymap = {}
-        
         register_key(self.keymap, KeyBind(27, self.action_cancel, "Cancel"))
-        register_key(self.keymap, KeyBind([curses.KEY_BACKSPACE, 127, 8], self.action_prev, "Previous Step"))
         register_key(self.keymap, ConfirmBind(self.action_next))
         register_key(self.keymap, NavigationBind('LEFT', self.action_choice_left))
         register_key(self.keymap, NavigationBind('RIGHT', self.action_choice_right))
-        
+        register_key(self.keymap, NavigationBind('UP', self.action_up))
+        register_key(self.keymap, NavigationBind('DOWN', self.action_down))
+
     def action_cancel(self, ctx):
         return 'EXIT'
 
-    def action_prev(self, ctx):
-        if self.current_step > 0:
-            self.current_step -= 1
-            if self.steps[self.current_step][3] == 'choice':
-                choices = self.steps[self.current_step][4]
-                curr = self.config.get(self.steps[self.current_step][0], choices[0])
-                self.choice_index = choices.index(curr) if curr in choices else 0
+    def action_up(self, ctx):
+        if self.in_module_step:
+            self.module_cursor = max(0, self.module_cursor - 1)
+
+    def action_down(self, ctx):
+        if self.in_module_step:
+            self.module_cursor = min(len(self.available_modules) - 1, self.module_cursor + 1)
 
     def action_choice_left(self, ctx):
-        step = self.steps[self.current_step]; stype = step[3]
-        if stype == 'choice':
+        step = self.steps[self.current_step]
+        if step[3] == 'choice':
             choices = step[4]
             self.choice_index = (self.choice_index - 1) % len(choices)
 
     def action_choice_right(self, ctx):
-        step = self.steps[self.current_step]; stype = step[3]
-        if stype == 'choice':
+        step = self.steps[self.current_step]
+        if step[3] == 'choice':
             choices = step[4]
             self.choice_index = (self.choice_index + 1) % len(choices)
-            
+
     def action_next(self, ctx):
+        if self.in_module_step:
+            return 'FINISH_MODULES'
+        
         step = self.steps[self.current_step]
-        key, stype = (step[0], step[3])
+        key, stype = step[0], step[3]
         
         if stype == 'choice':
             choices = step[4]
@@ -80,150 +167,215 @@ class InitWizard:
                 self.current_step += 1
             elif not value and key == 'title':
                 h, w = self.scr.getmaxyx()
-                TUI.safe_addstr(self.scr, h - 2, (w - 20) // 2, 'Title is required!', curses.color_pair(6) | curses.A_BOLD)
+                TUI.safe_addstr(self.scr, h - 3, LEFT_PAD, 'Title is required!', curses.color_pair(6) | curses.A_BOLD)
                 self.scr.refresh()
                 curses.napms(1000)
 
-    def refresh(self):
-        h_raw, w_raw = self.scr.getmaxyx()
-        h, w = (h_raw - 2, w_raw - 2)
+    def refresh_config_step(self):
+        h, w = self.scr.getmaxyx()
         self.scr.clear()
-        layout = 'vert'
-        if w > 100:
-            layout = 'horz'
-        if layout == 'horz':
-            lh = len(LOGO)
-            ly = max(0, (h - lh) // 2)
-            lx = max(0, (w - 16 - 60) // 2)
-            for i, line in enumerate(LOGO):
-                if ly + i < h:
-                    TUI.safe_addstr(self.scr, ly + i, lx, line, curses.color_pair(1) | curses.A_BOLD)
-            sy = ly + lh + 2
-            footer_y = h - 3
-            
-            # Use columns if list is too long for vertical space?
-            # Or scroll the list if current step is out of view
-            max_steps_visible = footer_y - 1 - sy
-            if max_steps_visible < 1: max_steps_visible = 1
-            
-            start_step = 0
-            if self.current_step >= max_steps_visible:
-                start_step = self.current_step - max_steps_visible + 1
-            
-            for i in range(min(len(self.steps) - start_step, max_steps_visible)):
-                step_idx = start_step + i
-                step = self.steps[step_idx]
-                y_pos = sy + i
-                
-                marker = '>' if step_idx == self.current_step else ' '
-                style = curses.color_pair(3) | curses.A_BOLD if step_idx == self.current_step else curses.color_pair(4)
-                
-                if y_pos < footer_y:
-                    TUI.safe_addstr(self.scr, y_pos, lx + 2, f'{marker} {step[1]}', style)
-            
-            dx = lx + 20 + 4
-            dw = 55
-            dy = max(0, (h - 16) // 2)
-            TUI.draw_box(self.scr, dy, dx, 16, dw, 'Setup Wizard')
-            step = self.steps[self.current_step]
-            key, label, prompt, stype = (step[0], step[1], step[2], step[3])
-            TUI.safe_addstr(self.scr, dy + 2, dx + 2, f'Step {self.current_step + 1}/{len(self.steps)}: {label}', curses.color_pair(1) | curses.A_BOLD)
-            TUI.safe_addstr(self.scr, dy + 4, dx + 2, prompt[:dw - 4], curses.color_pair(4))
-            if stype == 'choice':
-                choices = step[4]
-                choice_text = f'◀  {choices[self.choice_index]}  ▶'
-                TUI.safe_addstr(self.scr, dy + 7, dx + (dw - len(choice_text)) // 2, choice_text, curses.color_pair(5) | curses.A_BOLD)
-                dots = ''.join(('●' if i == self.choice_index else '○' for i in range(len(choices))))
-                TUI.safe_addstr(self.scr, dy + 8, dx + (dw - len(dots)) // 2, dots, curses.color_pair(4) | curses.A_DIM)
-            else:
-                curr_val = self.config.get(key, '')
-                if isinstance(curr_val, list):
-                    curr_val = ', '.join(curr_val)
-                if curr_val:
-                    TUI.safe_addstr(self.scr, dy + 7, dx + 2, f'Default: {str(curr_val)[:dw - 12]}', curses.color_pair(4) | curses.A_DIM)
-            self.input_y, self.input_x, self.input_w = (dy + 10, dx + 2, dw - 4)
-            footer = 'Enter:Next  Back:Prev  Esc:Cancel'
-            TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
+        
+        y = TOP_PAD
+        
+        # Logo
+        for i, line in enumerate(LOGO[:min(len(LOGO), 8)]):
+            TUI.safe_addstr(self.scr, y + i, LEFT_PAD, line, curses.color_pair(1) | curses.A_BOLD)
+        
+        y += len(LOGO[:8]) + 1
+        TUI.safe_addstr(self.scr, y, LEFT_PAD, 'Setup Wizard', curses.color_pair(1) | curses.A_BOLD)
+        y += 2
+        
+        step = self.steps[self.current_step]
+        key, label, prompt, stype = step[0], step[1], step[2], step[3]
+        
+        TUI.safe_addstr(self.scr, y, LEFT_PAD, f'Step {self.current_step + 1}/{len(self.steps)}: {label}', 
+                       curses.color_pair(5) | curses.A_BOLD)
+        y += 1
+        TUI.safe_addstr(self.scr, y, LEFT_PAD, prompt, curses.color_pair(4))
+        y += 2
+        
+        if stype == 'choice':
+            choices = step[4]
+            choice_text = f'◀  {choices[self.choice_index]}  ▶'
+            TUI.safe_addstr(self.scr, y, LEFT_PAD, choice_text, curses.color_pair(5) | curses.A_BOLD)
+            y += 1
+            TUI.safe_addstr(self.scr, y + 1, LEFT_PAD, '←→ Select  Enter Confirm', curses.color_pair(4) | curses.A_DIM)
         else:
-            total_h = 16
-            start_y = max(1, (h - total_h) // 2)
-            TUI.safe_addstr(self.scr, start_y, (w - 22) // 2, 'NOTEWORTHY SETUP WIZARD', curses.color_pair(1) | curses.A_BOLD)
-            TUI.safe_addstr(self.scr, start_y + 1, (w - 40) // 2, "Let's set up your document configuration", curses.color_pair(4) | curses.A_DIM)
-            prog = f'Step {self.current_step + 1} of {len(self.steps)}'
-            TUI.safe_addstr(self.scr, start_y + 3, (w - len(prog)) // 2, prog, curses.color_pair(5))
-            step = self.steps[self.current_step]
-            key, label, prompt, stype = (step[0], step[1], step[2], step[3])
-            bw = min(60, w - 4)
-            bx = (w - bw) // 2
-            TUI.draw_box(self.scr, start_y + 5, bx, 7, bw, label)
-            TUI.safe_addstr(self.scr, start_y + 6, bx + 2, prompt[:bw - 4], curses.color_pair(4))
-            if stype == 'choice':
-                choices = step[4]
-                choice_text = f'◀  {choices[self.choice_index]}  ▶'
-                TUI.safe_addstr(self.scr, start_y + 8, (w - len(choice_text)) // 2, choice_text, curses.color_pair(5) | curses.A_BOLD)
-                dots = ''.join(('●' if i == self.choice_index else '○' for i in range(len(choices))))
-                TUI.safe_addstr(self.scr, start_y + 9, (w - len(dots)) // 2, dots, curses.color_pair(4) | curses.A_DIM)
-                footer = '←→:Select  Enter:Confirm  Backspace:Back  Esc:Cancel'
-            else:
-                curr_val = self.config.get(key, '')
-                if isinstance(curr_val, list):
-                    curr_val = ', '.join(curr_val)
-                if curr_val:
-                    TUI.safe_addstr(self.scr, start_y + 8, bx + 2, f'Default: {str(curr_val)[:bw - 12]}', curses.color_pair(4) | curses.A_DIM)
-                footer = 'Enter:Input  Backspace:Back  Esc:Cancel'
-            self.input_y, self.input_x, self.input_w = (start_y + 10, bx + 2, bw - 4)
-            TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
+            curr_val = self.config.get(key, '')
+            if isinstance(curr_val, list):
+                curr_val = ', '.join(curr_val)
+            if curr_val:
+                TUI.safe_addstr(self.scr, y, LEFT_PAD, f'Current: {str(curr_val)[:50]}', curses.color_pair(4) | curses.A_DIM)
+            self.input_y = y + 2
+        
+        TUI.safe_addstr(self.scr, h - 2, LEFT_PAD, 'Enter Continue  Esc Cancel', curses.color_pair(4) | curses.A_DIM)
+        self.scr.refresh()
+
+    def refresh_module_step(self):
+        h, w = self.scr.getmaxyx()
+        self.scr.clear()
+        
+        y = TOP_PAD
+        TUI.safe_addstr(self.scr, y, LEFT_PAD, 'Select Modules', curses.color_pair(1) | curses.A_BOLD)
+        y += 1
+        TUI.safe_addstr(self.scr, y, LEFT_PAD, 'Space to toggle, Enter to finish (☁ = remote)', curses.color_pair(4) | curses.A_DIM)
+        y += 2
+        
+        TUI.safe_addstr(self.scr, y, LEFT_PAD, 'Core modules (always enabled):', curses.color_pair(4) | curses.A_DIM)
+        y += 1
+        TUI.safe_addstr(self.scr, y, LEFT_PAD + 2, '• block - Semantic content blocks', curses.color_pair(4))
+        y += 1
+        TUI.safe_addstr(self.scr, y, LEFT_PAD + 2, '• cover - Document covers', curses.color_pair(4))
+        y += 2
+        
+        TUI.safe_addstr(self.scr, y, LEFT_PAD, 'Optional modules:', curses.color_pair(4) | curses.A_DIM)
+        y += 1
+        
+        visible = h - y - 4
+        if self.module_cursor < self.module_scroll:
+            self.module_scroll = self.module_cursor
+        elif self.module_cursor >= self.module_scroll + visible:
+            self.module_scroll = self.module_cursor - visible + 1
+        
+        for i in range(visible):
+            idx = self.module_scroll + i
+            if idx >= len(self.available_modules):
+                break
+            
+            mod = self.available_modules[idx]
+            is_selected = self.selected_modules.get(mod['name'], False)
+            is_cursor = idx == self.module_cursor
+            is_remote = mod.get('source') == 'remote'
+            
+            if is_cursor:
+                TUI.safe_addstr(self.scr, y + i, LEFT_PAD, '▶', curses.color_pair(3) | curses.A_BOLD)
+            
+            cb = '[✓]' if is_selected else '[ ]'
+            cb_color = curses.color_pair(2 if is_selected else 4)
+            TUI.safe_addstr(self.scr, y + i, LEFT_PAD + 2, cb, cb_color)
+            
+            # Show LC/RM tag with highlighting
+            tag = 'RM' if is_remote else 'LC'
+            tag_color = curses.color_pair(5) if is_remote else curses.color_pair(2)
+            TUI.safe_addstr(self.scr, y + i, LEFT_PAD + 6, tag, tag_color | curses.A_BOLD)
+            
+            name_style = curses.color_pair(4) | (curses.A_BOLD if is_cursor else 0)
+            TUI.safe_addstr(self.scr, y + i, LEFT_PAD + 9, mod['name'][:15], name_style)
+            
+            if mod['description']:
+                TUI.safe_addstr(self.scr, y + i, LEFT_PAD + 25, mod['description'][:w - LEFT_PAD - 28], 
+                               curses.color_pair(4) | curses.A_DIM)
+        
+        TUI.safe_addstr(self.scr, h - 2, LEFT_PAD, 'Space Toggle  Enter Finish  Esc Cancel', curses.color_pair(4) | curses.A_DIM)
         self.scr.refresh()
 
     def get_input(self):
         curses.echo()
         curses.curs_set(1)
-        y, x = (self.input_y, self.input_x)
+        h, w = self.scr.getmaxyx()
+        y = self.input_y if hasattr(self, 'input_y') else TOP_PAD + 12
+        
+        TUI.safe_addstr(self.scr, y, LEFT_PAD, '> ', curses.color_pair(3) | curses.A_BOLD)
+        self.scr.refresh()
+        
         try:
-            real_y = y + 1
-            real_x = x + 1
-            TUI.safe_addstr(self.scr, y, x, ' ' * self.input_w)
-            TUI.safe_addstr(self.scr, y, x, '> ', curses.color_pair(3) | curses.A_BOLD)
-            self.scr.refresh()
-            value = self.scr.getstr(real_y, real_x + 2, self.input_w - 6).decode('utf-8').strip()
+            value = self.scr.getstr(y, LEFT_PAD + 2, 50).decode('utf-8').strip()
         except:
             value = ''
+        
         curses.noecho()
         curses.curs_set(0)
         return value
 
+    def _enable_dependencies(self, mod_name):
+        """Enable all dependencies for a module."""
+        for mod in self.available_modules:
+            if mod['name'] == mod_name:
+                for dep in mod.get('dependencies', []):
+                    self.selected_modules[dep] = True
+                    self._enable_dependencies(dep)  # Recursive
+                break
+
+    def _save_module_config(self):
+        """Save selected modules to config."""
+        modules = {}
+        for mod in self.available_modules:
+            name = mod['name']
+            source = mod.get('source', 'local')
+            if self.selected_modules.get(name, False):
+                modules[name] = {"status": "global", "source": source}
+            else:
+                modules[name] = {"status": "disabled", "source": source}
+        
+        MODULES_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        config = {"modules": modules, "meta": {}}
+        MODULES_CONFIG_FILE.write_text(json.dumps(config, indent=4))
+
     def run(self):
+        # Welcome screen
         while True:
             if not TUI.check_terminal_size(self.scr):
                 return None
             h, w = self.scr.getmaxyx()
             self.scr.clear()
-            bh, bw = (8, min(60, w - 4))
-            bx, by = ((w - bw) // 2, (h - bh) // 2)
-            TUI.draw_box(self.scr, by, bx, bh, bw, ' Welcome ')
-            TUI.safe_addstr(self.scr, by + 2, bx + 2, 'welcome to noteworthy!', curses.color_pair(1) | curses.A_BOLD)
-            TUI.safe_addstr(self.scr, by + 3, bx + 2, 'We will guide you to initializing your project.', curses.color_pair(4))
-            footer = 'Press Enter to begin...'
-            TUI.safe_addstr(self.scr, by + 6, bx + (bw - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
+            
+            y = TOP_PAD
+            for i, line in enumerate(LOGO):
+                TUI.safe_addstr(self.scr, y + i, LEFT_PAD, line, curses.color_pair(1) | curses.A_BOLD)
+            
+            y += len(LOGO) + 2
+            TUI.safe_addstr(self.scr, y, LEFT_PAD, 'Welcome to Noteworthy!', curses.color_pair(1) | curses.A_BOLD)
+            TUI.safe_addstr(self.scr, y + 2, LEFT_PAD, 'Press Enter to begin setup...', curses.color_pair(4) | curses.A_DIM)
+            
             self.scr.refresh()
             k = self.scr.getch()
             if k == 27:
                 return None
             if k in (ord('\n'), 10, curses.KEY_ENTER):
                 break
-                
+        
+        # Config steps
         while self.current_step < len(self.steps):
             if not TUI.check_terminal_size(self.scr):
                 return None
-            self.refresh()
+            
+            self.refresh_config_step()
             k = self.scr.getch()
             
             handled, res = handle_key_event(k, self.keymap, self)
             if handled and res == 'EXIT':
                 return None
-                
+        
+        # Module selection step
+        self.in_module_step = True
+        while True:
+            if not TUI.check_terminal_size(self.scr):
+                return None
+            
+            self.refresh_module_step()
+            k = self.scr.getch()
+            
+            if k == 27:
+                return None
+            elif k == ord(' '):
+                mod = self.available_modules[self.module_cursor]
+                name = mod['name']
+                new_state = not self.selected_modules.get(name, False)
+                self.selected_modules[name] = new_state
+                if new_state:
+                    self._enable_dependencies(name)
+            elif k in (curses.KEY_UP, ord('k')):
+                self.module_cursor = max(0, self.module_cursor - 1)
+            elif k in (curses.KEY_DOWN, ord('j')):
+                self.module_cursor = min(len(self.available_modules) - 1, self.module_cursor + 1)
+            elif k in (ord('\n'), 10, curses.KEY_ENTER):
+                break
+        
+        # Save everything
         try:
             METADATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-            return save_config(self.config)
+            save_config(self.config)
+            self._save_module_config()
+            return True
         except:
             return None

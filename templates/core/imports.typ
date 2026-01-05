@@ -3,32 +3,19 @@
 // Managed by Noteworthy Module Config
 // =====================================================
 
-// Module: block (Global)
-#import "../module/block/mod.typ": *
+// Theme
+#import "../styles/theme.typ": theme
 
-// Module: canvas (Global)
-#import "../module/canvas/mod.typ": *
+// Core Modules (always enabled)
+#import "../module/core/block/mod.typ": *
+#import "../module/core/cover/mod.typ": *
 
-// Module: combi (Global)
-#import "../module/combi/mod.typ": *
-
-// Module: cover (Global)
-#import "../module/cover/mod.typ": *
-
-// Module: data (Global)
-#import "../module/data/mod.typ": *
-
-// Module: dsa (Global)
-#import "../module/dsa/mod.typ": *
-
-// Module: graph (Global)
-#import "../module/graph/mod.typ": *
-
-// Module: layout (Global)
-#import "../module/layout/mod.typ": *
-
-// Module: shape (Global)
-#import "../module/shape/mod.typ": *
-
-// Module: trees (Global)
-#import "../module/trees/mod.typ": *
+// Optional Modules
+#import "../module/canvas/mod.typ": *  // canvas
+#import "../module/combi/mod.typ": *  // combi
+#import "../module/data/mod.typ": *  // data
+#import "../module/dsa/mod.typ": *  // dsa
+#import "../module/graph/mod.typ": *  // graph
+#import "../module/layout/mod.typ": *  // layout
+#import "../module/shape/mod.typ": *  // shape
+#import "../module/trees/mod.typ": *  // trees

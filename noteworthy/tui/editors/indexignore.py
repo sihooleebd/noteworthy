@@ -1,26 +1,27 @@
 import curses
-from ..base import ListEditor, TUI
+from ..base import ListEditor, TUI, LEFT_PAD, TOP_PAD
 from ...config import INDEXIGNORE_FILE
 from ..components.common import LineEditor
 from ...utils import load_indexignore, save_indexignore, register_key
 from ..keybinds import ConfirmBind, KeyBind
 
+
 class IndexignoreEditor(ListEditor):
+    """Ignored files editor with left-aligned design."""
 
     def __init__(self, scr):
         super().__init__(scr, 'Ignored Files')
         self.filepath = INDEXIGNORE_FILE
         self.ignored = sorted(list(load_indexignore()))
         self._update_items()
-        self.box_title = 'Ignored Files'
-        self.box_width = 50
+        self.section_title = 'Ignored Patterns'
         
         register_key(self.keymap, ConfirmBind(self.action_enter))
         register_key(self.keymap, KeyBind(ord('n'), self.action_add, "Add Pattern"))
         register_key(self.keymap, KeyBind(ord('d'), self.action_delete, "Delete Pattern"))
         
     def action_enter(self, ctx):
-        if self.items[self.cursor] == "+ Add new ignore pattern...":
+        if self.items[self.cursor] == "+ Add pattern...":
             self.action_add(ctx)
         else:
             curr = self.ignored[self.cursor]
@@ -32,7 +33,7 @@ class IndexignoreEditor(ListEditor):
                 self.modified = True
 
     def action_add(self, ctx):
-        val = LineEditor(self.scr, title='Ignore File ID').run()
+        val = LineEditor(self.scr, title='Add Ignore Pattern').run()
         if val and val not in self.ignored:
             self.ignored.append(val)
             self.ignored.sort()
@@ -40,16 +41,15 @@ class IndexignoreEditor(ListEditor):
             self.modified = True
             
     def action_delete(self, ctx):
-        if self.items and self.items[self.cursor] != "+ Add new ignore pattern...":
-            if TUI.prompt_confirm(self.scr, "Delete pattern? (y/n): "):
+        if self.items and self.items[self.cursor] != "+ Add pattern...":
+            if TUI.prompt_confirm(self.scr, "Delete pattern?"):
                 del self.ignored[self.cursor]
-                choice = self.cursor
                 self._update_items()
                 self.modified = True
-                self.cursor = min(choice, len(self.items) - 1)
+                self.cursor = min(self.cursor, len(self.items) - 1)
 
     def _update_items(self):
-        self.items = self.ignored + ["+ Add new ignore pattern..."]
+        self.items = self.ignored + ["+ Add pattern..."]
 
     def save(self):
         save_indexignore(set(self.ignored))
@@ -61,15 +61,16 @@ class IndexignoreEditor(ListEditor):
         self._update_items()
 
     def _draw_item(self, y, x, item, width, selected):
-        if item == "+ Add new ignore pattern...":
-            TUI.safe_addstr(self.scr, y, x + 4, item, curses.color_pair(3 if selected else 4) | (curses.A_BOLD if selected else curses.A_DIM))
-            if selected: TUI.safe_addstr(self.scr, y, x + 2, '>', curses.color_pair(3) | curses.A_BOLD)
-            return
-
         if selected:
-            TUI.safe_addstr(self.scr, y, x + 2, '>', curses.color_pair(3) | curses.A_BOLD)
-        TUI.safe_addstr(self.scr, y, x + 4, item, curses.color_pair(5 if selected else 4))
+            TUI.safe_addstr(self.scr, y, x, '▶', curses.color_pair(3) | curses.A_BOLD)
+        
+        if item == "+ Add pattern...":
+            style = curses.color_pair(3 if selected else 4) | (curses.A_BOLD if selected else curses.A_DIM)
+            TUI.safe_addstr(self.scr, y, x + 2, item, style)
+        else:
+            style = curses.color_pair(4) | (curses.A_BOLD if selected else 0)
+            TUI.safe_addstr(self.scr, y, x + 2, item[:width - 4], style)
 
     def _draw_footer(self, h, w):
-        footer = 'Enter:Edit n:Add d:Del Esc:Save x:Export l:Import'
-        TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
+        TUI.safe_addstr(self.scr, h - 2, LEFT_PAD, 'Enter Edit  n Add  d Delete  Esc Save', 
+                       curses.color_pair(4) | curses.A_DIM)

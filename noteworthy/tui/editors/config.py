@@ -1,6 +1,6 @@
 import curses
 import json
-from ..base import ListEditor, TUI
+from ..base import ListEditor, TUI, LEFT_PAD, TOP_PAD
 from ..components.common import LineEditor
 from ...config import METADATA_FILE, CONSTANTS_FILE, PREFACE_FILE
 from ...utils import load_config_safe, save_config, register_key
@@ -8,15 +8,17 @@ from ..keybinds import ConfirmBind, ToggleBind, KeyBind
 from .schemes import extract_themes
 from .text import TextEditor
 
+
 class ConfigEditor(ListEditor):
+    """Configuration editor with left-aligned design."""
 
     def __init__(self, scr):
         super().__init__(scr, 'General Settings')
         self.config = load_config_safe()
         self.themes = extract_themes()
         self._build_items()
-        self.box_title = 'Configuration'
-        self.box_width = 80
+        self.section_title = 'Configuration'
+        self.content_width = 80
         
         register_key(self.keymap, ConfirmBind(self.action_edit))
         register_key(self.keymap, ToggleBind(self.action_toggle))
@@ -51,9 +53,11 @@ class ConfigEditor(ListEditor):
         
         for key, meta in field_meta.items():
             if key in self.config:
-                 if len(meta) == 3: self.fields.append((key, meta[0], meta[1], meta[2]))
-                 else: self.fields.append((key, meta[0], meta[1]))
-                 processed_keys.add(key)
+                if len(meta) == 3:
+                    self.fields.append((key, meta[0], meta[1], meta[2]))
+                else:
+                    self.fields.append((key, meta[0], meta[1]))
+                processed_keys.add(key)
         
         for key, val in self.config.items():
             if key not in processed_keys and key != 'display-mode':
@@ -71,7 +75,7 @@ class ConfigEditor(ListEditor):
         try:
             save_config(self.config)
             return True
-        except Exception as e:
+        except:
             return False
 
     def _load(self):
@@ -82,97 +86,72 @@ class ConfigEditor(ListEditor):
 
     def _draw_item(self, y, x, item, width, selected):
         key = item[0]
-        if len(item) == 4: _, label, ftype, opts = item
-        else: _, label, ftype = item
+        if len(item) == 4:
+            _, label, ftype, opts = item
+        else:
+            _, label, ftype = item
+            opts = None
 
-        left_w = 26
+        label_w = 24
 
+        # Selection indicator
         if selected:
-            TUI.safe_addstr(self.scr, y, x + 2, '>', curses.color_pair(3) | curses.A_BOLD)
+            TUI.safe_addstr(self.scr, y, x, '▶', curses.color_pair(3) | curses.A_BOLD)
         
+        # Special case: Preface action
         if key == 'Preface':
-            TUI.safe_addstr(self.scr, y, x + 4, key, curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
-            TUI.safe_addstr(self.scr, y, x + left_w, "│", curses.color_pair(4) | curses.A_DIM)
-            TUI.safe_addstr(self.scr, y, x + left_w + 2, label, curses.color_pair(4) | (curses.A_BOLD if selected else 0))
+            style = curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0)
+            TUI.safe_addstr(self.scr, y, x + 2, key, style)
+            TUI.safe_addstr(self.scr, y, x + label_w, label, curses.color_pair(4) | curses.A_DIM)
             return
 
-        TUI.safe_addstr(self.scr, y, x + 4, label[:left_w - 6], curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
-        
-        TUI.safe_addstr(self.scr, y, x + left_w, "│", curses.color_pair(4) | curses.A_DIM)
+        # Label
+        style = curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0)
+        TUI.safe_addstr(self.scr, y, x + 2, label[:label_w - 4], style)
 
+        # Value
         val = self.config.get(key)
         val_str = str(val) if val is not None else "(none)"
         
         color = curses.color_pair(4)
-        if selected: color = color | curses.A_BOLD
+        if selected:
+            color |= curses.A_BOLD
 
         if ftype == 'bool':
             val_str = 'Yes' if val else 'No'
             color = curses.color_pair(2 if val else 6)
-            if selected: color = color | curses.A_BOLD
+            if selected:
+                color |= curses.A_BOLD
         elif ftype == 'list':
             val_str = ', '.join(val) if isinstance(val, list) else str(val)
         elif ftype == 'choice':
-             if selected: color = curses.color_pair(5) | curses.A_BOLD
-             else: color = curses.color_pair(4)
+            if selected:
+                color = curses.color_pair(5) | curses.A_BOLD
         
-        TUI.safe_addstr(self.scr, y, x + left_w + 2, val_str[:width - left_w - 4], color)
-
-    def refresh(self):
-        h, w = TUI.get_dims(self.scr)
-        self.scr.clear()
-        
-        list_h = min(len(self.items) + 2, h - 8)
-        total_h = 2 + list_h + 2
-        
-        cy, cx = TUI.center(self.scr, total_h, self.box_width)
-        start_y = cy + 1
-        
-        title_str = f"{self.title}{' *' if self.modified else ''}"
-        ty, tx = TUI.center(self.scr, content_w=len(title_str))
-        TUI.safe_addstr(self.scr, start_y, tx, title_str, curses.color_pair(1) | curses.A_BOLD)
-        
-        bw = min(self.box_width, w - 2)
-        _, bx = TUI.center(self.scr, content_w=bw)
-        left_w = 26
-        
-        TUI.draw_box(self.scr, start_y + 2, bx, list_h, bw, self.box_title)
-        
-        TUI.safe_addstr(self.scr, start_y + 3, bx + 4, "Setting", curses.color_pair(1) | curses.A_BOLD)
-        TUI.safe_addstr(self.scr, start_y + 3, bx + left_w + 2, "Value", curses.color_pair(1) | curses.A_BOLD)
-        TUI.safe_addstr(self.scr, start_y + 3, bx + left_w, "│", curses.color_pair(4) | curses.A_DIM)
-
-        vis = list_h - 3 
-        
-        if self.cursor < self.scroll: self.scroll = self.cursor
-        elif self.cursor >= self.scroll + vis: self.scroll = self.cursor - vis + 1
-        
-        for i in range(vis):
-            idx = self.scroll + i
-            if idx >= len(self.items): break
-            y = start_y + 4 + i
-            self._draw_item(y, bx, self.items[idx], bw, idx == self.cursor)
-            
-        self._draw_footer(h, w)
-        self.scr.refresh()
+        TUI.safe_addstr(self.scr, y, x + label_w, val_str[:width - label_w - 2], color)
 
     def _draw_footer(self, h, w):
-        footer = 'Enter:Edit Space:Toggle Esc:Save x:Export l:Import'
-        TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
+        footer = 'Enter Edit  Space Toggle  Esc Save'
+        TUI.safe_addstr(self.scr, h - 2, LEFT_PAD, footer, curses.color_pair(4) | curses.A_DIM)
 
     def action_edit(self, ctx):
         item = self.items[self.cursor]
         key = item[0]
-        if len(item) == 4: _, label, ftype, opts = item
-        else: _, label, ftype = item
+        if len(item) == 4:
+            _, label, ftype, opts = item
+        else:
+            _, label, ftype = item
+            opts = None
 
         if key == 'Preface':
             editor = TextEditor(self.scr, filepath=PREFACE_FILE, title='Preface Editor')
             editor.run()
-        elif ftype == 'choice':
+        elif ftype == 'choice' and opts:
             val = self.config.get(key, opts[0])
-            try: idx = opts.index(val)
-            except: idx = 0
+            try:
+                idx = opts.index(val)
+            except:
+                idx = 0
             idx = (idx + 1) % len(opts)
             self.config[key] = opts[idx]
             self.modified = True
@@ -189,64 +168,62 @@ class ConfigEditor(ListEditor):
         else:
             val = self.config.get(key)
             init_val = str(val) if val is not None else ""
-            
             new_val = LineEditor(self.scr, initial_value=init_val, title=f'Edit {label}').run()
             
             if new_val is not None:
                 if ftype == 'int':
-                    try: 
-                        if not new_val: self.config[key] = None
-                        else: self.config[key] = int(new_val)
+                    try:
+                        self.config[key] = int(new_val) if new_val else None
                     except ValueError:
-                         pass
+                        pass
                 else:
-                    if not new_val:
-                        self.config[key] = None
-                    else:
-                        self.config[key] = new_val
+                    self.config[key] = new_val if new_val else None
                 self.modified = True
     
     def action_toggle(self, ctx):
         item = self.items[self.cursor]
         key = item[0]
-        if len(item) == 4: _, label, ftype, opts = item
-        else: _, label, ftype = item
+        if len(item) == 4:
+            _, label, ftype, opts = item
+        else:
+            _, label, ftype = item
+            opts = None
         
         if ftype == 'bool':
             self.config[key] = not self.config.get(key, False)
             self.modified = True
-        elif ftype == 'choice':
+        elif ftype == 'choice' and opts:
             val = self.config.get(key, opts[0])
-            try: idx = opts.index(val)
-            except: idx = 0
+            try:
+                idx = opts.index(val)
+            except:
+                idx = 0
             idx = (idx + 1) % len(opts)
             self.config[key] = opts[idx]
             self.modified = True
 
     def action_next_value(self, ctx):
         item = self.items[self.cursor]
-        key = item[0]
-        if len(item) == 4: _, label, ftype, opts = item
-        else: _, label, ftype = item
-
-        if ftype == 'choice':
-            val = self.config.get(key, opts[0])
-            try: idx = opts.index(val)
-            except: idx = 0
-            idx = (idx + 1) % len(opts)
-            self.config[key] = opts[idx]
-            self.modified = True
+        if len(item) == 4:
+            key, _, ftype, opts = item
+            if ftype == 'choice':
+                val = self.config.get(key, opts[0])
+                try:
+                    idx = opts.index(val)
+                except:
+                    idx = 0
+                self.config[key] = opts[(idx + 1) % len(opts)]
+                self.modified = True
     
     def action_prev_value(self, ctx):
         item = self.items[self.cursor]
-        key = item[0]
-        if len(item) == 4: _, label, ftype, opts = item
-        else: _, label, ftype = item
-
-        if ftype == 'choice':
-            val = self.config.get(key, opts[0])
-            try: idx = opts.index(val)
-            except: idx = 0
-            idx = (idx - 1 + len(opts)) % len(opts)
-            self.config[key] = opts[idx]
-            self.modified = True
+        if len(item) == 4:
+            key, _, ftype, opts = item
+            if ftype == 'choice':
+                val = self.config.get(key, opts[0])
+                try:
+                    idx = opts.index(val)
+                except:
+                    idx = 0
+                self.config[key] = opts[(idx - 1 + len(opts)) % len(opts)]
+                self.modified = True

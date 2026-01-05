@@ -13,7 +13,6 @@ API_BASE = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents"
 def fetch_index():
     """Fetch list of available modules from remote using GitHub API."""
     try:
-        # 1. Fetch root contents
         req = urllib.request.Request(API_BASE)
         req.add_header('User-Agent', 'Noteworthy-PM')
         with urllib.request.urlopen(req, timeout=5) as response:
@@ -22,17 +21,37 @@ def fetch_index():
         index = {}
         for item in contents:
             if item['type'] == 'dir' and not item['name'].startswith('.'):
+                name = item['name']
                 idx_entry = {
-                    "name": item['name'],
-                    "dependencies": [], # Can't know deps without fetching metadata
-                    "exports": []
+                    "name": name,
+                    "description": "",
+                    "dependencies": [],
+                    "exports": [],
+                    "source": "remote"
                 }
-                # Try to pre-fetch metadata? Too slow for index. 
-                # We'll rely on lazy fetching or just assume no deps for listing.
-                index[item['name']] = idx_entry
+                
+                # Try to fetch metadata.json for this module
+                try:
+                    meta_url = f"{API_BASE}/{name}/metadata.json"
+                    meta_req = urllib.request.Request(meta_url)
+                    meta_req.add_header('User-Agent', 'Noteworthy-PM')
+                    with urllib.request.urlopen(meta_req, timeout=3) as meta_resp:
+                        meta_data = json.loads(meta_resp.read().decode())
+                        # GitHub API returns base64 encoded content
+                        if 'content' in meta_data:
+                            import base64
+                            content = base64.b64decode(meta_data['content']).decode('utf-8')
+                            meta = json.loads(content)
+                            idx_entry["description"] = meta.get("description", "")
+                            idx_entry["dependencies"] = meta.get("dependencies", [])
+                            idx_entry["exports"] = meta.get("exports", [])
+                except:
+                    pass  # No metadata, use defaults
+                
+                index[name] = idx_entry
         return index
     except Exception as e:
-        return {} # Offline or rate limited
+        return {}  # Offline or rate limited
 
 def get_installed_modules():
     if not MODULES_CONFIG_FILE.exists():

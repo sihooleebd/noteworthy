@@ -7,7 +7,15 @@ from ..core.config_mgmt import export_file, import_file, list_exports_for
 from ..utils import register_key, handle_key_event
 from .keybinds import SaveBind, ExitBind, NavigationBind, KeyBind
 
+# Layout constants
+LEFT_PAD = 4
+TOP_PAD = 2
+MIN_HEIGHT = 20
+MIN_WIDTH = 50
+
+
 class TUI:
+    """Core TUI utilities with left-aligned, borderless design."""
 
     @staticmethod
     def init_colors():
@@ -32,76 +40,41 @@ class TUI:
 
     @staticmethod
     def safe_addstr(scr, y, x, text, attr=0):
+        """Write text at position with bounds checking."""
         try:
             h, w = scr.getmaxyx()
-            real_y = y + 1
-            real_x = x + 1
-            if 0 <= real_y < h - 1 and 0 <= real_x < w - 1:
-                scr.addstr(real_y, real_x, text[:w - 1 - real_x], attr)
-        except curses.error:
-            pass
-
-    @staticmethod
-    def draw_box(scr, y, x, h, w, title=''):
-        try:
-            real_y, real_x = (y + 1, x + 1)
-            scr.addstr(real_y, real_x, '╔' + '═' * (w - 2) + '╗')
-            for i in range(1, h - 1):
-                scr.addstr(real_y + i, real_x, '║' + ' ' * (w - 2) + '║')
-            scr.addstr(real_y + h - 1, real_x, '╚' + '═' * (w - 2) + '╝')
-            if title:
-                scr.addstr(real_y, real_x + 2, f' {title} ', curses.color_pair(1) | curses.A_BOLD)
+            if 0 <= y < h and 0 <= x < w:
+                scr.addstr(y, x, text[:w - x - 1], attr)
         except curses.error:
             pass
 
     @staticmethod
     def get_dims(scr):
-        h_raw, w_raw = scr.getmaxyx()
-        return h_raw - 2, w_raw - 2
+        """Get usable dimensions (full screen)."""
+        return scr.getmaxyx()
 
     @staticmethod
-    def center(scr, content_h=None, content_w=None, offset_y=0, offset_x=0):
-        h_raw, w_raw = scr.getmaxyx()
-        
-        cy = h_raw // 2
-        cx = w_raw // 2
-        
-        start_y = cy
-        start_x = cx
-        
-        if content_h is not None:
-            start_y = max(0, (h_raw - content_h) // 2)
-        if content_w is not None:
-            start_x = max(0, (w_raw - content_w) // 2)
-
-        return start_y - 1 + offset_y, start_x - 1 + offset_x
+    def get_content_area(scr):
+        """Get content area with padding applied."""
+        h, w = scr.getmaxyx()
+        return h - TOP_PAD, w - LEFT_PAD
 
     @staticmethod
     def prompt_save(scr):
-        h, w = TUI.get_dims(scr)
+        h, w = scr.getmaxyx()
         msg = 'Save? (y/n/c): '
-        TUI.safe_addstr(scr, h - 1, 2, msg, curses.color_pair(3) | curses.A_BOLD)
+        TUI.safe_addstr(scr, h - 2, LEFT_PAD, msg, curses.color_pair(3) | curses.A_BOLD)
         scr.refresh()
         c = scr.getch()
         return chr(c) if c in (ord('y'), ord('n'), ord('c')) else 'c'
 
     @staticmethod
     def prompt_confirm(scr, message='Are you sure? (y/n): '):
-        box_h = 7
-        box_w = max(40, len(message) + 8)
+        h, w = scr.getmaxyx()
+        scr.clear()
         
-        box_y, box_x = TUI.center(scr, box_h, box_w)
-        
-        TUI.draw_box(scr, box_y, box_x, box_h, box_w, 'CONFIRM')
-        
-        msg_y = box_y + 2
-        msg_x = box_x + (box_w - len(message)) // 2
-        TUI.safe_addstr(scr, msg_y, msg_x, message, curses.color_pair(3) | curses.A_BOLD)
-        
-        hint = '[y] Yes    [n] No'
-        hint_y = box_y + 4
-        hint_x = box_x + (box_w - len(hint)) // 2
-        TUI.safe_addstr(scr, hint_y, hint_x, hint, curses.color_pair(4))
+        TUI.safe_addstr(scr, TOP_PAD, LEFT_PAD, message, curses.color_pair(3) | curses.A_BOLD)
+        TUI.safe_addstr(scr, TOP_PAD + 2, LEFT_PAD, '[y] Yes    [n] No', curses.color_pair(4))
         
         scr.refresh()
         while True:
@@ -113,33 +86,30 @@ class TUI:
 
     @staticmethod
     def show_saved(scr):
-        h, w = TUI.get_dims(scr)
-        TUI.safe_addstr(scr, h - 1, 2, 'Saved!', curses.color_pair(2) | curses.A_BOLD)
+        h, w = scr.getmaxyx()
+        TUI.safe_addstr(scr, h - 2, LEFT_PAD, 'Saved!', curses.color_pair(2) | curses.A_BOLD)
         scr.refresh()
         curses.napms(500)
 
     @staticmethod
     def show_message(scr, title, message):
-        h, w = TUI.get_dims(scr)
+        h, w = scr.getmaxyx()
+        scr.clear()
+        
+        TUI.safe_addstr(scr, TOP_PAD, LEFT_PAD, title, curses.color_pair(1) | curses.A_BOLD)
+        
         lines = message.split('\n')
-        box_h = len(lines) + 6
-        box_w = max(40, max([len(l) for l in lines]) + 6, len(title) + 8)
-        
-        box_y, box_x = TUI.center(scr, box_h, box_w)
-        
-        TUI.draw_box(scr, box_y, box_x, box_h, box_w, title)
-        
         for i, line in enumerate(lines):
-            TUI.safe_addstr(scr, box_y + 2 + i, box_x + 3, line, curses.color_pair(4) | curses.A_BOLD)
-            
+            TUI.safe_addstr(scr, TOP_PAD + 2 + i, LEFT_PAD, line, curses.color_pair(4))
+        
         hint = "Press any key to continue"
-        TUI.safe_addstr(scr, box_y + box_h - 2, box_x + (box_w - len(hint)) // 2, hint, curses.color_pair(4) | curses.A_DIM)
+        TUI.safe_addstr(scr, TOP_PAD + 3 + len(lines), LEFT_PAD, hint, curses.color_pair(4) | curses.A_DIM)
         
         scr.refresh()
         scr.getch()
 
     @staticmethod
-    def check_terminal_size(scr, min_h=24, min_w=60):
+    def check_terminal_size(scr, min_h=MIN_HEIGHT, min_w=MIN_WIDTH):
         was_error = False
         while True:
             h, w = scr.getmaxyx()
@@ -152,28 +122,26 @@ class TUI:
             was_error = True
             scr.clear()
             
-            msg1 = 'Terminal too small!'
-            msg2 = f'Current: {h}x{w}'
-            msg3 = f'Required: {min_h}x{min_w}'
-            
-            start_y, _ = TUI.center(scr, content_h=3)
-            _, start_x1 = TUI.center(scr, content_w=len(msg1))
-            _, start_x2 = TUI.center(scr, content_w=len(msg2))
-            _, start_x3 = TUI.center(scr, content_w=len(msg3))
-
-            TUI.safe_addstr(scr, start_y, start_x1, msg1, curses.color_pair(6) | curses.A_BOLD)
-            TUI.safe_addstr(scr, start_y + 1, start_x2, msg2, curses.color_pair(4))
-            TUI.safe_addstr(scr, start_y + 2, start_x3, msg3, curses.color_pair(4) | curses.A_DIM)
+            TUI.safe_addstr(scr, TOP_PAD, LEFT_PAD, 'Terminal too small!', curses.color_pair(6) | curses.A_BOLD)
+            TUI.safe_addstr(scr, TOP_PAD + 1, LEFT_PAD, f'Current: {h}×{w}', curses.color_pair(4))
+            TUI.safe_addstr(scr, TOP_PAD + 2, LEFT_PAD, f'Required: {min_h}×{min_w}', curses.color_pair(4) | curses.A_DIM)
             
             scr.refresh()
             curses.napms(100)
-            
             curses.flushinp()
             
             if scr.getch() in (ord('q'), 27):
                 return False
 
+    # Keep draw_box for backwards compatibility but deprecate
+    @staticmethod
+    def draw_box(scr, y, x, h, w, title=''):
+        """Deprecated: Use borderless design instead."""
+        pass  # No-op - borderless design
+
+
 class BaseEditor:
+    """Base class for all editors with left-aligned design."""
 
     def do_export(self, ctx=None):
         from .components.common import LineEditor, show_error_screen
@@ -189,8 +157,7 @@ class BaseEditor:
                 relative_path = Path(res).relative_to(BASE_DIR)
             except:
                 relative_path = Path(res).name
-                
-            msg = f"File saved to:\n{relative_path}\n\nYou can move this file to save it permanently,\nor use 'Import' to restore it later."
+            msg = f"Saved to: {relative_path}"
             TUI.show_message(self.scr, "Export Successful", msg)
         else:
             show_error_screen(self.scr, 'Export failed')
@@ -203,23 +170,24 @@ class BaseEditor:
         if not backups:
             show_error_screen(self.scr, 'No backups found')
             return
+        
         h, w = self.scr.getmaxyx()
-        bh, bw = (min(len(backups) + 6, h - 4), min(65, w - 4))
-        by, bx = TUI.center(self.scr, bh, bw)
         sel = 0
+        max_visible = h - TOP_PAD - 6
+        
         while True:
             self.scr.clear()
-            TUI.draw_box(self.scr, by, bx, bh, bw, 'Select Backup')
-            for i, b in enumerate(backups):
-                if i >= bh - 4:
-                    break
-                if i == sel:
-                    TUI.safe_addstr(self.scr, by + 1 + i, bx + 2, f'> {b}'[:bw - 4], curses.color_pair(3) | curses.A_BOLD)
-                else:
-                    TUI.safe_addstr(self.scr, by + 1 + i, bx + 4, b[:bw - 6], curses.color_pair(4))
+            TUI.safe_addstr(self.scr, TOP_PAD, LEFT_PAD, 'Select Backup', curses.color_pair(1) | curses.A_BOLD)
             
-            TUI.safe_addstr(self.scr, by + bh - 2, bx + 2, "Tip: Add .json/.typ to 'exports/' folder", curses.color_pair(4) | curses.A_DIM)
-
+            for i, b in enumerate(backups[:max_visible]):
+                y = TOP_PAD + 2 + i
+                if i == sel:
+                    TUI.safe_addstr(self.scr, y, LEFT_PAD, f'▶ {b}', curses.color_pair(3) | curses.A_BOLD)
+                else:
+                    TUI.safe_addstr(self.scr, y, LEFT_PAD + 2, b, curses.color_pair(4))
+            
+            TUI.safe_addstr(self.scr, h - 3, LEFT_PAD, "Enter Select  Esc Back", curses.color_pair(4) | curses.A_DIM)
+            
             self.scr.refresh()
             k = self.scr.getch()
             if k == 27:
@@ -233,23 +201,9 @@ class BaseEditor:
                     from ..config import BASE_DIR
                     src = BASE_DIR / 'exports' / backups[sel]
                     if import_file(src, self.filepath):
-                        msg = "File imported successfully!\n\nThe editor will reload to reflect changes."
-                        TUI.show_message(self.scr, "Import Successful", msg)
+                        TUI.show_message(self.scr, "Import Successful", "File imported. Editor will reload.")
                         if hasattr(self, '_load'):
                             self._load()
-                        elif hasattr(self, 'config'):
-                            from ..utils import load_config_safe
-                            self.config = load_config_safe()
-                            if hasattr(self, '_build_items'):
-                                self._build_items()
-                        elif hasattr(self, 'hierarchy'):
-                            import json
-                            try:
-                                self.hierarchy = json.loads(self.filepath.read_text())
-                            except:
-                                self.hierarchy = []
-                        elif hasattr(self, 'themes'):
-                            pass
                         return
                     else:
                         show_error_screen(self.scr, 'Import failed')
@@ -260,6 +214,7 @@ class BaseEditor:
         self.title = title
         self.modified = False
         self.keymap = {}
+        self.content_width = 70
         TUI.init_colors()
         
         register_key(self.keymap, ExitBind(self.do_exit))
@@ -279,7 +234,7 @@ class BaseEditor:
     def run(self):
         self.refresh()
         while True:
-            if not TUI.check_terminal_size(self.scr, 10, self.box_width + 4):
+            if not TUI.check_terminal_size(self.scr):
                 return
             
             k = self.scr.getch()
@@ -295,15 +250,16 @@ class BaseEditor:
     def _handle_input(self, k):
         pass
 
+
 class ListEditor(BaseEditor):
+    """Base editor for list-based content with left-aligned design."""
 
     def __init__(self, scr, title='List Editor'):
         super().__init__(scr, title)
         self.items = []
         self.cursor = 0
         self.scroll = 0
-        self.box_title = 'Items'
-        self.box_width = 70
+        self.section_title = 'Items'
         
         register_key(self.keymap, NavigationBind('UP', self.cursor_up))
         register_key(self.keymap, NavigationBind('DOWN', self.cursor_down))
@@ -313,36 +269,46 @@ class ListEditor(BaseEditor):
         register_key(self.keymap, NavigationBind('END', self.cursor_end))
 
     def _draw_item(self, y, x, item, width, selected):
+        """Override to customize item rendering."""
         raise NotImplementedError
 
     def refresh(self):
         h, w = self.scr.getmaxyx()
         self.scr.clear()
-        list_h = min(len(self.items) + 2, h - 8)
-        total_h = 2 + list_h + 2
-        start_y = max(1, (h - total_h) // 2)
-        title_str = f"{self.title}{(' *' if self.modified else '')}"
-        TUI.safe_addstr(self.scr, start_y, (w - len(title_str)) // 2, title_str, curses.color_pair(1) | curses.A_BOLD)
-        bw = min(self.box_width, w - 4)
-        bx = (w - bw) // 2
-        TUI.draw_box(self.scr, start_y + 2, bx, list_h, bw, self.box_title)
-        vis = list_h - 2
+        
+        # Title
+        title_str = f"{self.title}{' *' if self.modified else ''}"
+        TUI.safe_addstr(self.scr, TOP_PAD, LEFT_PAD, title_str, curses.color_pair(1) | curses.A_BOLD)
+        
+        # Section header
+        TUI.safe_addstr(self.scr, TOP_PAD + 2, LEFT_PAD, self.section_title, curses.color_pair(4) | curses.A_DIM)
+        
+        # Calculate visible area
+        list_start_y = TOP_PAD + 3
+        visible_rows = h - list_start_y - 3
+        content_w = min(self.content_width, w - LEFT_PAD - 2)
+        
+        # Scroll adjustment
         if self.cursor < self.scroll:
             self.scroll = self.cursor
-        elif self.cursor >= self.scroll + vis:
-            self.scroll = self.cursor - vis + 1
-        for i in range(vis):
+        elif self.cursor >= self.scroll + visible_rows:
+            self.scroll = self.cursor - visible_rows + 1
+        
+        # Draw items
+        for i in range(visible_rows):
             idx = self.scroll + i
             if idx >= len(self.items):
                 break
-            y = start_y + 3 + i
-            self._draw_item(y, bx, self.items[idx], bw, idx == self.cursor)
+            y = list_start_y + i
+            self._draw_item(y, LEFT_PAD, self.items[idx], content_w, idx == self.cursor)
+        
+        # Footer
         self._draw_footer(h, w)
         self.scr.refresh()
 
     def _draw_footer(self, h, w):
-        footer = 'Esc: Save & Exit'
-        TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
+        footer = 'Esc Save & Exit'
+        TUI.safe_addstr(self.scr, h - 2, LEFT_PAD, footer, curses.color_pair(4) | curses.A_DIM)
 
     def cursor_up(self, ctx):
         self.cursor = max(0, self.cursor - 1)
@@ -352,13 +318,13 @@ class ListEditor(BaseEditor):
         
     def cursor_pgup(self, ctx):
         h, _ = self.scr.getmaxyx()
-        jump = h - 8
+        jump = h - TOP_PAD - 6
         if jump < 1: jump = 1
         self.cursor = max(0, self.cursor - jump)
 
     def cursor_pgdn(self, ctx):
         h, _ = self.scr.getmaxyx()
-        jump = h - 8
+        jump = h - TOP_PAD - 6
         if jump < 1: jump = 1
         self.cursor = min(len(self.items) - 1, self.cursor + jump)
         

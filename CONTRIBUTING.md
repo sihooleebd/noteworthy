@@ -1,65 +1,64 @@
-# Contributing
+# Contributing Guidelines
 
-Contributions are welcome! To contribute:
+Thank you for your interest in contributing to **Noteworthy**! This project is a complex ecosystem spanning Python tooling, Typst templating, and user interfaces. 
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Code of Conduct
 
-## Module Development Philosophy
+We are committed to providing a friendly, safe and welcoming environment for all, regardless of level of experience, gender identity and expression, sexual orientation, disability, personal appearance, body size, race, ethnicity, age, religion, nationality, or other similar characteristic.
 
-Noteworthy follows a modular architecture designed to separate **logic** from **styling**.
+## Development Philosophies
 
-### 1. Separation of Concerns
--   **Implementation Files** (`draw.typ`, `impl.typ`): These files usually contain the raw logic. They often accept a `theme` parameter but **should not** hardcode theme values (e.g., specific colors) unless absolutely necessary.
--   **Module Entry Point** (`mod.typ`): This file acts as the interface between the raw implementation and the rest of the system.
-    -   It imports the `active-theme` from `core/setup.typ`.
-    -   It wraps the raw functions to inject the themed values automatically.
-    -   It exports these "themed wrappers" for the user to use.
+Different parts of the Noteworthy codebase follow different design philosophies. Understanding these is crucial for your contribution to be accepted.
 
-### 2. File Structure
-A typical module in `templates/module/` looks like this:
+### 1. The Core Infrastructure (`noteworthy/core/`)
+**Philosophy: Robustness & Isolation**
 
-```text
-templates/module/my-module/
-├── mod.typ      # The entry point
-├── draw.typ     # Drawing logic (if using CeTZ)
-├── core.typ     # Pure data manipulation logic
-└── ...
-```
+The core Python logic handles the heavy lifting of build automation, PDF processing, and file management.
+- **Dependency Isolation**: Core modules should have minimal external dependencies.
+- **Defensive Programming**: Assume user input is messy. Use robust error handling.
+- **Performance**: Builds should be fast. Optimize large file operations.
 
-### 3. Creating a New Module
+### 2. The TUI & CLI (`noteworthy/tui/`, `noteworthy_cli.py`)
+**Philosophy: UX First & Accessibility**
 
-1.  **Create the directory**: `templates/module/new-module-name`.
-2.  **Draft Implementation**: Write your raw functions in `impl.typ` (or `draw.typ`).
-    ```typst
-    // impl.typ
-    #let my-raw-function(content, theme: (:)) = {
-       let color = theme.at("primary", default: black)
-       block(fill: color, content)
-    }
-    ```
-3.  **Create `mod.typ`**:
-    ```typst
-    // mod.typ
-    #import "../../core/setup.typ": active-theme
-    #import "impl.typ": my-raw-function as my-raw-impl
+These are the primary touchpoints for the user.
+- **Intuitive Navigation**: Keybindings should follow standard patterns (Arrow keys + Vim bindings).
+- **Clear Feedback**: Every action must have immediate visual feedback.
+- **Aesthetics**: The TUI should look polished. Use color and spacing intentionally.
+- **Parity**: The CLI should mirror TUI capabilities where possible (e.g., using shared `noteworthy/utils.py`).
 
-    // Export the themed wrapper
-    #let my-function(content) = my-raw-impl(content, theme: active-theme)
-    ```
-4.  **Register**: Import your module in `templates/templater.typ` so it's available globally.
-    ```typst
-    // templates/templater.typ
-    #import "./module/new-module/mod.typ": *
-    ```
-5.  **Document**: Create a documentation file in `docs/modules/new-module.md`.
+### 3. Typst Templates (`templates/`)
+**Philosophy: Separation of Concerns**
 
-## 4. Verification & Safety
-To ensure you are using the safe, malware-free version of Noteworthy:
+We strictly separate **structure** from **style**.
+- **Implementation (`impl.typ`)**: Pure logic and default styling. Accepts a `theme` parameter but never hardcodes color values (e.g., use `theme.primary` not `red`). 
+- **Module Interface (`mod.typ`)**: The public-facing API. It injects the `active-theme` into the implementation functions.
+- **Setup (`examples.typ`)**: Clear, minimal examples of usage.
 
-1.  **Verify the Source:** Ensure you cloned this from `https://github.com/sihooleebd/noteworthy`.
-2.  **Check Metadata:** PDFs generated with this tool automatically include a metadata link to the original repository.
-3.  **Report Clones:** If you find this code hosted elsewhere without a direct link back to this repository, please report it to us immediately.
+**Example Flow:**
+1. Write logic in `impl.typ`: `#let alert(body, theme: (:)) = block(fill: theme.at("warning", default: yellow), body)`
+2. Export in `mod.typ`: `#import "impl.typ": alert as _alert` -> `#let alert(body) = _alert(body, theme: active-theme)`
+
+### 4. Themes (`templates/themes/`)
+**Philosophy: Coherence & Flexibility**
+
+Themes define the visual soul of a document.
+- **Standard Keys**: All themes must implement the core color keys (`primary`, `secondary`, `accent`, `background`, `text`).
+- **Scalability**: Designs should look good on both 100-page textbooks and 5-page notes.
+
+## Submitting Pull Requests
+
+1. **Fork & Branch**: Create a descriptive feature branch (e.g., `feature/inverted-grid`).
+2. **Test Locally**: 
+   - Run the TUI: `python3 noteworthy.py`
+   - Run the CLI: `python3 noteworthy_cli.py -c 0`
+   - Test builds: `python3 noteworthy.py -u -f` (if testing updater logic)
+3. **Draft PR**: Open a draft PR early if you need feedback.
+4. **Documentation**: Update `docs/` and `README.md` if you changed user-facing features.
+
+## Security
+
+Please see existing [SECURITY.md](SECURITY.md) for our disclosure policy.
+
+---
+**Happy Coding!** - *Sihoo & Hojun*

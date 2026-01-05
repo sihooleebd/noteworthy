@@ -130,5 +130,14 @@
                 "title": "Algorithms"
             }
         ]
+    },
+    {
+        "title": "Timeline Module",
+        "summary": "Chronological event timelines for notes.",
+        "pages": [
+            {
+                "title": "Timeline Examples"
+            }
+        ]
     }
 ]

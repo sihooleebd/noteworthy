@@ -7,77 +7,53 @@ import urllib.parse
 import shutil
 from pathlib import Path
 
+
+import shutil
+from pathlib import Path
+
+
 def bootstrap(branch='master'):
-    repo_api = f'https://api.github.com/repos/sihooleebd/noteworthy/git/trees/{branch}?recursive=1'
-    raw_base = f'https://raw.githubusercontent.com/sihooleebd/noteworthy/{branch}/'
-
-    print(f'Fetching file list from {branch}...')
-    try:
-        req = urllib.request.Request(repo_api, headers={'User-Agent': 'Noteworthy-Loader'})
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode())
-    except Exception as e:
-        print(f'Error fetching file list: {e}')
-        return False
-
-    # User config files that should NOT be downloaded (user creates these)
-    USER_CONFIG_FILES = {
-        'config/metadata.json',
-        'config/constants.json',
-        'config/hierarchy.json',
-        'config/snippets.typ',
-        'config/preface.typ',
-    }
-
-    files = []
-    for item in data.get('tree', []):
-        if item.get('type') != 'blob':
-            continue
-        p = item['path']
-        
-        # Download noteworthy/ Python package
-        if p.startswith('noteworthy/'):
-            files.append(p)
-            continue
-            
-        # Download templates/
-        if p.startswith('templates/'):
-            files.append(p)
-            continue
-            
-        # Download config/ (excluding user files)
-        if p.startswith('config/'):
-            if p not in USER_CONFIG_FILES:
-                files.append(p)
-            continue
-            
-        # Download noteworthy.py itself
-        if p == 'noteworthy.py':
-            files.append(p)
-
-    print(f'Downloading {len(files)} files...')
-    success_count = 0
-    for p in files:
-        target = Path(p)
-        url = raw_base + urllib.parse.quote(p)
-        try:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with urllib.request.urlopen(url) as r, open(target, 'wb') as f:
-                f.write(r.read())
-            print(f'Downloaded {p}')
-            success_count += 1
-        except Exception as e:
-            print(f'Failed {p}: {e}')
-            
-    return success_count > 0
+    # Legacy bootstrap for initial run if needed, but we prefer external updater now
+    # We keep a minimal version or just rely on the external one.
+    # Actually, the internal bootstrap is still used if we don't trigger external update.
+    # But wait, the generate_updater script HAS the bootstrap function inside it.
+    # noteworthy.py calls bootstrap only if NOT doing external update?
+    # No, noteworthy.py calls external update if flags are present.
+    # If flags are NOT present, it runs main().
+    # So we don't need bootstrap function here anymore if we only update via external script.
+    # BUT line 117 checks if 'noteworthy' folder exists and auto-installs.
+    # It sets do_install=True.
+    pass
 
 if __name__ == "__main__":
-    do_install = False
-    branch = 'master'
-    force = False
+    import argparse
     
-    # Handle --print-inputs: output typst CLI flags for content folder info
-    if '--print-inputs' in sys.argv:
+    try:
+        sys.path.append(str(Path(__file__).parent))
+        from noteworthy.utils import generate_updater
+    except ImportError:
+        print("Error: noteworthy package not found. Please ensure you have the full repository.")
+        sys.exit(1)
+
+    parser = argparse.ArgumentParser(description='Noteworthy TUI Launcher')
+    parser.add_argument('--print-inputs', action='store_true', help='Print Typst input flags')
+    
+    # Update flags
+    parser.add_argument('-u', '--update', action='store_true', help='Update noteworthy')
+    parser.add_argument('-n', '--nightly', action='store_true', help='Use nightly branch')
+    parser.add_argument('-f', '--force', action='store_true', help='Force update (clean install)')
+
+    # Legacy (Backward Compatibility)
+    parser.add_argument('--update-nightly', action='store_true', help='Legacy: Update to nightly')
+    parser.add_argument('--load', action='store_true', help='Legacy: Alias for --update')
+    parser.add_argument('--load-nightly', action='store_true', help='Legacy: Alias for --update-nightly')
+    parser.add_argument('--force-update', action='store_true', help='Legacy: Alias for --update --force')
+    parser.add_argument('--force-update-nightly', action='store_true', help='Legacy: Alias for --update-nightly --force')
+    
+    args = parser.parse_args()
+
+    # Handle --print-inputs
+    if args.print_inputs:
         content_dir = Path('content')
         ch_folders = []
         pg_folders = {}
@@ -90,93 +66,55 @@ if __name__ == "__main__":
                     ch_folders.append(ch_dir.name)
                     pg_folders[str(idx)] = pg_files
         
-        # Output as typst --input flags (requires eval for shell parsing)
         print(f"--input chapter-folders='{json.dumps(ch_folders)}' --input page-folders='{json.dumps(pg_folders)}'")
         sys.exit(0)
     
-    # Parse flags
-    if '--force-update-nightly' in sys.argv:
-        do_install = True
-        branch = 'nightly'
-        force = True
-        sys.argv.remove('--force-update-nightly')
-    elif '--force-update' in sys.argv:
-        do_install = True
-        branch = 'master'
-        force = True
-        sys.argv.remove('--force-update')
-    elif '--load-nightly' in sys.argv:
-        do_install = True
-        branch = 'nightly'
-        sys.argv.remove('--load-nightly')
-    elif '--load' in sys.argv:
-        do_install = True
-        sys.argv.remove('--load')
+    # Check for update request
+    do_update = False
+    branch = 'master'
+    force = args.force
+    
+    # Triggers
+    if args.update or args.load or args.force_update:
+        do_update = True
         
-    # Auto-install if missing package
+    if args.update_nightly or args.load_nightly or args.force_update_nightly:
+        do_update = True
+        branch = 'nightly'
+        
+    # Modifiers
+    if args.nightly:
+        branch = 'nightly'
+        
+    if args.force_update or args.force_update_nightly:
+        force = True
+        
+    # Auto-install if missing
     if not Path('noteworthy').exists():
-        do_install = True
+        do_update = True
         print("Noteworthy folder not found. Initiating download...")
         
-    if do_install:
-        if force:
-            print("Force updating: Removing existing directories...")
-            
-            # Backup user config files
-            backups = []
-            files_to_save = ['config/metadata.json', 'config/constants.json', 'config/hierarchy.json', 'config/preface.typ']
-            for fpath in files_to_save:
-                src = Path(fpath)
-                if src.exists():
-                    dst = Path(f'{src.name}.bak')
-                    try:
-                        shutil.copy2(src, dst)
-                        backups.append((dst, src))
-                        print(f"Backed up {src.name}")
-                    except Exception as e:
-                        print(f"Warning: Failed to backup {src.name}: {e}")
-
-            if Path('noteworthy').exists():
-                shutil.rmtree('noteworthy')
-            if Path('templates').exists():
-                shutil.rmtree('templates')
-                
-        print(f"Updating/Installing Noteworthy from branch: {branch}")
+    if do_update:
+        print(f"Initiating update (branch: {branch}, force: {force})...")
+        script_content = generate_updater(branch, force, 'noteworthy.py')
+        updater_path = Path('_update_runner.py')
+        updater_path.write_text(script_content)
         
-        success = bootstrap(branch)
-        
-        # Restore backups regardless of success (to save user data)
-        if force and backups:
-            print("Restoring configuration files...")
-            for dst, src in backups:
-                try:
-                    if dst.exists():
-                        src.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.move(str(dst), str(src))
-                        print(f"Restored {src.name}")
-                except Exception as e:
-                    print(f"Error restoring {src.name} (backup at {dst}): {e}")
+        os.chmod(updater_path, 0o755)
+        os.execv(sys.executable, [sys.executable, str(updater_path)])
+        sys.exit(0)
 
-        if not success:
-            print("Update failed or incomplete.")
-            if not Path('noteworthy').exists():
-                sys.exit(1)
-        else:
-            print("Update complete.")
-
-    # Ensure preface.typ exists to prevent build errors, but keep it empty
+    # Ensure preface.typ exists to prevent build errors
     preface_path = Path('config/preface.typ')
     if Path('config').exists() and not preface_path.exists():
         try:
             preface_path.write_text('')
-            print("Created empty preface.typ")
         except Exception as e:
             print(f"Warning: Could not create default preface: {e}")
 
     try:
         from noteworthy.__main__ import main
     except ImportError:
-        # Fallback for local development or if just installed
         sys.path.append(str(Path(__file__).parent))
         from noteworthy.__main__ import main
 

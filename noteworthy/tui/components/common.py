@@ -1,11 +1,14 @@
 import curses
 import subprocess
-from ...config import SAD_FACE, HAPPY_FACE, HMM_FACE, OUTPUT_FILE
+from ...config import OUTPUT_FILE
+from ...assets import SAD_FACE, HAPPY_FACE, HMM_FACE
 from ...utils import register_key, handle_key_event
-from ..base import TUI
+from ..base import TUI, LEFT_PAD, TOP_PAD
 from ..keybinds import KeyBind, ConfirmBind, NavigationBind
 
+
 class LineEditor:
+    """Single-line text input with left-aligned design."""
 
     def __init__(self, scr, title='Edit', initial_value=''):
         self.scr = scr
@@ -48,51 +51,46 @@ class LineEditor:
         return True
 
     def run(self):
-        h_raw, w_raw = self.scr.getmaxyx()
-        box_h = 7
-        box_w = max(50, len(self.title) + 10, len(self.value) + 10)
-        box_w = min(box_w, w_raw - 2)
-        
-        bh, bw = (14, min(40, w_raw - 4))
-        by, bx = TUI.center(self.scr, bh, bw)
-        
-        box_y = by
-        box_x = bx
-        
+        h, w = self.scr.getmaxyx()
         curses.curs_set(1)
-        
         scroll_off = 0
+        max_input_w = w - LEFT_PAD - 4
         
         while True:
             if not TUI.check_terminal_size(self.scr):
+                curses.curs_set(0)
                 return None
-                
-            TUI.draw_box(self.scr, box_y, box_x, box_h, box_w, self.title)
-            TUI.safe_addstr(self.scr, box_y + 4, box_x + 2, 'Enter: Confirm  Esc: Cancel', curses.color_pair(4) | curses.A_DIM)
-            input_y = box_y + 2
-            input_x = box_x + 2
-            max_len = box_w - 4
+            
+            self.scr.clear()
+            
+            # Title
+            TUI.safe_addstr(self.scr, TOP_PAD, LEFT_PAD, self.title, curses.color_pair(1) | curses.A_BOLD)
+            
+            # Input field
+            input_y = TOP_PAD + 2
             
             if self.cursor_pos < scroll_off:
                 scroll_off = self.cursor_pos
-            if self.cursor_pos >= scroll_off + max_len:
-                scroll_off = self.cursor_pos - max_len + 1
+            if self.cursor_pos >= scroll_off + max_input_w:
+                scroll_off = self.cursor_pos - max_input_w + 1
             
-            disp_val = self.value[scroll_off:scroll_off + max_len]
+            disp_val = self.value[scroll_off:scroll_off + max_input_w]
+            TUI.safe_addstr(self.scr, input_y, LEFT_PAD, disp_val, curses.color_pair(4) | curses.A_BOLD)
             
-            TUI.safe_addstr(self.scr, input_y, input_x, ' ' * max_len, curses.color_pair(4))
-            TUI.safe_addstr(self.scr, input_y, input_x, disp_val, curses.color_pair(1) | curses.A_BOLD)
+            # Underline effect
+            TUI.safe_addstr(self.scr, input_y + 1, LEFT_PAD, '─' * min(len(self.value) + 1, max_input_w), curses.color_pair(4) | curses.A_DIM)
             
-            real_cur_x = input_x + 1 + (self.cursor_pos - scroll_off)
+            # Footer
+            TUI.safe_addstr(self.scr, TOP_PAD + 5, LEFT_PAD, 'Enter Confirm  Esc Cancel', curses.color_pair(4) | curses.A_DIM)
             
-            real_cur_x = min(real_cur_x, input_x + 1 + max_len) 
-            
-            real_y = input_y + 1
+            # Position cursor
+            cur_x = LEFT_PAD + (self.cursor_pos - scroll_off)
             try:
-                self.scr.move(real_y, real_cur_x)
+                self.scr.move(input_y, cur_x)
             except:
                 pass
             
+            self.scr.refresh()
             k = self.scr.getch()
             handled, res = handle_key_event(k, self.keymap, self)
             if handled:
@@ -105,35 +103,28 @@ class LineEditor:
             elif 32 <= k <= 126:
                 self.handle_char(chr(k))
 
+
 def copy_to_clipboard(text):
-    try:
-        subprocess.run(['pbcopy'], input=text.encode('utf-8'), check=True, stderr=subprocess.DEVNULL)
-        return True
-    except:
-        pass
-    try:
-        subprocess.run(['clip'], input=text.encode('utf-16le'), check=True, stderr=subprocess.DEVNULL)
-        return True
-    except:
-        pass
-    try:
-        subprocess.run(['wl-copy'], input=text.encode('utf-8'), check=True, stderr=subprocess.DEVNULL)
-        return True
-    except:
-        pass
-    try:
-        subprocess.run(['xclip', '-selection', 'clipboard'], input=text.encode('utf-8'), check=True, stderr=subprocess.DEVNULL)
-        return True
-    except:
-        pass
-    try:
-        subprocess.run(['xsel', '-b', '-i'], input=text.encode('utf-8'), check=True, stderr=subprocess.DEVNULL)
-        return True
-    except:
-        pass
+    """Copy text to system clipboard."""
+    for cmd in [
+        ['pbcopy'],
+        ['clip'],
+        ['wl-copy'],
+        ['xclip', '-selection', 'clipboard'],
+        ['xsel', '-b', '-i'],
+    ]:
+        try:
+            encoding = 'utf-16le' if 'clip' in cmd else 'utf-8'
+            subprocess.run(cmd, input=text.encode(encoding), check=True, stderr=subprocess.DEVNULL)
+            return True
+        except:
+            pass
     return False
 
+
 class LogScreen:
+    """Log viewer with left-aligned design."""
+    
     def __init__(self, scr, log, title_func, draw_func):
         self.scr = scr
         self.log = log
@@ -141,25 +132,34 @@ class LogScreen:
         self.draw_func = draw_func
         self.view_log = False
         self.copied = False
+        self.scroll = 0
         
         self.keymap = {}
         register_key(self.keymap, KeyBind(ord('v'), self.action_toggle_log, "View Log"))
         register_key(self.keymap, KeyBind(ord('c'), self.action_copy, "Copy Log"))
         register_key(self.keymap, KeyBind(27, self.action_esc, "Back/Exit"))
-        register_key(self.keymap, KeyBind(None, self.action_any, "Exit"))
 
     def handle_key(self, k):
         if k == ord('v') or k == ord('c'):
-             return handle_key_event(k, self.keymap, self)
+            return handle_key_event(k, self.keymap, self)
         
         if not self.view_log:
-             return True, 'EXIT'
-             
+            return True, 'EXIT'
+        
+        # Log view navigation
+        if k in (curses.KEY_UP, ord('k')):
+            self.scroll = max(0, self.scroll - 1)
+            return True, None
+        if k in (curses.KEY_DOWN, ord('j')):
+            self.scroll += 1
+            return True, None
+            
         return handle_key_event(k, self.keymap, self)
 
     def action_toggle_log(self, ctx):
         self.view_log = not self.view_log
         self.copied = False
+        self.scroll = 0
         
     def action_copy(self, ctx):
         if self.view_log:
@@ -170,9 +170,6 @@ class LogScreen:
             self.action_toggle_log(ctx)
         else:
             return 'EXIT'
-            
-    def action_any(self, ctx):
-        if not self.view_log: return 'EXIT'
         
     def run(self):
         self.scr.nodelay(False)
@@ -184,82 +181,85 @@ class LogScreen:
                 return
                 
             self.scr.clear()
-            h, w = TUI.get_dims(self.scr)
+            h, w = self.scr.getmaxyx()
             
             if self.view_log:
-                 header = "LOG (press 'v' or 'Esc' to go back, 'c' to copy)"
-                 if self.copied: header = 'LOG (copied to clipboard!)'
-                 TUI.safe_addstr(self.scr, 0, 2, header, curses.color_pair(6) | curses.A_BOLD)
-                 for i, line in enumerate(self.log.split('\n')[:h-3]):
-                     TUI.safe_addstr(self.scr, i + 2, 2, line, curses.color_pair(4))
+                header = "LOG" if not self.copied else "LOG (copied!)"
+                TUI.safe_addstr(self.scr, TOP_PAD, LEFT_PAD, header, curses.color_pair(6) | curses.A_BOLD)
+                
+                lines = self.log.split('\n')
+                visible = h - TOP_PAD - 4
+                for i, line in enumerate(lines[self.scroll:self.scroll + visible]):
+                    TUI.safe_addstr(self.scr, TOP_PAD + 2 + i, LEFT_PAD, line[:w - LEFT_PAD - 2], curses.color_pair(4))
+                
+                TUI.safe_addstr(self.scr, h - 2, LEFT_PAD, 'v Back  c Copy  ↑↓ Scroll', curses.color_pair(4) | curses.A_DIM)
             else:
-                 self.draw_func(self.scr, h, w)
+                self.draw_func(self.scr, h, w)
             
             self.scr.refresh()
             k = self.scr.getch()
-            if k == -1: continue
+            if k == -1:
+                continue
             handled, res = self.handle_key(k)
-            if handled and res == 'EXIT': break
+            if handled and res == 'EXIT':
+                break
+
 
 def show_error_screen(scr, error):
+    """Display error with left-aligned design."""
     import traceback
     log = traceback.format_exc()
-    if log.strip() == 'NoneType: None': log = str(error)
+    if log.strip() == 'NoneType: None':
+        log = str(error)
     
     def draw(s, h, w):
-        face = SAD_FACE
-        total_h = len(face) + 2 + 1 + 2 + 1
+        y = TOP_PAD
         
-        cy, cx = TUI.center(s, content_h=total_h if total_h < h else h)
-        y = cy + 1
+        # Face
+        for i, line in enumerate(SAD_FACE):
+            TUI.safe_addstr(s, y + i, LEFT_PAD, line, curses.color_pair(6) | curses.A_BOLD)
         
-        for i, line in enumerate(face):
-             _, lx = TUI.center(s, content_w=len(line))
-             TUI.safe_addstr(s, y + i, lx, line, curses.color_pair(6) | curses.A_BOLD)
-             
-        my = y + len(face) + 2
+        y += len(SAD_FACE) + 1
         
-        is_build_error = "Build failed" in str(error) or (isinstance(error, Exception) and getattr(error, 'is_build_error', False))
-        title = 'BUILD ERROR' if is_build_error else 'FATAL ERROR'
-        _, tx = TUI.center(s, content_w=len(title))
-        TUI.safe_addstr(s, my, tx, title, curses.color_pair(6) | curses.A_BOLD)
+        # Title
+        is_build_error = "Build failed" in str(error)
+        title = 'BUILD ERROR' if is_build_error else 'ERROR'
+        TUI.safe_addstr(s, y, LEFT_PAD, title, curses.color_pair(6) | curses.A_BOLD)
         
-        err = str(error)[:max(10, w - 10)]
-        _, ex = TUI.center(s, content_w=len(err))
-        TUI.safe_addstr(s, my + 2, ex, err, curses.color_pair(4))
+        # Message
+        TUI.safe_addstr(s, y + 2, LEFT_PAD, str(error)[:w - LEFT_PAD - 4], curses.color_pair(4))
         
-        hint = "Press 'v' to view log  |  Esc: Exit"
-        _, hx = TUI.center(s, content_w=len(hint))
-        TUI.safe_addstr(s, my + 4, hx, hint, curses.color_pair(4) | curses.A_DIM)
+        # Footer
+        TUI.safe_addstr(s, h - 2, LEFT_PAD, "v View log  Esc Exit", curses.color_pair(4) | curses.A_DIM)
 
     LogScreen(scr, log, None, draw).run()
 
+
 def show_success_screen(scr, page_count, has_warnings=False, typst_logs=None):
+    """Display success with left-aligned design."""
     log = '\n'.join(typst_logs) if typst_logs else ""
     
     def draw(s, h, w):
+        y = TOP_PAD
         face = HMM_FACE if has_warnings else HAPPY_FACE
         color = curses.color_pair(3) if has_warnings else curses.color_pair(2)
         
-        total_h = len(face) + 2 + 1 + 2 + 1
-        cy, cx = TUI.center(s, content_h=total_h)
-        y = cy + 1
-        
+        # Face
         for i, line in enumerate(face):
-            _, lx = TUI.center(s, content_w=len(line))
-            TUI.safe_addstr(s, y + i, lx, line, color | curses.A_BOLD)
-            
-        my = y + len(face) + 2
-        title = 'BUILD SUCCEEDED (with warnings)' if has_warnings else 'BUILD SUCCEEDED!'
-        _, tx = TUI.center(s, content_w=len(title))
-        TUI.safe_addstr(s, my, tx, title, color | curses.A_BOLD)
+            TUI.safe_addstr(s, y + i, LEFT_PAD, line, color | curses.A_BOLD)
         
-        msg = f'Created: {OUTPUT_FILE} ({page_count} pages)'
-        _, mx = TUI.center(s, content_w=len(msg))
-        TUI.safe_addstr(s, my + 2, mx, msg, curses.color_pair(4))
+        y += len(face) + 1
         
-        hint = "Press 'v' to view log  |  Esc: Exit" if has_warnings else 'Press any key to exit...'
-        _, hx = TUI.center(s, content_w=len(hint))
-        TUI.safe_addstr(s, my + 4, hx, hint, curses.color_pair(4) | curses.A_DIM)
+        # Title
+        title = 'BUILD SUCCEEDED' + (' (with warnings)' if has_warnings else '')
+        TUI.safe_addstr(s, y, LEFT_PAD, title, color | curses.A_BOLD)
+        
+        # Details
+        TUI.safe_addstr(s, y + 2, LEFT_PAD, f'{OUTPUT_FILE.name}', curses.color_pair(4))
+        TUI.safe_addstr(s, y + 3, LEFT_PAD, f'{page_count} pages', curses.color_pair(4) | curses.A_DIM)
+        
+        # Footer
+        hint = "v View log  Esc Exit" if has_warnings else "Press any key"
+        TUI.safe_addstr(s, h - 2, LEFT_PAD, hint, curses.color_pair(4) | curses.A_DIM)
 
     LogScreen(scr, log, None, draw).run()

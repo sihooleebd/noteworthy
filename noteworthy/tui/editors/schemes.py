@@ -1,10 +1,11 @@
 import curses
 import json
-from ..base import ListEditor, TUI
+from ..base import ListEditor, TUI, LEFT_PAD, TOP_PAD
 from ..components.common import LineEditor
 from ...config import SCHEMES_DIR
 from ...utils import load_config_safe, save_config, register_key
 from ..keybinds import ConfirmBind, KeyBind
+
 
 def extract_themes():
     """Extract theme names from the schemes folder."""
@@ -16,8 +17,9 @@ def extract_themes():
     except:
         return []
 
+
 def load_all_schemes():
-    """Load all schemes from individual files in config/schemes/data/."""
+    """Load all schemes from individual files."""
     schemes = {}
     data_dir = SCHEMES_DIR / 'data'
     if data_dir.exists():
@@ -28,6 +30,7 @@ def load_all_schemes():
                 pass
     return schemes
 
+
 def save_scheme(name, scheme_data):
     """Save a single scheme to its individual file."""
     data_dir = SCHEMES_DIR / 'data'
@@ -35,13 +38,16 @@ def save_scheme(name, scheme_data):
     target = data_dir / f'{name}.json'
     target.write_text(json.dumps(scheme_data, indent=4))
 
+
 def delete_scheme_file(name):
     """Delete a scheme file."""
     target = SCHEMES_DIR / 'data' / f'{name}.json'
     if target.exists():
         target.unlink()
 
+
 def hex_to_curses_color(hex_color):
+    """Convert hex color to curses color pair index."""
     if not hex_color or not hex_color.startswith('#'):
         return 4
     try:
@@ -82,21 +88,21 @@ def hex_to_curses_color(hex_color):
     except:
         return 4
 
+
 class ThemeDetailEditor(ListEditor):
+    """Theme detail editor with left-aligned design."""
 
     def __init__(self, scr, schemes, theme_name):
-        super().__init__(scr, f'Editing "{theme_name}"')
+        super().__init__(scr, f'Theme: {theme_name}')
         self.schemes = schemes
         self.theme_name = theme_name
         self.theme = self.schemes[self.theme_name]
         self._build_items()
-        self.box_title = 'Schemes'
-        self.box_width = 80
+        self.section_title = 'Colors'
         
         register_key(self.keymap, ConfirmBind(self.action_select))
 
     def save(self):
-        # Save individual theme file
         save_scheme(self.theme_name, self.theme)
         return True
 
@@ -156,65 +162,37 @@ class ThemeDetailEditor(ListEditor):
             parts = key.split('.')
             return f'{parts[1]}.{parts[2]}'
         elif key.startswith('plot.'):
-            parts = key.split('.')
-            return f'plot.{parts[1]}'
+            return key
         return key
-
-    def refresh(self):
-        h, w = self.scr.getmaxyx()
-        self.scr.clear()
-        list_h = min(len(self.items) + 3, h - 8)
-        total_h = 3 + list_h + 2
-        start_y = max(1, (h - total_h) // 2)
-        title_str = f"{self.title}{(' *' if self.modified else '')}"
-        TUI.safe_addstr(self.scr, start_y, (w - len(title_str)) // 2, title_str, curses.color_pair(1) | curses.A_BOLD)
-        bw = min(self.box_width, w - 4)
-        bx = (w - bw) // 2
-        left_w = 22
-        TUI.draw_box(self.scr, start_y + 2, bx, list_h, bw, self.box_title)
-        TUI.safe_addstr(self.scr, start_y + 3, bx + 4, 'Property', curses.color_pair(1) | curses.A_BOLD)
-        TUI.safe_addstr(self.scr, start_y + 3, bx + left_w + 2, 'Color', curses.color_pair(1) | curses.A_BOLD)
-        for i in range(1, list_h - 1):
-            TUI.safe_addstr(self.scr, start_y + 2 + i, bx + left_w, '│', curses.color_pair(4) | curses.A_DIM)
-        vis = list_h - 3
-        if self.cursor < self.scroll:
-            self.scroll = self.cursor
-        elif self.cursor >= self.scroll + vis:
-            self.scroll = self.cursor - vis + 1
-        for i in range(vis):
-            idx = self.scroll + i
-            if idx >= len(self.items):
-                break
-            y = start_y + 4 + i
-            self._draw_item(y, bx, self.items[idx], bw, idx == self.cursor)
-        self._draw_footer(h, w)
-        self.scr.refresh()
 
     def _draw_item(self, y, x, item, width, selected):
         key, _ = item
-        left_w = 22
+        
         if selected:
-            TUI.safe_addstr(self.scr, y, x + 2, '>', curses.color_pair(3) | curses.A_BOLD)
+            TUI.safe_addstr(self.scr, y, x, '▶', curses.color_pair(3) | curses.A_BOLD)
+        
         label = self._get_label(key)
-        TUI.safe_addstr(self.scr, y, x + 4, label[:left_w - 6], curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0))
         hex_val = self._get_value(key)
         color = hex_to_curses_color(hex_val)
-        TUI.safe_addstr(self.scr, y, x + left_w + 2, '██', curses.color_pair(color))
-        TUI.safe_addstr(self.scr, y, x + left_w + 5, hex_val[:width - left_w - 8], curses.color_pair(4) | (curses.A_BOLD if selected else 0))
+        
+        style = curses.color_pair(4) | (curses.A_BOLD if selected else 0)
+        TUI.safe_addstr(self.scr, y, x + 2, label[:20], style)
+        TUI.safe_addstr(self.scr, y, x + 24, '██', curses.color_pair(color))
+        TUI.safe_addstr(self.scr, y, x + 27, hex_val[:width - 30], curses.color_pair(4) | curses.A_DIM)
 
     def _draw_footer(self, h, w):
-        footer = 'Enter: Select  Esc: Save & Exit'
-        TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
+        TUI.safe_addstr(self.scr, h - 2, LEFT_PAD, 'Enter Edit  Esc Save', curses.color_pair(4) | curses.A_DIM)
+
 
 class SchemeEditor(ListEditor):
+    """Scheme editor with left-aligned design."""
 
     def __init__(self, scr):
         super().__init__(scr, 'Color Themes')
         self.schemes = load_all_schemes()
         self.config = load_config_safe()
         self._build_items()
-        self.box_title = 'Available Schemes'
-        self.box_width = 70
+        self.section_title = 'Available Themes'
         
         register_key(self.keymap, ConfirmBind(self.action_select))
         register_key(self.keymap, KeyBind(ord('n'), self._create_new))
@@ -224,7 +202,7 @@ class SchemeEditor(ListEditor):
     def action_select(self, ctx):
         if self.items:
             name = self.items[self.cursor]
-            if name == '+ Add new scheme...':
+            if name == '+ Add theme...':
                 self._create_new()
             else:
                 editor = ThemeDetailEditor(self.scr, self.schemes, name)
@@ -235,7 +213,7 @@ class SchemeEditor(ListEditor):
     def action_set_active(self, ctx):
         if self.items:
             name = self.items[self.cursor]
-            if name != '+ Add new scheme...':
+            if name != '+ Add theme...':
                 self.config['display-mode'] = name
                 save_config(self.config)
 
@@ -245,37 +223,28 @@ class SchemeEditor(ListEditor):
         self.cursor = min(self.cursor, max(0, len(self.items) - 1))
 
     def _build_items(self):
-        self.items = sorted(list(self.schemes.keys())) + ['+ Add new scheme...']
+        self.items = sorted(list(self.schemes.keys())) + ['+ Add theme...']
 
     def save(self):
-        # Save all schemes to individual files
         for name, scheme_data in self.schemes.items():
             save_scheme(name, scheme_data)
         self.modified = False
         return True
 
     def _create_new(self):
-        name = LineEditor(self.scr, title='New Scheme Name', initial_value='new-scheme').run()
+        name = LineEditor(self.scr, title='New Theme Name', initial_value='new-theme').run()
         if name and name not in self.schemes:
             blank_scheme = {
                 "page-fill": "#ffffff",
                 "text-main": "#000000",
                 "text-heading": "#000000",
-                "text-muted": "#000000",
-                "text-accent": "#000000",
+                "text-muted": "#666666",
+                "text-accent": "#0066cc",
                 "blocks": {},
-                "plot": {
-                    "stroke": "#000000",
-                    "highlight": "#000000",
-                    "grid-opacity": 0.15
-                }
+                "plot": {"stroke": "#000000", "highlight": "#0066cc", "grid-opacity": 0.15}
             }
-            for b in ['definition', 'equation', 'example', 'solution', 'proof', 'note', 'notation', 'analysis', 'theorem']:
-                blank_scheme['blocks'][b] = {
-                    "fill": "#ffffff",
-                    "stroke": "#000000",
-                    "title": b.title()
-                }
+            for b in ['definition', 'theorem', 'example', 'proof', 'note']:
+                blank_scheme['blocks'][b] = {"fill": "#f5f5f5", "stroke": "#cccccc", "title": b.title()}
             self.schemes[name] = blank_scheme
             save_scheme(name, blank_scheme)
             self._build_items()
@@ -286,20 +255,16 @@ class SchemeEditor(ListEditor):
                 pass
 
     def _delete_current(self):
-        if not self.items:
+        if not self.items or len(self.items) <= 2:
             return
         name = self.items[self.cursor]
-        if name == '+ Add new scheme...':
-            return
-        if len(self.items) <= 2:
+        if name == '+ Add theme...':
             return
         
-        active_theme = self.config.get('display-mode')
-        if active_theme == name:
-            real_themes = [t for t in self.items if t != '+ Add new scheme...' and t != name]
+        if self.config.get('display-mode') == name:
+            real_themes = [t for t in self.items if t not in ('+ Add theme...', name)]
             if real_themes:
-                fallback = real_themes[0]
-                self.config['display-mode'] = fallback
+                self.config['display-mode'] = real_themes[0]
                 save_config(self.config)
         
         del self.schemes[name]
@@ -309,49 +274,27 @@ class SchemeEditor(ListEditor):
         self.cursor = min(self.cursor, len(self.items) - 1)
 
     def _delete_current_prompt(self, ctx):
-        if TUI.prompt_confirm(self.scr, 'Delete scheme? (y/n): '):
+        if TUI.prompt_confirm(self.scr, 'Delete theme?'):
             self._delete_current()
-
-    def refresh(self):
-        h, w = self.scr.getmaxyx()
-        self.scr.clear()
-        list_h = min(len(self.items) + 2, h - 8)
-        total_h = 2 + list_h + 2
-        start_y = max(1, (h - total_h) // 2)
-        title_str = f"{self.title}{(' *' if self.modified else '')}"
-        TUI.safe_addstr(self.scr, start_y, (w - len(title_str)) // 2, title_str, curses.color_pair(1) | curses.A_BOLD)
-        bw = min(self.box_width, w - 4)
-        bx = (w - bw) // 2
-        TUI.draw_box(self.scr, start_y + 2, bx, list_h, bw, self.box_title)
-        vis = list_h - 2
-        if self.cursor < self.scroll:
-            self.scroll = self.cursor
-        elif self.cursor >= self.scroll + vis:
-            self.scroll = self.cursor - vis + 1
-        for i in range(vis):
-            idx = self.scroll + i
-            if idx >= len(self.items):
-                break
-            y = start_y + 3 + i
-            self._draw_item(y, bx, self.items[idx], bw, idx == self.cursor)
-        self._draw_footer(h, w)
-        self.scr.refresh()
 
     def _draw_item(self, y, x, item, width, selected):
         name = item
-        if name == '+ Add new scheme...':
-            TUI.safe_addstr(self.scr, y, x + 4, name, curses.color_pair(3 if selected else 4) | (curses.A_BOLD if selected else curses.A_DIM))
-            if selected:
-                TUI.safe_addstr(self.scr, y, x + 2, '>', curses.color_pair(3) | curses.A_BOLD)
-            return
-        is_active = self.config.get('display-mode') == name
+        
         if selected:
-            TUI.safe_addstr(self.scr, y, x + 2, '>', curses.color_pair(3) | curses.A_BOLD)
-        attr = curses.color_pair(5 if selected else 4) | (curses.A_BOLD if selected else 0)
-        TUI.safe_addstr(self.scr, y, x + 4, name[:width - 25], attr)
+            TUI.safe_addstr(self.scr, y, x, '▶', curses.color_pair(3) | curses.A_BOLD)
+        
+        if name == '+ Add theme...':
+            style = curses.color_pair(3 if selected else 4) | (curses.A_BOLD if selected else curses.A_DIM)
+            TUI.safe_addstr(self.scr, y, x + 2, name, style)
+            return
+        
+        is_active = self.config.get('display-mode') == name
+        style = curses.color_pair(4) | (curses.A_BOLD if selected else 0)
+        TUI.safe_addstr(self.scr, y, x + 2, name[:width - 15], style)
+        
         if is_active:
-            TUI.safe_addstr(self.scr, y, x + width - 12, '(ACTIVE)', curses.color_pair(2) | curses.A_BOLD)
+            TUI.safe_addstr(self.scr, y, x + width - 10, '(active)', curses.color_pair(2) | curses.A_BOLD)
 
     def _draw_footer(self, h, w):
-        footer = 'Enter: Edit  Space: Set Active  n: New  d: Delete  Esc: Save & Exit  x: Export  l: Import'
-        TUI.safe_addstr(self.scr, h - 3, (w - len(footer)) // 2, footer, curses.color_pair(4) | curses.A_DIM)
+        TUI.safe_addstr(self.scr, h - 2, LEFT_PAD, 'Enter Edit  Space Active  n New  d Delete  Esc Save', 
+                       curses.color_pair(4) | curses.A_DIM)

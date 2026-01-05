@@ -14,8 +14,3 @@ SNIPPETS_FILE = BASE_DIR / 'config/snippets.typ'
 SCHEMES_DIR = BASE_DIR / 'config/schemes'
 MODULES_CONFIG_FILE = BASE_DIR / 'config/modules.json'
 SETUP_FILE = BASE_DIR / 'templates/core/setup.typ'
-
-LOGO = ['         ,--. ', "       ,--.'| ", '   ,--,:  : | ', ",`--.'`|  ' : ", '|   :  :  | | ', ':   |   \\ | : ', "|   : '  '; | ", "'   ' ;.    ; ", '|   | | \\   | ', "'   : |  ; .' ", "|   | '`--'   ", "'   : |       ", ";   |.'       ", "'---'         "]
-HAPPY_FACE = ['    __  ', ' _  \\ \\ ', '(_)  | |', '     | |', ' _   | |', '(_)  | |', '    /_/ ']
-HMM_FACE = ['     _ ', ' _  | |', '(_) | |', '    | |', ' _  | |', '(_) | |', '    |_|']
-SAD_FACE = ['       __', '  _   / /', ' (_) | | ', '     | | ', '  _  | | ', ' (_) | | ', '      \\_\\']

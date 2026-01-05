@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 
 from noteworthy.config import BASE_DIR, BUILD_DIR, OUTPUT_FILE, METADATA_FILE, HIERARCHY_FILE, PREFACE_FILE
-from noteworthy.utils import load_settings, save_settings, load_config_safe, check_dependencies
+from noteworthy.utils import load_settings, save_settings, load_config_safe, check_dependencies, scan_content
 from noteworthy.core.build import (
     BuildManager, compile_target, merge_pdfs, create_pdf_metadata, 
     apply_pdf_metadata, zip_build_directory, get_pdf_page_count
@@ -27,22 +27,6 @@ class CliTarget:
         self.chapters = chapters or []  # List of chapter indices
         self.pages = pages or []        # List of (ch_idx, pg_idx) tuples
 
-def scan_content():
-    """Scan content/ folder to get sorted folder/file names"""
-    content_dir = Path('content')
-    ch_folders = []
-    pg_folders = {}
-    
-    if content_dir.exists():
-        ch_dirs = sorted([d for d in content_dir.iterdir() if d.is_dir() and d.name.isdigit()], key=lambda d: int(d.name))
-        idx = 0
-        for ch_dir in ch_dirs:
-            pg_files = sorted([f.stem for f in ch_dir.glob('*.typ') if f.stem.isdigit()], key=lambda s: int(s))
-            if pg_files:
-                ch_folders.append(ch_dir.name)
-                pg_folders[str(idx)] = pg_files
-                idx += 1
-    return ch_folders, pg_folders
 
 def run_build(args):
     # Load settings and config
@@ -212,7 +196,50 @@ def main():
     parser.add_argument('-t', '--threads', type=int, help='Number of threads to use')
     parser.add_argument('--flags', nargs='+', help='Additional Typst CLI flags')
     
+    # Update flags
+    parser.add_argument('-u', '--update', action='store_true', help='Update noteworthy')
+    parser.add_argument('-n', '--nightly', action='store_true', help='Use nightly branch')
+    parser.add_argument('-f', '--force', action='store_true', help='Force update (clean install)')
+    
+    # Legacy
+    parser.add_argument('--update-nightly', action='store_true', help='Legacy: Update to nightly')
+
     args = parser.parse_args()
+    
+    # Check for update request
+    do_update = False
+    branch = 'master'
+    
+    if args.update:
+        do_update = True
+        
+    if args.update_nightly:
+        do_update = True
+        branch = 'nightly'
+        
+    if args.nightly:
+        branch = 'nightly'
+    
+    if do_update:
+        try:
+            from noteworthy.utils import generate_updater
+            
+            print(f"Initiating update (branch: {branch}, force: {args.force})...")
+            
+            script_content = generate_updater(branch, args.force, 'noteworthy_cli.py')
+            updater_path = Path('_update_runner.py')
+            updater_path.write_text(script_content)
+            
+            os.chmod(updater_path, 0o755)
+            # Use sys.executable to ensure we run with the same python interpreter
+            os.execv(sys.executable, [sys.executable, str(updater_path)])
+            
+        except ImportError:
+            print("Error: 'noteworthy' package not found. Cannot generate updater.")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Update initiation failed: {e}")
+            sys.exit(1)
     
     run_build(args)
 

@@ -56,8 +56,7 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
 ### Framework Components
 
 - **Theme System**: 13+ pre-built color schemes with easy customization
-- **Content Block Library**: Pre-styled components for definitions, theorems, examples, proofs, and solutions
-- **Plotting Engine**: Advanced 2D/3D plotting, vector diagrams, and geometric constructions
+- **Standard Library**: Extensive collection of modules (Math, Plotting, DSA) provided by [noteworthy-modules](https://github.com/sihooleebd/noteworthy-modules)
 - **Document Structure**: Automated table of contents, chapter covers, and page headers
 - **Configuration Layer**: JSON-based settings in `config/`
 - **Build System**: Incremental compilation with automatic PDF merging
@@ -114,17 +113,18 @@ python3 noteworthy.py
 
 ### Advanced Usage
 
-You can force an update or switch branches using CLI flags:
+You can force an update or switch branches using CLI flags. These flags work for both `noteworthy.py` and `noteworthy_cli.py`:
 
-| Flag                     | Description                                                                                           |
-| ------------------------ | ----------------------------------------------------------------------------------------------------- |
-| `--load`                 | Force update/install from `master` branch.                                                            |
-| `--load-nightly`         | Force update/install from `nightly` branch.                                                           |
-| `--force-update`         | **Destructive**. Removes existing `noteworthy` and `templates` folders and reinstalls from `master`.  |
-| `--force-update-nightly` | **Destructive**. Removes existing `noteworthy` and `templates` folders and reinstalls from `nightly`. |
-| `--print-inputs`         | Output Typst `--input` flags for content folder info. Use with `typst compile`.                       |
+| Flag | Long Flag   | Description                                                                 |
+| ---- | ----------- | --------------------------------------------------------------------------- |
+| `-u` | `--update`  | Update noteworthy to the selected branch (default: master).                 |
+| `-n` | `--nightly` | Select the `nightly` branch instead of `master`.                            |
+| `-f` | `--force`   | **Destructive**. Force clean reinstall (removes existing `noteworthy` dir). |
 
-The noteworthy system guides you through the initialization, the configuration, and the build. Upon first run, the template will load the necessary template files.
+**Examples:**
+- `python3 noteworthy.py -u` (Update Master)
+- `python3 noteworthy.py -u -n` (Update Nightly)
+- `python3 noteworthy.py -u -f` (Force Clean Install Master)
 
 ### CLI Builder (Lightweight)
 
@@ -159,24 +159,26 @@ The CLI builder uses the same build engine as the TUI but runs non-interactively
   <img src="https://github.com/sihooleebd/noteworthy/blob/media/wizard_demo.gif" width="70%" alt="Setup Wizard Demo"/>
 </p>
 
-**TUI Features:**
-- **Chapter Selection**: Toggle individual chapters/sections to compile
+#### TUI Build Menu Features
+The build menu (`b` key from main menu or after setup) has been updated with a powerful grid interface:
+
+- **Grid Layout**: Chapters are **Rows**, Pages are **Columns**.
+- **Visuals**:
+    - **Yellow Cursor**: Your current position.
+    - **Cyan Crosshair**: Highlights the active row and column.
+- **Navigation**:
+    - **Arrow Keys**: Smart navigation that skips empty spaces and follows the PDF flow (Z-Pattern).
+    - **vim-keys**: `h`, `j`, `k`, `l` also supported.
+- **Selection**:
+    - `Space`: Toggle current page.
+    - `r`: Toggle entire Chapter (Row).
+    - `c`: Toggle specific Page Index across all chapters (Column).
+    - `a` / `n`: Select All / None.
 - **Options**:
-  - `d` - Debug mode (verbose output)
-  - `f` - Include/exclude frontmatter (cover, preface, outline)
-  - `l` - Keep individual PDFs after merge
-  - `c` - Configure custom Typst flags (e.g., `--font-path`)
+  - `d` - Debug mode
+  - `f` - Toggle frontmatter
+  - `p` - **Keep PDFs**: Don't delete individual chapter PDFs after merging.
   - `e` - Open configuration editors
-- **Editor Menu** (`e` key):
-  - Config Editor - Document settings (title, authors, theme, preface content, etc.)
-  - Hierarchy Editor - Chapter/page structure with add/delete
-  - Scheme Editor - Color themes with create/delete
-  - Snippets Editor - Custom macros
-  - Ignored Files - Manage files excluded from indexing
-- **Controls**: Arrow keys to navigate, Space to toggle, Enter to build, `q` to quit
-- **Build Progress**: Real-time compilation status with Typst log toggle (`v`)
-- **Template Integrity Check**: Verify that the template files are not corrupted and auto fix
-- **Backup & Restore**: Export and Import configuration files individually
 
 #### Interface Preview
 
