@@ -44,6 +44,37 @@
 #import "../../config/snippets.typ": *
 
 // =====================
+// GLOBAL STYLING
+// =====================
+
+#show raw: it => {
+  let theme = active-theme
+  let bg = if "page-fill" in theme { eval(theme.page-fill) } else { white }
+  let text-col = if "text-main" in theme { eval(theme.text-main) } else { black }
+  let accent = if "text-accent" in theme { eval(theme.text-accent) } else { blue }
+  let highlight = if "plot" in theme and "highlight" in theme.plot { eval(theme.plot.highlight) } else { rgb("eeeeee") }
+
+  if it.block {
+    block(
+      width: 100%,
+      fill: bg.lighten(5%), // Slight contrast from page background
+      stroke: 0.5pt + text-col.lighten(60%),
+      inset: 8pt,
+      radius: 4pt,
+      text(fill: text-col, size: 9pt, it),
+    )
+  } else {
+    box(
+      fill: accent.transparentize(90%),
+      inset: (x: 2pt, y: 0pt),
+      outset: (y: 2pt),
+      radius: 2pt,
+      text(fill: accent.darken(10%), it),
+    )
+  }
+}
+
+// =====================
 // HELPER FUNCTIONS
 // =====================
 
