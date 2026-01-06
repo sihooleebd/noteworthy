@@ -19,6 +19,7 @@ class TextEditor(BaseEditor):
         self.scroll_y = 0
         self.preferred_x = 0
         
+        # Arrow keys disabled as per user request (Re-enabled)
         register_key(self.keymap, NavigationBind('UP', self.move_up))
         register_key(self.keymap, NavigationBind('DOWN', self.move_down))
         register_key(self.keymap, NavigationBind('LEFT', self.move_left))
@@ -96,8 +97,8 @@ class TextEditor(BaseEditor):
         TUI.safe_addstr(self.scr, h - 1, fx, footer, curses.color_pair(4) | curses.A_DIM)
         
         curses.curs_set(1)
-        cur_y = vcy - self.scroll_y + 3
-        cur_x = 7 + (self.cx - visual_lines[vcy][2])
+        cur_y = vcy - self.scroll_y + 2
+        cur_x = 6 + (self.cx - visual_lines[vcy][2])
         if 0 <= cur_y < h and 0 <= cur_x < w:
             self.scr.move(cur_y, cur_x)
         self.scr.refresh()

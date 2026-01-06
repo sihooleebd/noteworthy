@@ -9,7 +9,7 @@ from .wizards.schemes import SchemesWizard
 from .menus import MainMenu
 from .editors import show_editor_menu
 from .editors.hierarchy import HierarchyEditor
-from .components.build import BuildMenu, run_build_process
+from .editors.build_wizard import BuildWizard
 from .components.common import show_error_screen
 
 def combine_schemes():
@@ -34,10 +34,7 @@ def needs_init():
 def run_build(scr):
     try:
         hierarchy = json.loads(HIERARCHY_FILE.read_text())
-        menu = BuildMenu(scr, hierarchy)
-        res = menu.run()
-        if res:
-            run_build_process(scr, hierarchy, res)
+        BuildWizard(scr, hierarchy).run()
     except Exception as e:
         show_error_screen(scr, e)
 

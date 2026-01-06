@@ -60,6 +60,14 @@ class TUI:
         return h - TOP_PAD, w - LEFT_PAD
 
     @staticmethod
+    def center(scr, content_h=1, content_w=1):
+        """Calculate start coordinates to center content."""
+        h, w = scr.getmaxyx()
+        start_y = max(0, (h - content_h) // 2)
+        start_x = max(0, (w - content_w) // 2)
+        return start_y, start_x
+
+    @staticmethod
     def prompt_save(scr):
         h, w = scr.getmaxyx()
         msg = 'Save? (y/n/c): '
@@ -238,14 +246,27 @@ class BaseEditor:
                 return
             
             k = self.scr.getch()
-            handled, res = handle_key_event(k, self.keymap, self)
+            handled, res = self.handle_input(k)
             if handled:
-                if res == 'EXIT': return
-            else:
-                if k == ord('x'): self.do_export()
-                elif k == ord('l'): self.do_import()
-                else: self._handle_input(k)
+                if res == 'EXIT': return res
+                if res is not None: return res
+            
             self.refresh()
+
+    def handle_input(self, k):
+        handled, res = handle_key_event(k, self.keymap, self)
+        if handled:
+            return True, res
+        
+        if k == ord('x'): 
+            self.do_export()
+            return True, None
+        elif k == ord('l'): 
+            self.do_import()
+            return True, None
+        
+        self._handle_input(k)
+        return False, None
 
     def _handle_input(self, k):
         pass
@@ -308,7 +329,10 @@ class ListEditor(BaseEditor):
 
     def _draw_footer(self, h, w):
         footer = 'Esc Save & Exit'
+        count_str = f"Item {self.cursor + 1}/{len(self.items)}"
         TUI.safe_addstr(self.scr, h - 2, LEFT_PAD, footer, curses.color_pair(4) | curses.A_DIM)
+        # Draw count aligned right
+        TUI.safe_addstr(self.scr, h - 2, w - len(count_str) - 2, count_str, curses.color_pair(4) | curses.A_DIM)
 
     def cursor_up(self, ctx):
         self.cursor = max(0, self.cursor - 1)

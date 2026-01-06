@@ -151,6 +151,30 @@ def download_modules(modules_to_download, callback=None):
 
     if callback: callback("Download Complete.")
 
+    # Update SHAs for downloaded modules
+    # We need to fetch the tree again or cache it to get the new SHAs? 
+    # Or we can just get the latest HEAD sha of the repo? 
+    # Ideally we want the sha of the specific folder we just got.
+    # Let's fetch the tree one more time or pass it in. Check module_updates already fetches it.
+    # For simplicity, we'll fetch latest repo tree and update specific modules.
+    try:
+        url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/git/trees/HEAD?recursive=1"
+        req = urllib.request.Request(url)
+        req.add_header('User-Agent', 'Noteworthy-PM')
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.loads(r.read().decode())
+        
+        tree = {i['path']: i['sha'] for i in data.get('tree', [])}
+        config = load_json_safe(MODULES_CONFIG_FILE)
+        
+        for name in modules_to_download:
+            if name in tree and "modules" in config and name in config["modules"]:
+                config["modules"][name]["sha"] = tree[name]
+        
+        save_modules_config(config["modules"])
+    except:
+        pass
+
 def get_latest_commit_sha():
     """Fetch the latest commit SHA from the GitHub repository."""
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/commits/HEAD"
@@ -203,3 +227,83 @@ def save_modules_meta(meta):
     MODULES_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(MODULES_CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=4)
+
+def check_module_updates(installed_modules):
+    """
+    Check relevant modules for updates by comparing local versions/content with remote.
+    Returns a set of module names that have updates.
+    """
+    # For efficiency, we can fetch the tree of the repo and compare SHAs of module folders/files
+    # api.github.com/repos/.../git/trees/HEAD?recursive=1 
+    # That gives us sha for every path.
+    # But installed_modules doesn't store the installed sha currently, only global meta["commit"].
+    # Ideally we should store sha per module in modules.json
+    
+    # Strategy:
+    # 1. Fetch remote tree
+    # 2. For each installed remote module, check if remote folder sha != stored sha (if we store it)
+    #    OR if not stored, we assume up to date unless we can check version in metadata.json?
+    #    Checking version requires downloading metadata.json for each module => slow.
+    
+    # We will assume "version" field in metadata.json is the source of truth if available,
+    # OR we start storing 'sha' in installed_modules.
+    
+    # Let's try to fetch the remote metadata for all installed remote modules.
+    # This might be N requests so we should be careful.
+    # Alternatively, fetch repo tree (1 request) and ignore version, just look for change.
+    
+    # If we don't have local SHAs, we can't do SHA comparison. 
+    # Our current module state is just {"source": "remote", "status": "..."}.
+    # We should start storing the installed SHA.
+    
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/git/trees/HEAD?recursive=1"
+    try:
+        req = urllib.request.Request(url)
+        req.add_header('User-Agent', 'Noteworthy-PM')
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.loads(r.read().decode())
+    except:
+        return set() # Fail safe
+        
+    remote_shas = {} # path -> sha
+    for item in data.get('tree', []):
+        remote_shas[item['path']] = item['sha']
+        
+    outdated = set()
+    current_config = load_json_safe(MODULES_CONFIG_FILE)
+    modules_config = current_config.get("modules", {})
+    
+    # We update the config with SHAs if they are missing (first run after update) 
+    # But if they are missing, we can't know if they are outdated without checking content.
+    # Use global commit as proxy for "all updated" if we lack granular info?
+    # Or just assume fresh install = latest.
+    
+    # Let's verify against what we have on disk?
+    # For now, let's implement the logic to return outdated based on 'sha' field in module config.
+    # If 'sha' is missing, we claim update available to force sync once? Or assume updated.
+    
+    idx_changes = False
+    
+    for name, state in modules_config.items():
+        if state.get("source") != "remote":
+            continue
+            
+        # The path in repo for module 'name' is just 'name' (folder)
+        # But 'tree' api returns sha for the folder.
+        remote_sha = remote_shas.get(name)
+        if not remote_sha: continue # Module might have been renamed or moved
+        
+        local_sha = state.get("sha")
+        
+        if local_sha != remote_sha:
+            outdated.add(name)
+            # We don't update local sha here, only on successful download
+            
+    return outdated
+
+def update_module_sha(module_name, sha):
+    config = load_json_safe(MODULES_CONFIG_FILE)
+    if "modules" in config and module_name in config["modules"]:
+        config["modules"][module_name]["sha"] = sha
+        save_modules_config(config["modules"]) 
+

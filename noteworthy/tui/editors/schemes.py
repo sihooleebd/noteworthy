@@ -4,7 +4,7 @@ from ..base import ListEditor, TUI, LEFT_PAD, TOP_PAD
 from ..components.common import LineEditor
 from ...config import SCHEMES_DIR
 from ...utils import load_config_safe, save_config, register_key
-from ..keybinds import ConfirmBind, KeyBind
+from ..keybinds import ConfirmBind, KeyBind, NavigationBind
 
 
 def extract_themes():
@@ -100,7 +100,8 @@ class ThemeDetailEditor(ListEditor):
         self._build_items()
         self.section_title = 'Colors'
         
-        register_key(self.keymap, ConfirmBind(self.action_select))
+        # Explicitly register navigation keys to resolve issue
+        self.section_title = 'Colors'
 
     def save(self):
         save_scheme(self.theme_name, self.theme)

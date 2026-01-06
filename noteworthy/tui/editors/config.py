@@ -4,7 +4,7 @@ from ..base import ListEditor, TUI, LEFT_PAD, TOP_PAD
 from ..components.common import LineEditor
 from ...config import METADATA_FILE, CONSTANTS_FILE, PREFACE_FILE
 from ...utils import load_config_safe, save_config, register_key
-from ..keybinds import ConfirmBind, ToggleBind, KeyBind
+from ..keybinds import ConfirmBind, ToggleBind, KeyBind, NavigationBind
 from .schemes import extract_themes
 from .text import TextEditor
 
@@ -19,6 +19,11 @@ class ConfigEditor(ListEditor):
         self._build_items()
         self.section_title = 'Configuration'
         self.content_width = 80
+        
+        
+        # Explicit registration to fix navigation
+        register_key(self.keymap, NavigationBind('UP', self.cursor_up))
+        register_key(self.keymap, NavigationBind('DOWN', self.cursor_down))
         
         register_key(self.keymap, ConfirmBind(self.action_edit))
         register_key(self.keymap, ToggleBind(self.action_toggle))
@@ -39,8 +44,7 @@ class ConfigEditor(ListEditor):
             "display-chap-cover": ("Chapter Covers", "bool"),
             "chapter-name": ("Chapter Label", "str"),
             "subchap-name": ("Section Label", "str"),
-            "box-margin": ("Box Margin", "str"),
-            "box-inset": ("Box Inset", "str"),
+            "subchap-name": ("Section Label", "str"),
             "render-sample-count": ("Render Samples", "int"),
             "render-implicit-count": ("Implicit Samples", "int"),
             "pad-chapter-id": ("Pad Chapter ID", "bool"),

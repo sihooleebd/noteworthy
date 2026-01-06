@@ -162,8 +162,10 @@ class HierarchyEditor(ListEditor):
                 new_val = TextEditor(self.scr, initial_text=curr_val, title="Edit Summary").run()
                 if new_val is not None:
                     self._set_value(new_val)
+            elif t == "pg_id":
+                pass # ID editing disabled
             else:
-                title = "Edit File ID" if t == "pg_id" else "Edit Value"
+                title = "Edit Value"
                 new_val = LineEditor(self.scr, initial_value=curr_val, title=title).run()
                 if new_val is not None:
                     self._set_value(new_val)

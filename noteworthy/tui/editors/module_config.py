@@ -32,57 +32,87 @@ class ModuleConfigEditor(ListEditor):
         register_key(self.keymap, KeyBind(ord('\n'), self.action_enter, "Action"))
         register_key(self.keymap, KeyBind(curses.KEY_ENTER, self.action_enter, "Action"))
         
-        self._check_for_updates()
+        self.has_updates = False
+        self.new_commit_sha = None
+        self._check_updates_silent()
         
-    def _check_for_updates(self):
-        h, w = self.scr.getmaxyx()
-        self.scr.clear()
-        TUI.safe_addstr(self.scr, TOP_PAD, LEFT_PAD, "Checking for updates...", curses.color_pair(4))
-        self.scr.refresh()
-        
-        latest_sha = get_latest_commit_sha()
-        current_sha = self.meta.get("commit")
-        
-        if latest_sha and latest_sha != current_sha:
-            if TUI.prompt_confirm(self.scr, "Updates available. Update now?"):
-                self.meta["commit"] = latest_sha
-                save_modules_meta(self.meta)
-                
-                to_update = [name for name, state in self.modules.items() 
-                            if state.get("status") != "disabled" and state.get("source") == "remote"]
-                
-                if to_update:
-                    def progress_cb(m):
-                        self.scr.clear()
-                        TUI.safe_addstr(self.scr, TOP_PAD, LEFT_PAD, "Updating Modules", curses.color_pair(1) | curses.A_BOLD)
-                        TUI.safe_addstr(self.scr, TOP_PAD + 2, LEFT_PAD, m[:60], curses.color_pair(4))
-                        self.scr.refresh()
-                    download_modules(to_update, progress_cb)
-                    TUI.show_message(self.scr, "Success", "Modules updated!")
+        register_key(self.keymap, KeyBind(ord('u'), self.action_update, "Update All"))
 
     def _build_local_index(self):
         self.index = {}
-        root = Path("templates/module")
-        if root.exists():
-            for d in root.iterdir():
-                if d.is_dir():
-                    meta_path = d / "metadata.json"
-                    if meta_path.exists():
+        mod_dir = Path("templates/module")
+        if mod_dir.exists():
+            for item in mod_dir.iterdir():
+                if item.is_dir() and not item.name.startswith('.'):
+                    meta_file = item / "metadata.json"
+                    entry = {
+                        "name": item.name,
+                        "dependencies": [],
+                        "exports": [],
+                        "source": "local"
+                    }
+                    if meta_file.exists():
                         try:
-                            self.index[d.name] = json.loads(meta_path.read_text())
+                            with open(meta_file, 'r') as f:
+                                meta = json.load(f)
+                            entry.update(meta)
                         except:
                             pass
-                    else:
-                        self.index[d.name] = {"name": d.name, "dependencies": []}
+                    self.index[item.name] = entry
+        
+        # Ensure installed modules are in index
+        for name, state in self.modules.items():
+            if name not in self.index:
+                self.index[name] = {
+                    "name": name,
+                    "dependencies": [],
+                    "exports": [],
+                    "source": state.get("source", "local")
+                }
+
+    def _check_updates_silent(self):
+        # Silent check for updates
+        try:
+             # Check for granular updates
+            from ...core.pm import check_module_updates
+            self.outdated_modules = check_module_updates(self.modules)
+            if self.outdated_modules:
+                self.has_updates = True
+        except:
+            self.outdated_modules = set()
+            pass
+            
+    def action_update(self, ctx):
+        if not self.has_updates:
+            return
+            
+        if TUI.prompt_confirm(self.scr, "Update available modules?"):
+             # self.meta["commit"] = ... # No longer using global commit for all
+             
+             to_update = list(self.outdated_modules)
+             
+             if to_update:
+                 def progress_cb(m):
+                     self.scr.clear()
+                     TUI.safe_addstr(self.scr, TOP_PAD, LEFT_PAD, "Updating Modules", curses.color_pair(1) | curses.A_BOLD)
+                     TUI.safe_addstr(self.scr, TOP_PAD + 2, LEFT_PAD, m[:60], curses.color_pair(4))
+                     self.scr.refresh()
+                 download_modules(to_update, progress_cb)
+                 self.has_updates = False
+                 self.outdated_modules = set()
+                 self.modified = True
+                 TUI.show_message(self.scr, "Success", "Modules updated!")
+                 self._build_items()
 
     def _build_items(self):
+        # ... (same as before) ...
         self.items = []
         all_keys = set(self.modules.keys()) | set(self.index.keys())
         standard = sorted([k for k in all_keys if k in STANDARD_MODULES])
         custom = sorted([k for k in all_keys if k not in STANDARD_MODULES])
         
         for name in standard:
-            state = self.modules.get(name, {"status": "disabled", "source": "local"})
+            state = self.modules.get(name, {"status": "disabled", "source": "remote"})
             self.items.append((name, state, False, False))
             
         if custom:
@@ -92,79 +122,85 @@ class ModuleConfigEditor(ListEditor):
                 self.items.append((name, state, True, False))
                 
         self.items.append(("+ Create Custom Module...", None, False, True))
-            
-    def _get_status_str(self, state):
-        if not state:
-            return ""
-        s = state.get("status", "disabled")
-        if s == "global":
-            return "Global"
-        if s == "qualified":
-            return "Qualified"
-        return "Disabled"
+    
+    # ... (rest of class) ...
 
     def refresh(self):
-        conflicts = get_module_conflicts()
         h, w = self.scr.getmaxyx()
         self.scr.clear()
         
         # Title
-        title = f"{self.title}{' *' if self.modified else ''}"
-        TUI.safe_addstr(self.scr, TOP_PAD, LEFT_PAD, title, curses.color_pair(1) | curses.A_BOLD)
+        title_str = f"{self.title}{' *' if self.modified else ''}"
+        TUI.safe_addstr(self.scr, TOP_PAD, LEFT_PAD, title_str, curses.color_pair(1) | curses.A_BOLD)
         
         # Section header
         TUI.safe_addstr(self.scr, TOP_PAD + 2, LEFT_PAD, self.section_title, curses.color_pair(4) | curses.A_DIM)
         
-        # Items
-        list_y = TOP_PAD + 3
-        visible = h - list_y - 4
+        # Calculate visible area
+        list_start_y = TOP_PAD + 3
+        visible_rows = h - list_start_y - 3
         
+        # Scroll adjustment
         if self.cursor < self.scroll:
             self.scroll = self.cursor
-        elif self.cursor >= self.scroll + visible:
-            self.scroll = self.cursor - visible + 1
-        
-        for i in range(visible):
+        elif self.cursor >= self.scroll + visible_rows:
+            self.scroll = self.cursor - visible_rows + 1
+            
+        # Draw items
+        for i in range(visible_rows):
             idx = self.scroll + i
             if idx >= len(self.items):
                 break
+            y = list_start_y + i
             
             name, state, is_custom, is_action = self.items[idx]
-            y = list_y + i
+            is_selected = (idx == self.cursor)
             
-            if name == "" and state is None:
-                TUI.safe_addstr(self.scr, y, LEFT_PAD, "─" * 50, curses.color_pair(4) | curses.A_DIM)
-                continue
-            
-            selected = idx == self.cursor
-            
-            if selected:
+            # Draw cursor
+            if is_selected:
                 TUI.safe_addstr(self.scr, y, LEFT_PAD, "▶", curses.color_pair(3) | curses.A_BOLD)
             
+            # Draw Name
+            name_attr = 0
+            if is_selected:
+                name_attr |= curses.A_REVERSE
             if is_action:
-                style = curses.color_pair(3 if selected else 4) | (curses.A_BOLD if selected else 0)
-                TUI.safe_addstr(self.scr, y, LEFT_PAD + 2, name, style)
-            else:
-                style = curses.color_pair(4) | (curses.A_BOLD if selected else 0)
-                TUI.safe_addstr(self.scr, y, LEFT_PAD + 2, name[:30], style)
+                 name_attr |= curses.color_pair(3)
+            
+            TUI.safe_addstr(self.scr, y, LEFT_PAD + 2, name, name_attr)
+            
+            # Draw Status
+            if not is_action and state:
+                status = state.get("status", "disabled")
+                status_str = status.upper()
                 
-                status_str = self._get_status_str(state)
-                if state.get("status") == "global":
-                    status_style = curses.color_pair(2) | curses.A_BOLD
-                elif state.get("status") == "qualified":
-                    status_style = curses.color_pair(5)
-                else:
-                    status_style = curses.color_pair(4) | curses.A_DIM
+                status_attr = 0
+                if is_selected:
+                    status_attr |= curses.A_REVERSE
                 
-                TUI.safe_addstr(self.scr, y, LEFT_PAD + 35, status_str, status_style)
-        
+                if status == "disabled":
+                     status_attr |= curses.color_pair(4) | curses.A_DIM
+                elif status == "qualified":
+                     status_attr |= curses.color_pair(2)
+                elif status == "global":
+                     status_attr |= curses.color_pair(3) | curses.A_BOLD
+
+                TUI.safe_addstr(self.scr, y, LEFT_PAD + 35, status_str, status_attr)
+
+                if self.has_updates and name in getattr(self, 'outdated_modules', set()):
+                    TUI.safe_addstr(self.scr, y, LEFT_PAD + 45, "[U]", curses.color_pair(3)|curses.A_BOLD)
+
         # Conflicts warning
+        conflicts = get_module_conflicts(self._get_enabled_modules())
         if conflicts:
             TUI.safe_addstr(self.scr, h - 3, LEFT_PAD, f"⚠ {len(conflicts)} symbol conflicts!", 
                            curses.color_pair(3) | curses.A_BOLD)
         
         # Footer
-        TUI.safe_addstr(self.scr, h - 2, LEFT_PAD, "Space Toggle  Enter Action  Esc Save", 
+        footer = "Space Toggle  Enter Details  u Update  Esc Back"
+        if self.has_updates:
+            footer = "u Update All  " + footer.replace("u Update  ", "")
+        TUI.safe_addstr(self.scr, h - 2, LEFT_PAD, footer, 
                        curses.color_pair(4) | curses.A_DIM)
         
         self.scr.refresh()
