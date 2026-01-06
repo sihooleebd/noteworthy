@@ -18,6 +18,21 @@ These blocks are automatically numbered and styled based on the theme.
 ]
 ```
 
+### Block Design
+
+You can customize the visual style of blocks in `config/constants.json`.
+
+- `"simple"` (Default): Filled background, no border. Clean and minimal.
+- `"modern"`: Outlined with `2pt` stroke, rounded corners, and increased padding. A spacious, "hero" aesthetic.
+
+**Configuration:**
+```json
+// config/constants.json
+{
+  "block-design": "modern"
+}
+```
+
 ### Examples & Solutions
 
 Designed for problem sets and worked examples.

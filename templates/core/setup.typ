@@ -30,6 +30,7 @@
 #let pad-chapter-id = constants.pad-chapter-id
 #let pad-page-id = constants.pad-page-id
 #let heading-numbering = constants.heading-numbering
+#let block-design = constants.at("block-design", default: "simple")
 #let hierarchy = json("../../config/hierarchy.json")
 
 // Load schemes

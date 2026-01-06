@@ -4,7 +4,7 @@
 // =====================================================
 
 // Theme
-#import "../styles/theme.typ": theme
+// Theme removed (handled by setup.typ)
 
 // Core Modules (always enabled)
 #import "../module/core/block/mod.typ": *
