@@ -10,8 +10,8 @@ from .keybinds import SaveBind, ExitBind, NavigationBind, KeyBind
 # Layout constants
 LEFT_PAD = 4
 TOP_PAD = 2
-MIN_HEIGHT = 20
-MIN_WIDTH = 50
+MIN_HEIGHT = 30
+MIN_WIDTH = 100
 
 
 class TUI:

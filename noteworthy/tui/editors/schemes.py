@@ -101,6 +101,7 @@ class ThemeDetailEditor(ListEditor):
         self.section_title = 'Colors'
         
         # Explicitly register navigation keys to resolve issue
+        register_key(self.keymap, KeyBind(curses.KEY_LEFT, self.do_exit, "Back"))
         self.section_title = 'Colors'
 
     def save(self):

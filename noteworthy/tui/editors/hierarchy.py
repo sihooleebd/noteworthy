@@ -28,7 +28,6 @@ class HierarchyEditor(ListEditor):
             self.items.append(("ch_summary", ci, None, ch))
             for pi, p in enumerate(ch.get("pages", [])):
                 self.items.append(("pg_title", ci, pi, p))
-                self.items.append(("pg_id", ci, pi, p))
             self.items.append(("add_page", ci, None, None))
         self.items.append(("add_chapter", None, None, None))
     
@@ -40,8 +39,6 @@ class HierarchyEditor(ListEditor):
             return self.hierarchy[ci]["summary"]
         elif t == "pg_title":
             return self.hierarchy[ci]["pages"][pi]["title"]
-        elif t == "pg_id":
-            return self.hierarchy[ci]["pages"][pi].get("id", str(pi))
         return ""
     
     def _set_value(self, val):
@@ -54,8 +51,6 @@ class HierarchyEditor(ListEditor):
             self.hierarchy[ci]["summary"] = val
         elif t == "pg_title":
             self.hierarchy[ci]["pages"][pi]["title"] = val
-        elif t == "pg_id":
-            self.hierarchy[ci]["pages"][pi]["id"] = val
         
         self.modified = True
         self._build_items()
@@ -87,7 +82,7 @@ class HierarchyEditor(ListEditor):
                 self.modified = True
                 self._build_items()
                 self.cursor = min(self.cursor, len(self.items) - 1)
-        elif t in ("pg_title", "pg_id"):
+        elif t == "pg_title":
             del self.hierarchy[ci]["pages"][pi]
             self.modified = True
             self._build_items()
@@ -131,11 +126,6 @@ class HierarchyEditor(ListEditor):
             TUI.safe_addstr(self.scr, y, x + 4, "Page:", curses.color_pair(4))
             TUI.safe_addstr(self.scr, y, x + 14, str(self._get_value(item))[:width - 16], style)
             
-        elif t == "pg_id":
-            TUI.safe_addstr(self.scr, y, x + 6, "ID:", curses.color_pair(4) | curses.A_DIM)
-            TUI.safe_addstr(self.scr, y, x + 14, str(self._get_value(item)) + ".typ", 
-                           curses.color_pair(4) | curses.A_DIM)
-            
         elif t == "add_page":
             TUI.safe_addstr(self.scr, y, x + 4, "+ Add page", 
                            curses.color_pair(3 if selected else 4) | (curses.A_BOLD if selected else curses.A_DIM))
@@ -162,14 +152,12 @@ class HierarchyEditor(ListEditor):
                 new_val = TextEditor(self.scr, initial_text=curr_val, title="Edit Summary").run()
                 if new_val is not None:
                     self._set_value(new_val)
-            elif t == "pg_id":
-                pass # ID editing disabled
             else:
                 title = "Edit Value"
                 new_val = LineEditor(self.scr, initial_value=curr_val, title=title).run()
                 if new_val is not None:
                     self._set_value(new_val)
-
+    
     def action_delete(self, ctx):
         item = self.items[self.cursor]
         t = item[0]

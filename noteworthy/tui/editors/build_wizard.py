@@ -520,9 +520,9 @@ class BuildWizard(BaseEditor):
                         if not file_exists:
                              style = curses.color_pair(6)|curses.A_BOLD|curses.A_REVERSE # Red Reverse
                         elif selected:
-                             style = curses.color_pair(8)|curses.A_BOLD|curses.A_REVERSE # Cyan Reverse (Standard cursor)
+                             style = curses.color_pair(5)|curses.A_BOLD|curses.A_REVERSE # Magenta Reverse (Standard cursor)
                         else:
-                             style = curses.color_pair(8)|curses.A_REVERSE # Cyan Reverse 
+                             style = curses.color_pair(5)|curses.A_REVERSE # Magenta Reverse 
                     
                     else:
                         # Non-cursor Logic
@@ -530,13 +530,13 @@ class BuildWizard(BaseEditor):
                              style = curses.color_pair(6)|curses.A_DIM # Red dim
                         elif selected:
                              if is_row_highlight or is_col_highlight:
-                                  style = curses.color_pair(5)|curses.A_BOLD # Magenta Bold (Highlighted)
+                                  style = curses.color_pair(8)|curses.A_BOLD # Cyan Bold (Highlighted)
                              else:
                                   style = curses.color_pair(2) # Green
                         else:
                              # Unselected existing
                              if is_row_highlight or is_col_highlight:
-                                  style = curses.color_pair(5) # Magenta for crosshair trace
+                                  style = curses.color_pair(8) # Cyan for crosshair trace
                              else:
                                   style = curses.color_pair(4)|curses.A_DIM
 
