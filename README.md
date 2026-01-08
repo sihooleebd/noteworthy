@@ -82,7 +82,7 @@ Noteworthy includes a powerful web-based interface for visual editing, configura
 
 ### Quick Start
 ```bash
-python3 noteworthy.py --gui
+python3 noteworthy.py -g
 ```
 Access at `http://localhost:8000`.
 

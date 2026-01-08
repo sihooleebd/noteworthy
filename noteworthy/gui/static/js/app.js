@@ -11,7 +11,47 @@ const app = {
         sessionName: localStorage.getItem('sessionName') || 'Anonymous',
         previewMode: 'file' // Always file mode
     },
+    // ============================================================
+    // INITIALIZATION
+    // ============================================================
 
+    ASCII_LOGO: `         ,--. 
+       ,--.'| 
+   ,--,:  : | 
+,\`--.'\`|  ' : 
+|   :  :  | | 
+:   |   \\ | : 
+|   : '  '; | 
+'   ' ;.    ; 
+|   | | \\   | 
+'   : |  ; .' 
+|   | '\`--'   
+'   : |       
+;   |.'       
+'---'         `,
+
+    createWelcomeOverlay: function () {
+        // Create overlay element
+        const overlay = document.createElement('div');
+        overlay.id = 'welcome-overlay';
+
+        const logo = document.createElement('div');
+        logo.className = 'ascii-logo';
+        logo.textContent = this.ASCII_LOGO;
+
+        const text = document.createElement('div');
+        text.className = 'welcome-text';
+        text.textContent = 'NOTEWORTHY';
+
+        overlay.appendChild(logo);
+        overlay.appendChild(text);
+
+        // Append to editor area (parent of monaco-container)
+        const container = document.getElementById('monaco-container');
+        if (container && container.parentElement) {
+            container.parentElement.appendChild(overlay);
+        }
+    },
     // ============================================================
     // INITIALIZATION
     // ============================================================
@@ -37,7 +77,7 @@ const app = {
         require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
         require(['vs/editor/editor.main'], () => {
             this.state.editor = monaco.editor.create(document.getElementById('monaco-container'), {
-                value: '// Select a file from the sidebar',
+                value: '',
                 language: 'markdown',
                 theme: this.state.editorTheme,
                 automaticLayout: true,
@@ -72,6 +112,13 @@ const app = {
 
         // Unified WebSocket for all real-time features
         this.connectDocSocket();
+
+        // Create welcome overlay immediately (synchronous)
+        this.createWelcomeOverlay();
+
+        // Hide editor initially until file is selected
+        const container = document.getElementById('monaco-container');
+        if (container) container.style.display = 'none';
 
         // Load initial data
         await this.refreshTree();
@@ -121,6 +168,8 @@ const app = {
             if (this.state.editor) this.state.editor.layout();
         });
 
+
+
         document.addEventListener('mouseup', () => {
             if (isResizing) {
                 isResizing = false;
@@ -151,7 +200,7 @@ const app = {
         // Re-init lucide icons for dynamic content
         if (window.lucide) lucide.createIcons();
 
-        if (pageId === 'build') this.loadBuildGrid();
+        if (pageId === 'build') this.renderBuildHierarchy();
     },
 
     setEditorTheme: function (theme) {
@@ -197,6 +246,7 @@ const app = {
                 } else {
                     el.innerHTML = `<i data-lucide="file" class="tree-file" style="fill: none; stroke-width: 2px;"></i> ${item.name}`;
                     el.onclick = () => this.openFile(item.path, el);
+                    el.oncontextmenu = (e) => this.showFileContextMenu(e, item.path);
                     div.appendChild(el);
                 }
             });
@@ -225,7 +275,143 @@ const app = {
         this.refreshTree();
     },
 
+    // File context menu
+    showFileContextMenu: function (e, path) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        this.state.contextMenuFile = path;
+        const menu = document.getElementById('file-context-menu');
+        menu.style.left = `${e.clientX}px`;
+        menu.style.top = `${e.clientY}px`;
+        menu.classList.add('visible');
+
+        // Re-init icons
+        if (window.lucide) lucide.createIcons();
+
+        // Close on click outside
+        const closeMenu = () => {
+            menu.classList.remove('visible');
+            document.removeEventListener('click', closeMenu);
+        };
+        setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    },
+
+    // Upload files
+    uploadFiles: function () {
+        document.getElementById('file-upload-input').click();
+    },
+
+    handleFileUpload: async function (event) {
+        const files = event.target.files;
+        if (!files.length) return;
+
+        const formData = new FormData();
+        for (const file of files) {
+            formData.append('files', file);
+        }
+
+        // Upload to current directory (or root if none selected)
+        const dir = this.state.activeFile ?
+            this.state.activeFile.substring(0, this.state.activeFile.lastIndexOf('/')) :
+            '';
+        formData.append('directory', dir);
+
+        try {
+            const res = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            });
+            if (res.ok) {
+                this.showSaveStatus('Files Uploaded');
+                this.refreshTree();
+            } else {
+                this.showSaveStatus('Upload Failed');
+            }
+        } catch (e) {
+            console.error('Upload error:', e);
+            this.showSaveStatus('Upload Error');
+        }
+
+        event.target.value = ''; // Reset input
+    },
+
+    renameFile: async function () {
+        const path = this.state.contextMenuFile;
+        if (!path) return;
+
+        const filename = path.split('/').pop();
+        const newName = prompt('Rename file:', filename);
+        if (!newName || newName === filename) return;
+
+        try {
+            const res = await fetch('/api/rename', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path, newName })
+            });
+            if (res.ok) {
+                this.showSaveStatus('File Renamed');
+                this.refreshTree();
+                // Update active file if it was renamed
+                if (this.state.activeFile === path) {
+                    const newPath = path.substring(0, path.lastIndexOf('/') + 1) + newName;
+                    this.state.activeFile = newPath;
+                    document.getElementById('active-filename').textContent = newPath;
+                }
+            } else {
+                this.showSaveStatus('Rename Failed');
+            }
+        } catch (e) {
+            console.error('Rename error:', e);
+            this.showSaveStatus('Rename Error');
+        }
+    },
+
+    deleteFile: async function () {
+        const path = this.state.contextMenuFile;
+        if (!path) return;
+
+        if (!confirm(`Delete "${path}"?`)) return;
+
+        try {
+            const res = await fetch('/api/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path })
+            });
+            if (res.ok) {
+                this.showSaveStatus('File Deleted');
+                this.refreshTree();
+                // Clear editor if deleted file was active
+                if (this.state.activeFile === path) {
+                    this.state.activeFile = null;
+                    document.getElementById('active-filename').textContent = 'Select a file';
+                    if (this.state.editor) this.state.editor.setValue('');
+                }
+            } else {
+                this.showSaveStatus('Delete Failed');
+            }
+        } catch (e) {
+            console.error('Delete error:', e);
+            this.showSaveStatus('Delete Error');
+        }
+    },
+
     openFile: async function (path, el) {
+        // FORCE REMOVAL of welcome overlay (don't just hide)
+        const overlay = document.getElementById('welcome-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+
+        // Show editor
+        const container = document.getElementById('monaco-container');
+        if (container) {
+            container.style.display = 'block';
+            if (this.state.editor) this.state.editor.layout();
+        }
+
         // Update selection
         document.querySelectorAll('.tree-item').forEach(e => e.classList.remove('selected'));
         if (el) el.classList.add('selected');
@@ -572,6 +758,9 @@ const app = {
                     <input type="text" class="chapter-title-input" value="${chapter.title || ''}" 
                            oninput="app.updateChapterTitle(${chIdx}, this.value)" placeholder="Chapter Title">
                     <div class="chapter-actions">
+                        <button class="icon-btn" onclick="app.addPage(${chIdx})" title="Add Page">
+                            <i data-lucide="plus"></i>
+                        </button>
                         <button class="icon-btn" onclick="app.deleteChapter(${chIdx})" title="Delete Chapter">
                             <i data-lucide="trash-2"></i>
                         </button>
@@ -595,13 +784,6 @@ const app = {
                 `;
                 pagesContainer.appendChild(pageEl);
             });
-
-            // Add page button
-            const addPageBtn = document.createElement('button');
-            addPageBtn.className = 'add-btn';
-            addPageBtn.innerHTML = '<i data-lucide="plus"></i> Add Page';
-            addPageBtn.onclick = () => this.addPage(chIdx);
-            pagesContainer.appendChild(addPageBtn);
         });
 
         if (window.lucide) lucide.createIcons();
@@ -655,6 +837,134 @@ const app = {
             console.error('Error saving structure:', e);
             this.showSaveStatus('Error Saving');
         }
+    },
+
+    // Build page grid-based selection (TUI style)
+    renderBuildHierarchy: async function () {
+        const container = document.getElementById('build-grid');
+        if (!container) return;
+
+        // Load hierarchy if not loaded
+        if (!this.state.hierarchy || this.state.hierarchy.length === 0) {
+            try {
+                const res = await fetch('/api/hierarchy');
+                const data = await res.json();
+                this.state.hierarchy = data.hierarchy || [];
+            } catch (e) {
+                console.error('Failed to load hierarchy:', e);
+                container.innerHTML = '<p style="color: var(--text-muted);">Failed to load structure.</p>';
+                return;
+            }
+        }
+
+        // Initialize build selection state if needed
+        if (!this.state.buildSelection) {
+            this.state.buildSelection = {};
+            this.state.hierarchy.forEach((ch, chIdx) => {
+                this.state.buildSelection[chIdx] = {};
+                (ch.pages || []).forEach((pg, pgIdx) => {
+                    this.state.buildSelection[chIdx][pgIdx] = true; // Select all by default
+                });
+            });
+        }
+
+        container.innerHTML = '';
+
+        this.state.hierarchy.forEach((chapter, chIdx) => {
+            const pages = chapter.pages || [];
+            const selectedCount = pages.filter((_, pgIdx) =>
+                this.state.buildSelection[chIdx]?.[pgIdx]
+            ).length;
+            const allSelected = selectedCount === pages.length && pages.length > 0;
+
+            // Create row
+            const rowEl = document.createElement('div');
+            rowEl.className = 'build-row';
+
+            // Chapter label with toggle button
+            const labelEl = document.createElement('div');
+            labelEl.className = 'build-row-label';
+
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'btn btn-ghost btn-sm';
+            toggleBtn.textContent = allSelected ? 'Deselect' : 'Select';
+            toggleBtn.onclick = (e) => { e.stopPropagation(); this.toggleBuildChapter(chIdx); };
+
+            const titleSpan = document.createElement('span');
+            titleSpan.textContent = `Ch ${chIdx + 1}: ${chapter.title || 'Untitled'}`;
+
+            labelEl.appendChild(titleSpan);
+            labelEl.appendChild(toggleBtn);
+            rowEl.appendChild(labelEl);
+
+            // Page cells container
+            const pagesEl = document.createElement('div');
+            pagesEl.className = 'build-row-pages';
+
+            pages.forEach((page, pgIdx) => {
+                const isSelected = this.state.buildSelection[chIdx]?.[pgIdx];
+                const cell = document.createElement('div');
+                cell.className = 'build-cell' + (isSelected ? ' selected' : '');
+                cell.title = page.title || `Page ${pgIdx + 1}`;
+                cell.textContent = pgIdx + 1;
+                cell.onclick = () => this.toggleBuildPage(chIdx, pgIdx);
+                pagesEl.appendChild(cell);
+            });
+
+            rowEl.appendChild(pagesEl);
+            container.appendChild(rowEl);
+        });
+    },
+
+    toggleBuildChapter: function (chIdx) {
+        const pages = this.state.hierarchy[chIdx]?.pages || [];
+        if (!this.state.buildSelection[chIdx]) {
+            this.state.buildSelection[chIdx] = {};
+        }
+
+        const allSelected = pages.every((_, pgIdx) =>
+            this.state.buildSelection[chIdx][pgIdx]
+        );
+
+        pages.forEach((_, pgIdx) => {
+            this.state.buildSelection[chIdx][pgIdx] = !allSelected;
+        });
+
+        this.renderBuildHierarchy();
+    },
+
+    toggleBuildPage: function (chIdx, pgIdx) {
+        if (!this.state.buildSelection[chIdx]) {
+            this.state.buildSelection[chIdx] = {};
+        }
+        this.state.buildSelection[chIdx][pgIdx] = !this.state.buildSelection[chIdx][pgIdx];
+        this.renderBuildHierarchy();
+    },
+
+    toggleAllBuildPages: function () {
+        if (!this.state.hierarchy || !this.state.buildSelection) return;
+
+        // Check if all are selected
+        let allSelected = true;
+        for (let chIdx = 0; chIdx < this.state.hierarchy.length; chIdx++) {
+            const pages = this.state.hierarchy[chIdx]?.pages || [];
+            for (let pgIdx = 0; pgIdx < pages.length; pgIdx++) {
+                if (!this.state.buildSelection[chIdx]?.[pgIdx]) {
+                    allSelected = false;
+                    break;
+                }
+            }
+            if (!allSelected) break;
+        }
+
+        // Toggle all
+        this.state.hierarchy.forEach((ch, chIdx) => {
+            (ch.pages || []).forEach((_, pgIdx) => {
+                this.state.buildSelection[chIdx][pgIdx] = !allSelected;
+            });
+        });
+
+        this.renderBuildHierarchy();
     },
 
     renderSchemesTab: async function (container) {

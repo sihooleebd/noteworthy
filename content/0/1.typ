@@ -16,7 +16,7 @@ Noteworthy is a powerful Typst framework for creating beautiful educational docu
   Noteworthy is organized into *6 modules*, each handling a specific aspect of document creation:
 
   - *Block* — Semantic content containers (definitions, theorems, proofs)
-  - *Geometry* — 2D geometric primitives (points, lines, circles)
+  - *Geometry* — 2D geometric primixtives (points, lines, circles)
   - *Canvas* — Rendering canvases for plots and visualizations
   - *Data* — Tables, data series, and curve interpolation
   - *Cover* — Document covers and title pages

@@ -5,7 +5,7 @@ The graphical user interface for Noteworthy provides a modern, collaborative env
 ## Quick Start
 
 ```bash
-python3 noteworthy.py --gui
+python3 noteworthy.py -g
 ```
 The interface will be available at [`http://localhost:8000`](http://localhost:8000).
 
@@ -43,7 +43,7 @@ To collaborate with users over the internet (outside your LAN), we recommend usi
 
 1.  **Start the GUI**:
     ```bash
-    python3 noteworthy.py --gui
+    python3 noteworthy.py -g
     ```
 2.  **Expose Port**: In a separate terminal, run:
     ```bash
