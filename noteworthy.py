@@ -35,8 +35,10 @@ if __name__ == "__main__":
         print("Error: noteworthy package not found. Please ensure you have the full repository.")
         sys.exit(1)
 
-    parser = argparse.ArgumentParser(description='Noteworthy TUI Launcher')
+    parser = argparse.ArgumentParser(description='Noteworthy Launcher')
     parser.add_argument('--print-inputs', action='store_true', help='Print Typst input flags')
+    parser.add_argument('--gui', action='store_true', help='Launch web GUI instead of TUI')
+    parser.add_argument('-p', '--port', type=int, default=8000, help='Port for GUI server (default: 8000)')
     
     # Update flags
     parser.add_argument('-u', '--update', action='store_true', help='Update noteworthy')
@@ -112,10 +114,20 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Warning: Could not create default preface: {e}")
 
-    try:
-        from noteworthy.__main__ import main
-    except ImportError:
-        sys.path.append(str(Path(__file__).parent))
-        from noteworthy.__main__ import main
-
-    main()
+    # Launch GUI if requested
+    if args.gui:
+        try:
+            from noteworthy.gui.app import run_gui
+            run_gui(port=args.port)
+        except ImportError as e:
+            print(f"Error: GUI requires additional dependencies. Install with: pip install uvicorn fastapi")
+            print(f"Details: {e}")
+            sys.exit(1)
+    else:
+        # Launch TUI
+        try:
+            from noteworthy.__main__ import main
+        except ImportError:
+            sys.path.append(str(Path(__file__).parent))
+            from noteworthy.__main__ import main
+        main()

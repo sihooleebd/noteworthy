@@ -31,6 +31,8 @@
 
 **A powerful Typst framework for creating beautiful, themed educational documents.**
 
+
+
 [![Typst](https://img.shields.io/badge/Typst-0.12%2B-239DAD?logo=typst)](https://typst.app/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/W3S2UQCJzM)
@@ -58,7 +60,7 @@ typst compile theme_catalogue.typ --root ..
 - **Document Structure**: Automated table of contents, chapter covers, and page headers
 - **Configuration Layer**: JSON-based settings in `config/`
 - **Build System**: Incremental compilation with automatic PDF merging
-- **Interactive Editors**: TUI-based editors for config, hierarchy, schemes, and snippets
+- **Interactive Editors**: TUI-based editors or **Web-based GUI** for real-time preview
 
 ## Key Features
 
@@ -68,6 +70,38 @@ typst compile theme_catalogue.typ --root ..
 - **Extensible**: Add custom blocks, themes, and plotting functions
 - **Production-Ready**: Used for real educational materials
 - **Incremental Build**: Compile sections individually, merge automatically
+
+## Interactive GUI & Collaboration
+
+Noteworthy includes a powerful web-based interface for visual editing, configuration, and real-time collaboration.
+
+### Features
+- **Live Preview**: See your changes instantly as you type.
+- **Visual Configuration**: Configure themes, layouts, and modules without editing JSON.
+- **Real-time Collaboration**: Work with others on the same document simultaneously.
+  - **Shared Cursors**: See where others are editing.
+  - **Global Chat**: Communicate via the built-in encrypted chat.
+  - **Conflict-Free**: File-scoped edits ensure data integrity.
+
+### Running the GUI
+```bash
+python3 noteworthy.py --gui
+```
+The interface will be available at `http://localhost:8000`.
+
+### Remote Collaboration via Ngrok
+To collaborate with users over the internet (outside your LAN), we recommend using **ngrok**. This provides a secure, encrypted tunnel to your local instance.
+
+1.  Start the Noteworthy GUI:
+    ```bash
+    python3 noteworthy.py --gui
+    ```
+2.  In a separate terminal, expose port 8000:
+    ```bash
+    ngrok http 8000
+    ```
+3.  Share the provided **HTTPS** URL (e.g., `https://xxxx-xx.ngrok-free.app`) with your collaborators.
+
 
 ## Documentation
 

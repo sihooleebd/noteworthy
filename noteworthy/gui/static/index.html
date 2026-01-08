@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Noteworthy</title>
+    <link rel="stylesheet" href="css/main.css?v=2">
+    <link rel="stylesheet" href="css/collab.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        <!-- MAIN CONTENT -->
+        <div class="main-content">
+            <!-- EDITOR PAGE -->
+            <div class="page active" id="page-editor">
+                <!-- File Sidebar -->
+                <aside class="sidebar glass">
+                    <div class="sidebar-header">
+                        <h3>Explorer</h3>
+                        <button class="icon-btn" onclick="app.refreshTree()" title="Refresh">
+                            <i data-lucide="refresh-cw"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar-content" id="file-tree"></div>
+                </aside>
+
+                <!-- Editor -->
+                <section class="editor-area glass">
+                    <div class="editor-header">
+                        <div class="editor-filename">
+                            <i data-lucide="file-code"></i>
+                            <span id="active-filename">Select a file</span>
+                        </div>
+                        <div id="online-users" class="user-avatars"></div>
+                        <div class="editor-actions">
+                            <div class="theme-toggle">
+                                <select id="editor-theme" onchange="app.setEditorTheme(this.value)">
+                                    <option value="vs-dark">Dark</option>
+                                    <option value="vs-light">Light</option>
+                                    <option value="hc-black">High Contrast</option>
+                                </select>
+                            </div>
+                            <button class="icon-btn" onclick="app.toggleChat()" title="Chat">
+                                <i data-lucide="message-square"></i>
+                            </button>
+                            <span class="save-indicator" id="save-status"></span>
+                        </div>
+                    </div>
+
+                    <!-- Chat Panel -->
+                    <div id="chat-panel" class="chat-panel hidden">
+                        <div class="chat-header">
+                            <h4>Chat</h4>
+                            <button class="icon-btn-small" onclick="app.toggleChat()"><i data-lucide="x"></i></button>
+                        </div>
+                        <div id="chat-messages" class="chat-messages"></div>
+                        <div class="chat-input-area">
+                            <input type="text" id="chat-input" placeholder="Type a message..."
+                                onkeypress="app.handleChatKey(event)">
+                            <button class="icon-btn-small" onclick="app.sendChatMessage()"><i
+                                    data-lucide="send"></i></button>
+                        </div>
+                    </div>
+
+                    <div id="monaco-container"></div>
+                </section>
+
+                <!-- Resizer -->
+                <div id="editor-resizer" class="resizer"></div>
+
+                <!-- Preview -->
+                <aside class="preview-panel glass">
+                    <div class="preview-header">
+                        <h3>Preview</h3>
+                    </div>
+                    <div id="preview-container">
+                        <div class="preview-placeholder">
+                            <i data-lucide="eye"></i>
+                            <span>Select a .typ file</span>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+
+            <!-- CONFIG PAGE -->
+            <div class="page" id="page-config">
+                <div class="config-layout">
+                    <aside class="config-sidebar glass">
+                        <button class="config-tab active" data-tab="metadata">Metadata</button>
+                        <button class="config-tab" data-tab="constants">Theme & Display</button>
+                        <button class="config-tab" data-tab="hierarchy">Structure</button>
+                        <button class="config-tab" data-tab="schemes">Color Themes</button>
+                        <button class="config-tab" data-tab="snippets">Snippets</button>
+                        <button class="config-tab" data-tab="preface">Preface</button>
+                        <button class="config-tab" data-tab="ignored">Ignored</button>
+                        <button class="config-tab" data-tab="modules">Modules</button>
+                        <button class="config-tab" data-tab="session">Session</button>
+                    </aside>
+                    <section class="config-content glass" id="config-content">
+                        <!-- Dynamic content -->
+                    </section>
+                </div>
+            </div>
+        </div>
+
+        <!-- macOS DOCK -->
+        <div class="dock-container">
+            <div class="dock">
+                <div class="dock-item active" data-page="editor" onclick="app.showPage('editor')">
+                    <div class="dock-icon">
+                        <i data-lucide="code-2"></i>
+                    </div>
+                    <span class="dock-label">Editor</span>
+                    <span class="dock-dot"></span>
+                </div>
+                <div class="dock-item" data-page="config" onclick="app.showPage('config')">
+                    <div class="dock-icon">
+                        <i data-lucide="settings"></i>
+                    </div>
+                    <span class="dock-label">Settings</span>
+                    <span class="dock-dot"></span>
+                </div>
+                <div class="dock-separator"></div>
+                <div class="dock-item" onclick="app.openBuildModal()">
+                    <div class="dock-icon">
+                        <i data-lucide="package"></i>
+                    </div>
+                    <span class="dock-label">Build</span>
+                    <span class="dock-dot"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- BUILD MODAL -->
+        <div class="modal-overlay" id="build-modal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h2>Build Document</h2>
+                    <button class="modal-close" onclick="app.closeBuildModal()">
+                        <i data-lucide="x"></i>
+                    </button>
+                </div>
+
+                <div class="build-options" style="justify-content: flex-start; gap: 24px;">
+                    <label class="toggle-option">
+                        <input type="checkbox" id="opt-frontmatter" checked>
+                        <span>Frontmatter</span>
+                    </label>
+                    <label class="toggle-option">
+                        <input type="checkbox" id="opt-covers" checked>
+                        <span>Chapter Covers</span>
+                    </label>
+                </div>
+
+                <div class="build-grid glass" id="build-grid" style="max-height: 300px;"></div>
+
+                <div class="build-progress" id="build-progress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill" style="width: 0%;"></div>
+                    </div>
+                    <div class="progress-info">
+                        <span id="progress-page">Preparing...</span>
+                        <span id="progress-percent">0%</span>
+                    </div>
+                </div>
+
+                <div class="build-actions" style="margin-top: 24px;">
+                    <button class="btn btn-primary" id="build-btn" onclick="app.runBuild()">
+                        <i data-lucide="zap"></i>
+                        Build PDF
+                    </button>
+                </div>
+
+                <div class="build-log glass" id="build-log" style="margin-top: 16px; display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/collab.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+    </script>
+</body>
+
+</html>

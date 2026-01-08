@@ -6,7 +6,6 @@ import threading
 import concurrent.futures
 from pathlib import Path
 
-from .build import compile_target, get_pdf_page_count
 from ..config import PREFACE_FILE
 from ..utils import scan_content
 
@@ -177,6 +176,7 @@ class BuildManager:
     
     def _execute_parallel(self, to_run, task_map, projected_offsets, folder_flags, max_workers, callbacks):
         """Execute compilation tasks in parallel."""
+        from .build import compile_target, get_pdf_page_count
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_key = {}
             for key in to_run:

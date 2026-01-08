@@ -7,7 +7,8 @@ Noteworthy is a hybrid system combining a Python-based build orchestration layer
 The system consists of three main components:
 1.  **Python Orchestrator (`noteworthy.py`)**: Handles CLI arguments, TUI, configuration management, and build coordination.
 2.  **Core Parser (`noteworthy/core`)**: Logic for scanning the project structure, generating build plans, and executing Typst compilations.
-3.  **Typst Templates (`templates/`)**: A modular library of Typst components, layouts, and drawing tools.
+3.  **GUI Server (`noteworthy/gui`)**: A FastAPI-based backend and web frontend for visual editing and collaboration.
+4.  **Typst Templates (`templates/`)**: A modular library of Typst components, layouts, and drawing tools.
 
 ## The Build Process
 
@@ -29,6 +30,7 @@ The build workflow when running `python3 noteworthy.py` is as follows:
 -   `noteworthy/`: Python source code.
     -   `core/`: Build logic, file system syncing.
     -   `tui/`: Text User Interface components.
+    -   `gui/`: Web-based GUI server and static assets.
 -   `templates/`: Typst source code.
     -   `module/`: Functional modules (canvas, graph, etc.).
     -   `layouts/`: Page layouts (outline, etc.).

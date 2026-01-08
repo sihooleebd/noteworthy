@@ -8,6 +8,21 @@ import logging
 from pathlib import Path
 from ..config import BASE_DIR, BUILD_DIR, RENDERER_FILE, PREFACE_FILE
 
+# Find typst binary - check common locations if not in PATH
+def _find_typst():
+    # Try PATH first
+    typst = shutil.which('typst')
+    if typst:
+        return typst
+    # Common install locations
+    for loc in ['/opt/homebrew/bin/typst', '/usr/local/bin/typst', 
+                os.path.expanduser('~/.cargo/bin/typst')]:
+        if os.path.isfile(loc) and os.access(loc, os.X_OK):
+            return loc
+    return 'typst'  # Fallback, will error if not found
+
+TYPST_PATH = _find_typst()
+
 def get_pdf_page_count(pdf_path):
     try:
         result = subprocess.run(['pdfinfo', str(pdf_path)], capture_output=True, text=True, check=True)
@@ -24,7 +39,7 @@ class TypstBuildError(Exception):
         self.stderr = stderr
 
 def compile_target(target, output, page_offset=None, page_map=None, extra_flags=None, callback=None, log_callback=None):
-    cmd = ['typst', 'compile', str(RENDERER_FILE), str(output), '--root', str(BASE_DIR), '--input', f'target={target}']
+    cmd = [TYPST_PATH, 'compile', str(RENDERER_FILE), str(output), '--root', str(BASE_DIR), '--input', f'target={target}']
     if page_offset:
         cmd.extend(['--input', f'page-offset={page_offset}'])
     if page_map:
@@ -97,6 +112,8 @@ def merge_pdfs(pdf_files, output):
     logging.info(f"Merging {len(files)} files. First: {(files[0] if files else 'None')}")
     if not files:
         return False
+    
+    # Try pdfunite first
     if shutil.which('pdfunite'):
         logging.info('Using pdfunite')
         try:
@@ -104,13 +121,33 @@ def merge_pdfs(pdf_files, output):
             return 'pdfunite'
         except Exception as e:
             logging.error(f'pdfunite failed: {e}')
-    elif shutil.which('gs'):
+    
+    # Try ghostscript
+    if shutil.which('gs'):
         logging.info('Using ghostscript')
         try:
             subprocess.run(['gs', '-dBATCH', '-dNOPAUSE', '-q', '-sDEVICE=pdfwrite', f'-sOutputFile={output}'] + files, check=True, capture_output=True)
             return 'ghostscript'
         except Exception as e:
             logging.error(f'ghostscript failed: {e}')
+    
+    # Fallback: pypdf (pure Python - no external tools needed)
+    try:
+        from pypdf import PdfReader, PdfWriter
+        logging.info('Using pypdf')
+        writer = PdfWriter()
+        for f in files:
+            reader = PdfReader(f)
+            for page in reader.pages:
+                writer.add_page(page)
+        with open(str(output), 'wb') as out_file:
+            writer.write(out_file)
+        return 'pypdf'
+    except ImportError:
+        logging.error("No PDF merge tool available. Install pypdf: pip install pypdf")
+    except Exception as e:
+        logging.error(f'pypdf merge failed: {e}')
+    
     return None
 
 # Re-export BuildManager for backwards compatibility

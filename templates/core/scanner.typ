@@ -17,13 +17,13 @@
       pages: json(bytes(page-folders-str)),
     )
   } else {
-    // Fallback: generate 1-indexed page arrays based on hierarchy structure
-    // Pages are 1-indexed: ["1", "2", "3"...] not ["0", "1", "2"...]
+    // Fallback: generate basic page arrays based on hierarchy structure
+    // This is only used when chapter-folders/page-folders aren't passed
     let fallback-chapters = range(hierarchy.len()).map(i => str(i))
     let fallback-pages = {
       let result = (:)
       for (i, ch) in hierarchy.enumerate() {
-        // Use 0-based range to match file array indexing behavior
+        // Generate 0-indexed array as fallback (actual file info should come from inputs)
         result.insert(str(i), range(ch.pages.len()).map(j => str(j)))
       }
       result

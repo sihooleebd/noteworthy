@@ -1,143 +1,143 @@
 [
-    {
-        "title": "Architecture & Modules",
-        "summary": "Understanding Noteworthy's modular structure and file organization.",
-        "pages": [
-            {
-                "title": "Introduction"
-            },
-            {
-                "title": "File Structure"
-            },
-            {
-                "title": "Module Overview"
-            }
-        ]
-    },
-    {
-        "title": "Block Module",
-        "summary": "Semantic content blocks for educational documents.",
-        "pages": [
-            {
-                "title": "Block Fundamentals"
-            },
-            {
-                "title": "All Block Types"
-            }
-        ]
-    },
-    {
-        "title": "Shape Module",
-        "summary": "2D geometric primitives: points, lines, circles, polygons.",
-        "pages": [
-            {
-                "title": "Points & Lines"
-            },
-            {
-                "title": "Circles & Polygons"
-            },
-            {
-                "title": "Intersections & Constructions"
-            }
-        ]
-    },
-    {
-        "title": "Graph Module",
-        "summary": "Functions, vectors, and calculus operations.",
-        "pages": [
-            {
-                "title": "Function Plotting"
-            },
-            {
-                "title": "Vectors"
-            }
-        ]
-    },
-    {
-        "title": "Canvas Module",
-        "summary": "Plotting canvases for rendering shapes and graphs.",
-        "pages": [
-            {
-                "title": "Cartesian Canvas"
-            },
-            {
-                "title": "Polar & Trig Canvas"
-            },
-            {
-                "title": "3D Space Canvas"
-            }
-        ]
-    },
-    {
-        "title": "Data Module",
-        "summary": "Data visualization: tables, series, and curves.",
-        "pages": [
-            {
-                "title": "Tables"
-            },
-            {
-                "title": "Data Series & CSV"
-            },
-            {
-                "title": "Smooth Curves"
-            }
-        ]
-    },
-    {
-        "title": "Cover Module",
-        "summary": "Document covers and title pages.",
-        "pages": [
-            {
-                "title": "Cover Templates"
-            }
-        ]
-    },
-    {
-        "title": "Layout Module",
-        "summary": "Page layouts, outlines, and configuration.",
-        "pages": [
-            {
-                "title": "Layout & Config"
-            }
-        ]
-    },
-    {
-        "title": "Combi Module",
-        "summary": "Combinatorics visualizations: permutations, combinations, and counting.",
-        "pages": [
-            {
-                "title": "Combinatorics Visualizations"
-            }
-        ]
-    },
-    {
-        "title": "Trees Module",
-        "summary": "Visualizations for hierarchical data structures.",
-        "pages": [
-            {
-                "title": "Trees and Hierarchies"
-            }
-        ]
-    },
-    {
-        "title": "CS & Algorithms",
-        "summary": "Visualizations for data structures and algorithms.",
-        "pages": [
-            {
-                "title": "CS Data Structures"
-            },
-            {
-                "title": "Algorithms"
-            }
-        ]
-    },
-    {
-        "title": "Timeline Module",
-        "summary": "Chronological event timelines for notes.",
-        "pages": [
-            {
-                "title": "Timeline Examples"
-            }
-        ]
-    }
+  {
+    "title": "Architecture & Modules",
+    "summary": "Understanding Noteworthy's modular structure and file organization.",
+    "pages": [
+      {
+        "title": "Introduction"
+      },
+      {
+        "title": "File Structure"
+      },
+      {
+        "title": "Module Overview"
+      }
+    ]
+  },
+  {
+    "title": "Block Module",
+    "summary": "Semantic content blocks for educational documents.",
+    "pages": [
+      {
+        "title": "Block Fundamentals"
+      },
+      {
+        "title": "All Block Types"
+      }
+    ]
+  },
+  {
+    "title": "Shape Module",
+    "summary": "2D geometric primitives: points, lines, circles, polygons.",
+    "pages": [
+      {
+        "title": "Points & Lines"
+      },
+      {
+        "title": "Circles & Polygons"
+      },
+      {
+        "title": "Intersections & Constructions"
+      }
+    ]
+  },
+  {
+    "title": "Graph Module",
+    "summary": "Functions, vectors, and calculus operations.",
+    "pages": [
+      {
+        "title": "Function Plotting"
+      },
+      {
+        "title": "Vectors"
+      }
+    ]
+  },
+  {
+    "title": "Canvas Module",
+    "summary": "Plotting canvases for rendering shapes and graphs.",
+    "pages": [
+      {
+        "title": "Cartesian Canvas"
+      },
+      {
+        "title": "Polar & Trig Canvas"
+      },
+      {
+        "title": "3D Space Canvas"
+      }
+    ]
+  },
+  {
+    "title": "Data Module",
+    "summary": "Data visualization: tables, series, and curves.",
+    "pages": [
+      {
+        "title": "Tables"
+      },
+      {
+        "title": "Data Series & CSV"
+      },
+      {
+        "title": "Smooth Curves"
+      }
+    ]
+  },
+  {
+    "title": "Cover Module",
+    "summary": "Document covers and title pages.",
+    "pages": [
+      {
+        "title": "Cover Templates"
+      }
+    ]
+  },
+  {
+    "title": "Layout Module",
+    "summary": "Page layouts, outlines, and configuration.",
+    "pages": [
+      {
+        "title": "Layout & Config"
+      }
+    ]
+  },
+  {
+    "title": "Combi Module",
+    "summary": "Combinatorics visualizations: permutations, combinations, and counting.",
+    "pages": [
+      {
+        "title": "Combinatorics Visualizations"
+      }
+    ]
+  },
+  {
+    "title": "Trees Module",
+    "summary": "Visualizations for hierarchical data structures.",
+    "pages": [
+      {
+        "title": "Trees and Hierarchies"
+      }
+    ]
+  },
+  {
+    "title": "CS & Algorithms",
+    "summary": "Visualizations for data structures and algorithms.",
+    "pages": [
+      {
+        "title": "CS Data Structures"
+      },
+      {
+        "title": "Algorithms"
+      }
+    ]
+  },
+  {
+    "title": "Timeline Module",
+    "summary": "Chronological event timelines for notes.",
+    "pages": [
+      {
+        "title": "Timeline Examples"
+      }
+    ]
+  }
 ]
