@@ -48,6 +48,7 @@ class Document:
     path: str
     content: str
     version: int = 0
+    diagnostics: List[dict] = field(default_factory=list)
 
 
 class DocumentHub:
@@ -221,7 +222,16 @@ class DocumentHub:
                         
             except Exception as e:
                 print(f"[Hub] Error starting watch: {e}")
+            except Exception as e:
+                print(f"[Hub] Error starting watch: {e}")
         
+        # Send cached diagnostics to new user
+        if doc.diagnostics:
+            await user.websocket.send_text(json.dumps({
+                "type": "diagnostics",
+                "diagnostics": doc.diagnostics
+            }))
+            
         return doc
     
     async def disconnect(self, user_id: str, websocket: WebSocket = None):
@@ -256,6 +266,11 @@ class DocumentHub:
         
         for path in paths:
             diagnostics = await self._check_diagnostics(path)
+            
+            # Cache diagnostics
+            if path in self.documents:
+                self.documents[path].diagnostics = diagnostics
+                
             # Send to all users on this file
             await self._broadcast_to_file(path, {
                 "type": "diagnostics",
