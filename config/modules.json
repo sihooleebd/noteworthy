@@ -1,6 +1,6 @@
 {
     "meta": {
-        "commit": "9e2079db13c9d90a67e9f287eb4f6e22f6f6e422"
+        "commit": "68783483ad642cc6a2bb0c0b403df348129aa2b5"
     },
     "modules": {
         "layout": {
@@ -51,6 +51,10 @@
         "combi": {
             "source": "remote",
             "version": "0.1.0",
+            "status": "global"
+        },
+        "timeline": {
+            "source": "remote",
             "status": "global"
         }
     }

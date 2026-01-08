@@ -18,4 +18,5 @@
 #import "../module/graph/mod.typ": *  // graph
 #import "../module/layout/mod.typ": *  // layout
 #import "../module/shape/mod.typ": *  // shape
+#import "../module/timeline/mod.typ": *  // timeline
 #import "../module/trees/mod.typ": *  // trees

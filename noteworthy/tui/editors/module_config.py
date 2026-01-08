@@ -3,47 +3,51 @@ import json
 import shutil
 from pathlib import Path
 from ..base import ListEditor, TUI, LEFT_PAD, TOP_PAD
-from ...core.pm import get_installed_modules, save_modules_config, create_custom_module, check_dependencies, get_latest_commit_sha, get_commit_log, get_modules_meta, save_modules_meta, download_modules
+from ...core.pm import (
+    get_installed_modules, save_modules_config, create_custom_module, check_dependencies,
+    get_latest_commit_sha, get_commit_log, get_modules_meta, save_modules_meta,
+    download_modules, fetch_remote_modules, fetch_core_submodules, get_changed_files
+)
 from ...core.modules import generate_imports_file, get_module_conflicts
 from ..components.common import LineEditor
 from ...utils import register_key
 from ..keybinds import KeyBind
 
-STANDARD_MODULES = {
-    'layout', 'trees', 'shape', 'data', 'graph', 'block', 
-    'canvas', 'dsa', 'cover', 'combi'
-}
+MODULES_DIR = Path("templates/module")
 
 
 class ModuleConfigEditor(ListEditor):
-    """Module configuration editor with left-aligned design."""
+    """Module configuration editor with dynamic module discovery."""
     
     def __init__(self, scr):
         super().__init__(scr, "Module Configuration")
         self.modules = get_installed_modules()
         self.meta = get_modules_meta()
-        self.remote_index = {}
-        self._build_local_index()
+        self.remote_modules = []
+        self.core_submodules = []
         self.section_title = "Modules"
-        self._build_items()
         self.modified = False
         
         register_key(self.keymap, KeyBind(ord(' '), self.action_space, "Toggle Status"))
         register_key(self.keymap, KeyBind(ord('\n'), self.action_enter, "Action"))
         register_key(self.keymap, KeyBind(curses.KEY_ENTER, self.action_enter, "Action"))
+        register_key(self.keymap, KeyBind(ord('c'), self.action_show_conflicts, "Show Conflicts"))
         
         self.has_updates = False
         self.new_commit_sha = None
+        self.outdated_modules = set()
         self._check_updates_silent()
         
         register_key(self.keymap, KeyBind(ord('u'), self.action_update, "Update All"))
+        
+        self._build_local_index()
+        self._build_items()
 
     def _build_local_index(self):
         self.index = {}
-        mod_dir = Path("templates/module")
-        if mod_dir.exists():
-            for item in mod_dir.iterdir():
-                if item.is_dir() and not item.name.startswith('.'):
+        if MODULES_DIR.exists():
+            for item in MODULES_DIR.iterdir():
+                if item.is_dir() and not item.name.startswith('.') and item.name != 'core':
                     meta_file = item / "metadata.json"
                     entry = {
                         "name": item.name,
@@ -105,25 +109,38 @@ class ModuleConfigEditor(ListEditor):
                  self._build_items()
 
     def _build_items(self):
-        # ... (same as before) ...
         self.items = []
-        all_keys = set(self.modules.keys()) | set(self.index.keys())
-        standard = sorted([k for k in all_keys if k in STANDARD_MODULES])
-        custom = sorted([k for k in all_keys if k not in STANDARD_MODULES])
+        
+        # Get all module names
+        all_names = set(self.modules.keys()) | set(self.index.keys())
+        standard = sorted([n for n in all_names if self.modules.get(n, {}).get("source") != "local" 
+                          and self.index.get(n, {}).get("source") != "local"])
+        custom = sorted([n for n in all_names if self.modules.get(n, {}).get("source") == "local" 
+                        or self.index.get(n, {}).get("source") == "local"])
         
         for name in standard:
             state = self.modules.get(name, {"status": "disabled", "source": "remote"})
             self.items.append((name, state, False, False))
-            
+        
+        # Custom/local modules
         if custom:
-            self.items.append(("", None, False, False))
+            self.items.append(("", None, False, False))  # Separator
             for name in custom:
                 state = self.modules.get(name, {"status": "disabled", "source": "local"})
                 self.items.append((name, state, True, False))
-                
+        
+        # Create action
         self.items.append(("+ Create Custom Module...", None, False, True))
     
-    # ... (rest of class) ...
+    def _get_status_str(self, state):
+        if not state:
+            return ""
+        s = state.get("status", "disabled")
+        if s == "global":
+            return "GLOBAL"
+        if s == "qualified":
+            return "QUALIFIED"
+        return "DISABLED"
 
     def refresh(self):
         h, w = self.scr.getmaxyx()
@@ -172,7 +189,7 @@ class ModuleConfigEditor(ListEditor):
             # Draw Status
             if not is_action and state:
                 status = state.get("status", "disabled")
-                status_str = status.upper()
+                status_str = self._get_status_str(state)
                 
                 status_attr = 0
                 if is_selected:
@@ -187,7 +204,7 @@ class ModuleConfigEditor(ListEditor):
 
                 TUI.safe_addstr(self.scr, y, LEFT_PAD + 35, status_str, status_attr)
 
-                if self.has_updates and name in getattr(self, 'outdated_modules', set()):
+                if self.has_updates and name in self.outdated_modules:
                     TUI.safe_addstr(self.scr, y, LEFT_PAD + 45, "[U]", curses.color_pair(3)|curses.A_BOLD)
 
         # Conflicts warning
@@ -197,9 +214,9 @@ class ModuleConfigEditor(ListEditor):
                            curses.color_pair(3) | curses.A_BOLD)
         
         # Footer
-        footer = "Space Toggle  Enter Details  u Update  Esc Back"
+        footer = "Space Toggle  Enter Details  c Conflicts  Esc Back"
         if self.has_updates:
-            footer = "u Update All  " + footer.replace("u Update  ", "")
+            footer = "u Update  " + footer
         TUI.safe_addstr(self.scr, h - 2, LEFT_PAD, footer, 
                        curses.color_pair(4) | curses.A_DIM)
         
@@ -232,8 +249,8 @@ class ModuleConfigEditor(ListEditor):
                     return
         
         if name not in self.modules:
-            self.modules[name] = state
-            
+            self.modules[name] = state.copy()
+        
         self.modules[name]["status"] = nxt
         self.modified = True
         self._build_items()
@@ -244,6 +261,24 @@ class ModuleConfigEditor(ListEditor):
             self._create_custom()
         elif is_custom:
             self._rename_custom(name)
+
+    def action_show_conflicts(self, ctx):
+        """Show symbol conflicts in a dialog."""
+        conflicts = get_module_conflicts()
+        if not conflicts:
+            TUI.show_message(self.scr, "No Conflicts", "No symbol conflicts detected!")
+            return
+        
+        # Build conflict message
+        lines = []
+        for sym, modules in sorted(conflicts.items()):
+            lines.append(f"  {sym}: {', '.join(modules)}")
+        
+        msg = f"{len(conflicts)} symbol conflicts:\n" + "\n".join(lines[:15])
+        if len(lines) > 15:
+            msg += f"\n...and {len(lines) - 15} more"
+        
+        TUI.show_message(self.scr, "Symbol Conflicts", msg)
 
     def _get_enabled_modules(self):
         return [k for k, v in self.modules.items() if v.get("status") != "disabled"]
@@ -259,7 +294,7 @@ class ModuleConfigEditor(ListEditor):
     def _rename_custom(self, old_name):
         new_name = LineEditor(self.scr, title=f"Rename '{old_name}'", initial_value=old_name).run()
         if new_name and new_name != old_name:
-            if new_name in self.modules or (Path("templates/module") / new_name).exists():
+            if new_name in self.modules or (MODULES_DIR / new_name).exists():
                 TUI.show_message(self.scr, "Error", "Name already exists!")
                 return
             
@@ -267,27 +302,29 @@ class ModuleConfigEditor(ListEditor):
                 self.modules[new_name] = self.modules.pop(old_name)
             if old_name in self.index:
                 self.index[new_name] = self.index.pop(old_name)
-                
-            old_path = Path("templates/module") / old_name
+            
+            old_path = MODULES_DIR / old_name
             if old_path.exists():
-                shutil.move(old_path, Path("templates/module") / new_name)
-                
+                shutil.move(old_path, MODULES_DIR / new_name)
+            
             self.modified = True
             self._build_items()
 
     def save(self):
         if self.modified:
+            # Create local modules
             for name, state in self.modules.items():
                 if state.get("source") == "local":
-                    mod_path = Path("templates/module") / name
+                    mod_path = MODULES_DIR / name
                     if not mod_path.exists():
                         create_custom_module(name)
             
+            # Download missing remote modules
             to_download = []
             for name, state in self.modules.items():
                 if state.get("status") == "disabled":
                     continue
-                mod_path = Path("templates/module") / name
+                mod_path = MODULES_DIR / name
                 if not mod_path.exists():
                     if state.get("source") == "local":
                         create_custom_module(name)
@@ -304,5 +341,6 @@ class ModuleConfigEditor(ListEditor):
                     self.scr.refresh()
                 download_modules(to_download, progress_cb)
             
+            save_modules_config(self.modules)
             generate_imports_file()
         return True

@@ -39,3 +39,5 @@ content/**/*.pdf
 
 # Tests
 tests/
+templates/core/imports.typ
+config/modules.json

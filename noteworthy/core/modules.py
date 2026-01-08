@@ -19,11 +19,6 @@ def generate_imports_file():
     lines.append("// =====================================================")
     lines.append("")
     
-    # Always import theme first
-    lines.append("// Theme")
-    lines.append('#import "../styles/theme.typ": theme')
-    lines.append("")
-    
     # Always import core modules (from core/ directory)
     lines.append("// Core Modules (always enabled)")
     if CORE_DIR.exists():

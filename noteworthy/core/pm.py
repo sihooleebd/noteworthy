@@ -1,6 +1,7 @@
 import json
 import urllib.request
 import urllib.error
+import base64
 from pathlib import Path
 from ..utils import load_json_safe
 from ..config import MODULES_CONFIG_FILE
@@ -10,48 +11,37 @@ REPO_OWNER = "sihooleebd"
 REPO_NAME = "noteworthy-modules"
 API_BASE = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents"
 
-def fetch_index():
-    """Fetch list of available modules from remote using GitHub API."""
+def fetch_remote_modules():
+    """Fetch list of available module directories from remote (excludes 'core')."""
     try:
         req = urllib.request.Request(API_BASE)
         req.add_header('User-Agent', 'Noteworthy-PM')
         with urllib.request.urlopen(req, timeout=5) as response:
             contents = json.loads(response.read().decode())
-            
-        index = {}
+        
+        modules = []
+        for item in contents:
+            if item['type'] == 'dir' and not item['name'].startswith('.') and item['name'] != 'core':
+                modules.append(item['name'])
+        return sorted(modules)
+    except Exception:
+        return []
+
+def fetch_core_submodules():
+    """Fetch list of submodules inside 'core' folder."""
+    try:
+        req = urllib.request.Request(f"{API_BASE}/core")
+        req.add_header('User-Agent', 'Noteworthy-PM')
+        with urllib.request.urlopen(req, timeout=5) as response:
+            contents = json.loads(response.read().decode())
+        
+        submodules = []
         for item in contents:
             if item['type'] == 'dir' and not item['name'].startswith('.'):
-                name = item['name']
-                idx_entry = {
-                    "name": name,
-                    "description": "",
-                    "dependencies": [],
-                    "exports": [],
-                    "source": "remote"
-                }
-                
-                # Try to fetch metadata.json for this module
-                try:
-                    meta_url = f"{API_BASE}/{name}/metadata.json"
-                    meta_req = urllib.request.Request(meta_url)
-                    meta_req.add_header('User-Agent', 'Noteworthy-PM')
-                    with urllib.request.urlopen(meta_req, timeout=3) as meta_resp:
-                        meta_data = json.loads(meta_resp.read().decode())
-                        # GitHub API returns base64 encoded content
-                        if 'content' in meta_data:
-                            import base64
-                            content = base64.b64decode(meta_data['content']).decode('utf-8')
-                            meta = json.loads(content)
-                            idx_entry["description"] = meta.get("description", "")
-                            idx_entry["dependencies"] = meta.get("dependencies", [])
-                            idx_entry["exports"] = meta.get("exports", [])
-                except:
-                    pass  # No metadata, use defaults
-                
-                index[name] = idx_entry
-        return index
-    except Exception as e:
-        return {}  # Offline or rate limited
+                submodules.append(item['name'])
+        return sorted(submodules)
+    except Exception:
+        return []
 
 def get_installed_modules():
     if not MODULES_CONFIG_FILE.exists():
@@ -59,20 +49,18 @@ def get_installed_modules():
     return load_json_safe(MODULES_CONFIG_FILE).get("modules", {})
 
 def save_modules_config(modules):
+    config = load_json_safe(MODULES_CONFIG_FILE) if MODULES_CONFIG_FILE.exists() else {}
+    config["modules"] = modules
     MODULES_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(MODULES_CONFIG_FILE, "w") as f:
-        json.dump({"modules": modules}, f, indent=4)
+        json.dump(config, f, indent=4)
 
 def check_dependencies(module_name, index, enabled_modules):
     if module_name not in index:
         return []
     mod_meta = index[module_name]
     deps = mod_meta.get("dependencies", [])
-    missing = []
-    for d in deps:
-        if d not in enabled_modules:
-            missing.append(d)
-    return missing
+    return [d for d in deps if d not in enabled_modules]
 
 def create_custom_module(name):
     mod_dir = MODULES_DIR / name
@@ -80,76 +68,94 @@ def create_custom_module(name):
         return False
     mod_dir.mkdir(parents=True, exist_ok=True)
     (mod_dir / "mod.typ").write_text(f"// Custom module: {name}\n#let hello() = [Hello from {name}!]\n")
-    meta = {
-        "name": name,
-        "version": "0.1.0",
-        "dependencies": [],
-        "exports": ["hello"]
-    }
+    meta = {"name": name, "version": "0.1.0", "dependencies": [], "exports": ["hello"]}
     (mod_dir / "metadata.json").write_text(json.dumps(meta, indent=4))
     return True
 
-def _download_file(url, params):
+def _download_file(url):
     try:
         req = urllib.request.Request(url)
         req.add_header('User-Agent', 'Noteworthy-PM')
         with urllib.request.urlopen(req, timeout=10) as r:
-            content = r.read()
-            return content
+            return r.read()
     except:
         return None
 
-def _recurse_download(api_url, local_base, callback, current_msg):
+def _recurse_download(api_url, local_base, callback, msg_prefix):
     """Recursively download directory contents from GitHub API."""
     try:
         req = urllib.request.Request(api_url)
         req.add_header('User-Agent', 'Noteworthy-PM')
         with urllib.request.urlopen(req, timeout=10) as r:
             items = json.loads(r.read().decode())
-            
+        
         for item in items:
             name = item['name']
-            if name.startswith('.'): continue
+            if name.startswith('.'):
+                continue
             
             if item['type'] == 'file':
-                if callback: callback(f"{current_msg}: {name}")
-                
-                content = _download_file(item['download_url'], None)
+                if callback:
+                    callback(f"{msg_prefix}: {name}")
+                content = _download_file(item['download_url'])
                 if content is not None:
                     dest = local_base / name
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_bytes(content)
-                    
             elif item['type'] == 'dir':
-                _recurse_download(item['url'], local_base / name, callback, current_msg)
-                
+                _recurse_download(item['url'], local_base / name, callback, msg_prefix)
     except Exception as e:
-        if callback: callback(f"Error: {e}")
+        if callback:
+            callback(f"Error: {e}")
 
 def download_modules(modules_to_download, callback=None):
-    """
-    Download a list of module names from remote.
-    modules_to_download: list of strings (module names)
-    callback: function(current_status_string)
-    """
+    """Download a list of module names from remote."""
     total = len(modules_to_download)
     for i, name in enumerate(modules_to_download, 1):
-        if callback: callback(f"Downloading {name} ({i}/{total})...")
+        if callback:
+            callback(f"Downloading {name} ({i}/{total})...")
         
-        # Target dir
         target_dir = MODULES_DIR / name
-        # We don't wipe it, we overwrite/merge
         target_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Use API to list contents of the module folder
-        api_url = f"{API_BASE}/{name}" 
+        api_url = f"{API_BASE}/{name}"
         
         try:
-             _recurse_download(api_url, target_dir, callback, f"Downloading {name}")
+            _recurse_download(api_url, target_dir, callback, f"Downloading {name}")
         except Exception as e:
-             if callback: callback(f"Failed {name}: {e}")
+            if callback:
+                callback(f"Failed {name}: {e}")
+    
+    if callback:
+        callback("Download Complete.")
 
-    if callback: callback("Download Complete.")
+def get_changed_files(old_sha, new_sha):
+    """Get list of changed file paths between two commits."""
+    if not old_sha or not new_sha:
+        return None  # Force full download
+    
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/compare/{old_sha}...{new_sha}"
+    try:
+        req = urllib.request.Request(url)
+        req.add_header('User-Agent', 'Noteworthy-PM')
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode())
+        
+        changed = set()
+        for f in data.get('files', []):
+            path = f['filename']
+            parts = path.split('/')
+            if len(parts) >= 1:
+                changed.add(parts[0])  # Top-level module name
+        return changed
+    except:
+        return None
+
+def download_changed_modules(modules, changed_set, callback=None):
+    """Download only modules that have changed."""
+    to_download = [m for m in modules if m in changed_set]
+    if to_download:
+        download_modules(to_download, callback)
+    return to_download
 
     # Update SHAs for downloaded modules
     # We need to fetch the tree again or cache it to get the new SHAs? 
@@ -190,13 +196,10 @@ def get_latest_commit_sha():
 def get_commit_log(since_sha, until_sha):
     """Fetch commit messages between two SHAs."""
     if not since_sha:
-        # If no history, just show latest or a few?
-        # api.github.com/repos/.../commits?per_page=5
         url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/commits?per_page=5"
     else:
-        # compare view: api.github.com/repos/.../compare/base...head
         url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/compare/{since_sha}...{until_sha}"
-        
+    
     try:
         req = urllib.request.Request(url)
         req.add_header('User-Agent', 'Noteworthy-PM')
@@ -204,15 +207,15 @@ def get_commit_log(since_sha, until_sha):
             data = json.loads(r.read().decode())
             
             commits = []
-            if 'commits' in data: # Compare view
+            if 'commits' in data:
                 for c in data['commits']:
                     msg = c['commit']['message'].split('\n')[0]
                     commits.append(f"- {msg}")
-            elif isinstance(data, list): # List view (initial)
+            elif isinstance(data, list):
                 for c in data:
                     msg = c['commit']['message'].split('\n')[0]
                     commits.append(f"- {msg}")
-            return filter(None, commits) # list
+            return list(filter(None, commits))
     except:
         return ["Error fetching commit log"]
 
@@ -222,7 +225,7 @@ def get_modules_meta():
     return load_json_safe(MODULES_CONFIG_FILE).get("meta", {})
 
 def save_modules_meta(meta):
-    config = load_json_safe(MODULES_CONFIG_FILE)
+    config = load_json_safe(MODULES_CONFIG_FILE) if MODULES_CONFIG_FILE.exists() else {}
     config["meta"] = meta
     MODULES_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(MODULES_CONFIG_FILE, "w") as f:
