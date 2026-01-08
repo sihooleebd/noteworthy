@@ -45,6 +45,76 @@ async def startup_event():
         )
             
     preview_manager.add_callback(on_preview_bridge)
+    
+    # Sanity check modules.json
+    validate_modules_json()
+
+
+def validate_modules_json():
+    """Validate and recover modules.json if corrupted."""
+    if not MODULES_CONFIG_FILE.exists():
+        print("[Startup] modules.json not found, will be created on first use")
+        return
+    
+    try:
+        data = json.loads(MODULES_CONFIG_FILE.read_text())
+        
+        # Validate structure
+        if not isinstance(data, dict):
+            raise ValueError("modules.json root must be an object")
+        if 'modules' not in data or not isinstance(data.get('modules'), dict):
+            raise ValueError("modules.json must have 'modules' object")
+        
+        print(f"[Startup] modules.json validated: {len(data['modules'])} modules")
+        
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"[Startup] WARNING: modules.json is corrupted ({e}). Regenerating...")
+        
+        # Backup corrupted file
+        backup_path = MODULES_CONFIG_FILE.with_suffix('.json.bak')
+        try:
+            shutil.copy2(MODULES_CONFIG_FILE, backup_path)
+            print(f"[Startup] Backed up corrupted file to {backup_path.name}")
+        except Exception:
+            pass
+        
+        # Regenerate from disk state
+        regenerate_modules_json()
+
+
+def regenerate_modules_json():
+    """Regenerate modules.json by scanning templates/module directory."""
+    modules_dir = BASE_DIR / "templates/module"
+    modules = {}
+    
+    if modules_dir.exists():
+        for item in modules_dir.iterdir():
+            if item.is_dir() and not item.name.startswith('.'):
+                if item.name == 'core':
+                    # Scan core modules
+                    for core_item in item.iterdir():
+                        if core_item.is_dir():
+                            modules[f"core/{core_item.name}"] = {
+                                "source": "local",
+                                "status": "installed"
+                            }
+                else:
+                    modules[item.name] = {
+                        "source": "local",
+                        "status": "installed"
+                    }
+    
+    new_data = {
+        "meta": {"recovered": True},
+        "modules": modules
+    }
+    
+    try:
+        MODULES_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        MODULES_CONFIG_FILE.write_text(json.dumps(new_data, indent=4))
+        print(f"[Startup] Regenerated modules.json with {len(modules)} modules")
+    except Exception as e:
+        print(f"[Startup] ERROR: Failed to regenerate modules.json: {e}")
 
 
 @app.websocket("/ws/doc")
@@ -130,10 +200,15 @@ STATIC_DIR = Path(__file__).parent / "static"
 # ============================================================
 
 @app.get("/api/file")
-def get_file(path: str):
-    """Read a file relative to project root."""
+def get_file(path: str, raw: int = 0):
+    """Read a file relative to project root. If raw=1, return file directly."""
     target = BASE_DIR / path
     if target.exists() and target.is_file():
+        if raw:
+            # Return file directly for binary content (PDF, images)
+            import mimetypes
+            mime_type, _ = mimetypes.guess_type(str(target))
+            return FileResponse(target, media_type=mime_type or 'application/octet-stream')
         try:
             return {"content": target.read_text(encoding='utf-8')}
         except:
@@ -149,6 +224,32 @@ def save_file(data: dict = Body(...)):
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding='utf-8')
     return {"success": True}
+
+@app.post("/api/delete")
+def delete_file(data: dict = Body(...)):
+    """Delete a file relative to project root."""
+    path = data.get("path")
+    if not path:
+        return {"success": False, "error": "No path provided"}
+    
+    target = BASE_DIR / path
+    if not target.exists():
+        return {"success": False, "error": "File not found"}
+    
+    # Security check - ensure path is within project
+    try:
+        target.resolve().relative_to(BASE_DIR.resolve())
+    except ValueError:
+        return {"success": False, "error": "Invalid path"}
+    
+    try:
+        if target.is_file():
+            target.unlink()
+        elif target.is_dir():
+            shutil.rmtree(target)
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 # ============================================================
 # CONFIG API - Specific config file endpoints

@@ -202,26 +202,27 @@ class DocumentHub:
                 self.preview_manager.start_watch(path)
                 
                 # Send current cached state to this user immediately
-                # Otherwise they wait until next edit to see anything
-                status = self.preview_manager.get_status(path)
-                if status['pages']:
-                    updates = []
-                    for page in status['pages']:
-                        svg_bytes = self.preview_manager.get_image(path, page)
-                        if svg_bytes:
-                            updates.append({
-                                'page': page, 
-                                'svg': svg_bytes.decode('utf-8')
-                            })
-                    
-                    if updates:
-                        await user.websocket.send_text(json.dumps({
-                            "type": "preview",
-                            "updates": updates
-                        }))
+                # Retry a few times if cache is empty (typst might still be compiling)
+                for _ in range(10):  # Try up to 10 times = ~2 seconds
+                    await asyncio.sleep(0.2)
+                    status = self.preview_manager.get_status(path)
+                    if status['pages']:
+                        updates = []
+                        for page in status['pages']:
+                            svg_bytes = self.preview_manager.get_image(path, page)
+                            if svg_bytes:
+                                updates.append({
+                                    'page': page, 
+                                    'svg': svg_bytes.decode('utf-8')
+                                })
                         
-            except Exception as e:
-                print(f"[Hub] Error starting watch: {e}")
+                        if updates:
+                            await user.websocket.send_text(json.dumps({
+                                "type": "preview",
+                                "updates": updates
+                            }))
+                            break  # Exit retry loop once we have updates
+                        
             except Exception as e:
                 print(f"[Hub] Error starting watch: {e}")
         

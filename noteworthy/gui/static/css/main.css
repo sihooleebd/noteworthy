@@ -128,6 +128,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    min-height: 56px;
+    box-sizing: border-box;
 }
 
 .sidebar-header h3 {
@@ -214,6 +216,8 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
+    min-height: 56px;
+    box-sizing: border-box;
 }
 
 .editor-filename {
@@ -300,6 +304,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    min-height: 56px;
+    box-sizing: border-box;
 }
 
 .preview-header h3 {
@@ -1661,6 +1667,8 @@ select option {
     justify-content: center;
     gap: -8px;
     flex: 1;
+    position: relative;
+    z-index: 9999999;
 }
 
 .user-avatar {
@@ -1677,11 +1685,35 @@ select option {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     margin-left: -8px;
     position: relative;
-    cursor: default;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
+
+.user-avatar:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    z-index: 20;
+}
+
 
 .user-avatar:first-child {
     margin-left: 0;
+}
+
+/* Unread Badge */
+.unread-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background-color: var(--accent);
+    /* Or red if preferred, but accent fits theme */
+    background-color: #ff4d4f;
+    /* Using red for distinct visibility */
+    border-radius: 50%;
+    border: 1px solid var(--bg-base);
+    box-shadow: 0 0 0 1px var(--bg-surface);
 }
 
 /* Remote Cursor */

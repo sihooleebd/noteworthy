@@ -62,8 +62,12 @@ class BuildManager:
         max_workers = opts.get('threads', os.cpu_count() or 1)
         flags = opts.get('typst_flags', [])
         
-        # Scan content/ folder to get sorted folder names
-        ch_folders, pg_folders = scan_content()
+        # Use provided folders if available, otherwise scan
+        ch_folders = opts.get('ch_folders')
+        pg_folders = opts.get('pg_folders')
+        
+        if not ch_folders or not pg_folders:
+            ch_folders, pg_folders = scan_content()
         
         # Add folder info to flags (passed to all compile calls)
         folder_flags = flags.copy()
@@ -71,7 +75,9 @@ class BuildManager:
         folder_flags.extend(['--input', f'page-folders={json.dumps(pg_folders)}'])
         
         # Build task list
+        callbacks.get('on_log', lambda m, o: None)(f"Building {len(chapters)} chapters (parallel)", True)
         tasks = self._create_task_list(chapters, config, opts, ch_folders, pg_folders)
+        callbacks.get('on_log', lambda m, o: None)(f"Generated {len(tasks)} tasks", True)
         
         task_map = {t[0]: t for t in tasks}
         ordered_keys = [t[0] for t in tasks]
@@ -123,19 +129,32 @@ class BuildManager:
             if config.get('display-outline', True):
                 tasks.append(('outline', 'front', 'outline', self.build_dir / '02_outline.pdf', 'TOC'))
         
+        selected_set = set(opts.get('selected_pages', []))
+        use_selection = 'selected_pages' in opts
+
         for ci, ch in chapters:
             ch_folder = ch_folders[ci] if ci < len(ch_folders) else str(ci)
             ch_key = f'chapter-{ci}'
-            if config.get('display-chap-cover', True):
-                tasks.append((ch_key, 'chapter', f'chapter-{ci}', 
-                             self.build_dir / f'10_chapter_{ci}_cover.pdf', f"Chapter {ch_folder}"))
             
+            # Filter pages based on selection
+            pages_to_build = []
             pg_files = pg_folders.get(str(ci), [])
+            
             for ai, p in enumerate(ch['pages']):
-                pg_file = pg_files[ai] if ai < len(pg_files) else str(ai)
-                key = f'{ci}/{ai}'
-                tasks.append((key, 'section', key, 
-                             self.build_dir / f'20_page_{ci}_{ai}.pdf', f"Section {pg_file}: {p['title']}"))
+                if use_selection and (ci, ai) not in selected_set:
+                    continue
+                pages_to_build.append((ai, p))
+
+            if pages_to_build:
+                if config.get('display-chap-cover', True):
+                    tasks.append((ch_key, 'chapter', f'chapter-{ci}', 
+                                 self.build_dir / f'10_chapter_{ci}_cover.pdf', f"Chapter {ch_folder}"))
+                
+                for ai, p in pages_to_build:
+                    pg_file = pg_files[ai] if ai < len(pg_files) else str(ai)
+                    key = f'{ci}/{ai}'
+                    tasks.append((key, 'section', key, 
+                                 self.build_dir / f'20_page_{ci}_{ai}.pdf', f"Section {pg_file}: {p['title']}"))
                 
         return tasks
     

@@ -55,34 +55,19 @@
                         <div class="editor-actions">
                             <div class="theme-toggle">
                                 <select id="editor-theme" onchange="app.setEditorTheme(this.value)">
-                                    <option value="vs-dark">Dark</option>
+                                    <option value="noteworthy-dark" selected>Luxe Dark</option>
+                                    <option value="vs-dark">VS Dark</option>
                                     <option value="vs-light">Light</option>
                                     <option value="hc-black">High Contrast</option>
                                 </select>
                             </div>
-                            <button class="icon-btn" onclick="app.toggleChat()" title="Chat" id="chat-toggle-btn"
-                                style="position: relative;">
-                                <i data-lucide="message-square"></i>
-                                <span class="unread-badge" style="display: none;"></span>
-                            </button>
+
                             <span class="save-indicator" id="save-status"></span>
                         </div>
                     </div>
 
                     <!-- Chat Panel -->
-                    <div id="chat-panel" class="chat-panel hidden">
-                        <div class="chat-header">
-                            <h4>Chat</h4>
-                            <button class="icon-btn-small" onclick="app.toggleChat()"><i data-lucide="x"></i></button>
-                        </div>
-                        <div id="chat-messages" class="chat-messages"></div>
-                        <div class="chat-input-area">
-                            <input type="text" id="chat-input" placeholder="Type a message..."
-                                onkeypress="app.handleChatKey(event)">
-                            <button class="icon-btn-small" onclick="app.sendChatMessage()"><i
-                                    data-lucide="send"></i></button>
-                        </div>
-                    </div>
+
 
                     <div id="monaco-container"></div>
                 </section>
@@ -187,12 +172,21 @@
                     <span class="dock-label">Settings</span>
                     <span class="dock-dot"></span>
                 </div>
-                <div class="dock-separator"></div>
+
                 <div class="dock-item" data-page="build" onclick="app.showPage('build')">
                     <div class="dock-icon">
                         <i data-lucide="package"></i>
                     </div>
                     <span class="dock-label">Build</span>
+                    <span class="dock-dot"></span>
+                </div>
+                <!-- Chat Dock Item -->
+                <div class="dock-item" id="dock-chat-btn" onclick="app.toggleChat()">
+                    <div class="dock-icon" style="position: relative;">
+                        <i data-lucide="message-square"></i>
+                        <span class="unread-badge" id="chat-unread-badge" style="display: none;"></span>
+                    </div>
+                    <span class="dock-label">Chat</span>
                     <span class="dock-dot"></span>
                 </div>
             </div>
@@ -253,6 +247,19 @@
             <i data-lucide="trash-2"></i>
             Delete
         </button>
+    </div>
+
+    <!-- GLOBAL CHAT PANEL -->
+    <div id="chat-panel" class="chat-panel hidden" style="position: fixed; bottom: 80px; right: 20px; z-index: 1000;">
+        <div class="chat-header">
+            <h4>Chat</h4>
+            <button class="icon-btn-small" onclick="app.toggleChat()"><i data-lucide="x"></i></button>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-area">
+            <input type="text" id="chat-input" placeholder="Type a message..." onkeypress="app.handleChatKey(event)">
+            <button class="icon-btn-small" onclick="app.sendChatMessage()"><i data-lucide="send"></i></button>
+        </div>
     </div>
 
     <!-- Hidden file input for uploads -->

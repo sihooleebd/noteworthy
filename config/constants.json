@@ -11,7 +11,7 @@
   "display-chap-cover": true,
   "box-margin": "5pt",
   "box-inset": "15pt",
-  "display-mode": "aether",
+  "display-mode": "print",
   "pad-chapter-id": true,
   "pad-page-id": true,
   "heading-numbering": "1.1",

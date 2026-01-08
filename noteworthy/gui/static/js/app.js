@@ -73,13 +73,57 @@ const app = {
         // Debounced content sync (sends full content after pause)
         this.debouncedSyncContent = this.debounce(() => this.syncContent(), 150);
 
+
         // Monaco Editor with saved theme
         require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
         require(['vs/editor/editor.main'], () => {
+            // Define luxurious black theme
+            monaco.editor.defineTheme('noteworthy-dark', {
+                base: 'vs-dark',
+                inherit: true,
+                rules: [
+                    { token: '', foreground: 'e0e0e0', background: '000000' },
+                    { token: 'comment', foreground: '6a6a6a', fontStyle: 'italic' },
+                    { token: 'keyword', foreground: 'c792ea', fontStyle: 'bold' },
+                    { token: 'string', foreground: 'c3e88d' },
+                    { token: 'number', foreground: 'f78c6c' },
+                    { token: 'type', foreground: 'ffcb6b' },
+                    { token: 'function', foreground: '82aaff' },
+                    { token: 'variable', foreground: 'f07178' },
+                    { token: 'constant', foreground: '89ddff' },
+                    { token: 'operator', foreground: '89ddff' },
+                    { token: 'tag', foreground: 'f07178' },
+                    { token: 'attribute.name', foreground: 'ffcb6b' },
+                    { token: 'attribute.value', foreground: 'c3e88d' },
+                ],
+                colors: {
+                    'editor.background': '#000000',
+                    'editor.foreground': '#ffffff',
+                    'editor.lineHighlightBackground': '#0a0a0a',
+                    'editor.selectionBackground': '#333333',
+                    'editor.inactiveSelectionBackground': '#222222',
+                    'editorCursor.foreground': '#ffffff',
+                    'editorWhitespace.foreground': '#222222',
+                    'editorLineNumber.foreground': '#444444',
+                    'editorLineNumber.activeForeground': '#888888',
+                    'editorIndentGuide.background': '#1a1a1a',
+                    'editorIndentGuide.activeBackground': '#333333',
+                    'editor.selectionHighlightBackground': '#2a2a2a',
+                    'editorBracketMatch.background': '#333333',
+                    'editorBracketMatch.border': '#555555',
+                    'scrollbarSlider.background': '#222222',
+                    'scrollbarSlider.hoverBackground': '#333333',
+                    'scrollbarSlider.activeBackground': '#444444',
+                }
+            });
+
+            // Use custom theme by default
+            const themeToUse = this.state.editorTheme === 'vs-dark' ? 'noteworthy-dark' : this.state.editorTheme;
+
             this.state.editor = monaco.editor.create(document.getElementById('monaco-container'), {
                 value: '',
                 language: 'markdown',
-                theme: this.state.editorTheme,
+                theme: themeToUse,
                 automaticLayout: true,
                 fontSize: 14,
                 fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
@@ -129,6 +173,34 @@ const app = {
 
         // Initialize resizer
         this.initResizer();
+
+        // ESC key handler for saving config changes
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                // Save current config tab on ESC
+                const activePage = document.querySelector('.page.active');
+                if (activePage && activePage.id === 'page-config') {
+                    this.saveCurrentConfigTab();
+                    this.showSaveStatus('Changes saved');
+                }
+            }
+        });
+    },
+
+    saveCurrentConfigTab: function () {
+        // Find active config tab and save
+        const activeTab = document.querySelector('.config-tab.active');
+        if (!activeTab) return;
+
+        const tabId = activeTab.dataset.tab;
+        switch (tabId) {
+            case 'metadata': this.updateMetadata(); break;
+            case 'constants': this.updateConstants(); break;
+            case 'hierarchy': this.saveHierarchy(); break;
+            case 'snippets': this.saveSnippets(); break;
+            case 'preface': this.savePreface(); break;
+            case 'ignored': this.saveIgnored(); break;
+        }
     },
 
     initResizer: function () {
@@ -218,47 +290,19 @@ const app = {
     refreshTree: async function () {
         const res = await fetch('/api/tree');
         const data = await res.json();
+
+        // Cache tree data for instant folder toggling
+        this.state.treeData = data;
+
         const container = document.getElementById('file-tree');
         container.innerHTML = '';
-
-        const render = (items, depth) => {
-            const div = document.createElement('div');
-            items.forEach(item => {
-                const el = document.createElement('div');
-                el.className = 'tree-item';
-                el.style.paddingLeft = `${depth * 16 + 12}px`;
-
-                if (item.is_dir) {
-                    // Folder with toggle
-                    const isExpanded = this.state.expandedFolders?.[item.path] !== false; // Default expanded
-                    el.innerHTML = `<i data-lucide="${isExpanded ? 'chevron-down' : 'chevron-right'}" class="tree-arrow"></i><i data-lucide="folder" class="tree-folder"></i> ${item.name}`;
-                    el.onclick = (e) => {
-                        e.stopPropagation();
-                        this.toggleFolder(item.path);
-                    };
-                    div.appendChild(el);
-
-                    if (item.children && isExpanded) {
-                        const childDiv = render(item.children, depth + 1);
-                        childDiv.dataset.folder = item.path;
-                        div.appendChild(childDiv);
-                    }
-                } else {
-                    el.innerHTML = `<i data-lucide="file" class="tree-file" style="fill: none; stroke-width: 2px;"></i> ${item.name}`;
-                    el.onclick = () => this.openFile(item.path, el);
-                    el.oncontextmenu = (e) => this.showFileContextMenu(e, item.path);
-                    div.appendChild(el);
-                }
-            });
-            return div;
-        };
 
         // Initialize expanded folders state if not exists
         if (!this.state.expandedFolders) {
             this.state.expandedFolders = {};
         }
 
-        container.appendChild(render(data.items, 0));
+        container.appendChild(this.renderTreeItems(data.items, 0));
 
         // Re-initialize Lucide icons for new elements
         if (window.lucide) {
@@ -272,7 +316,65 @@ const app = {
         }
         // Default is expanded (true), so toggle to false means collapse
         this.state.expandedFolders[path] = this.state.expandedFolders[path] === false ? true : false;
-        this.refreshTree();
+        // Re-render from cached tree data (no network request)
+        this.renderTreeFromCache();
+    },
+
+    renderTreeFromCache: function () {
+        if (!this.state.treeData) return;
+        const container = document.getElementById('file-tree');
+        container.innerHTML = '';
+        container.appendChild(this.renderTreeItems(this.state.treeData.items, 0));
+        if (window.lucide) lucide.createIcons();
+    },
+
+    renderTreeItems: function (items, depth) {
+        const div = document.createElement('div');
+
+        // Sort items: content first, then other folders, then templates and config at bottom
+        const bottomFolders = ['templates', 'config'];
+        const sortedItems = [...items].sort((a, b) => {
+            const aIsBottom = bottomFolders.includes(a.name);
+            const bIsBottom = bottomFolders.includes(b.name);
+            if (aIsBottom && !bIsBottom) return 1;
+            if (!aIsBottom && bIsBottom) return -1;
+            // Put content folder at top
+            if (a.name === 'content' && b.name !== 'content') return -1;
+            if (a.name !== 'content' && b.name === 'content') return 1;
+            return a.name.localeCompare(b.name);
+        });
+
+        sortedItems.forEach(item => {
+            const el = document.createElement('div');
+            el.className = 'tree-item';
+            el.style.paddingLeft = `${depth * 16 + 12}px`;
+
+            if (item.is_dir) {
+                // Default templates and config to collapsed (false), others to expanded
+                const isBottomFolder = bottomFolders.includes(item.name);
+                const defaultExpanded = !isBottomFolder;
+                const isExpanded = this.state.expandedFolders?.[item.path] ?? defaultExpanded;
+
+                el.innerHTML = `<i data-lucide="${isExpanded ? 'chevron-down' : 'chevron-right'}" class="tree-arrow"></i><i data-lucide="folder" class="tree-folder"></i> ${item.name}`;
+                el.onclick = (e) => {
+                    e.stopPropagation();
+                    this.toggleFolder(item.path);
+                };
+                div.appendChild(el);
+
+                if (item.children && isExpanded) {
+                    const childDiv = this.renderTreeItems(item.children, depth + 1);
+                    childDiv.dataset.folder = item.path;
+                    div.appendChild(childDiv);
+                }
+            } else {
+                el.innerHTML = `<i data-lucide="file" class="tree-file" style="fill: none; stroke-width: 2px;"></i> ${item.name}`;
+                el.onclick = () => this.openFile(item.path, el);
+                el.oncontextmenu = (e) => this.showFileContextMenu(e, item.path);
+                div.appendChild(el);
+            }
+        });
+        return div;
     },
 
     // File context menu
@@ -405,13 +507,6 @@ const app = {
             overlay.remove();
         }
 
-        // Show editor
-        const container = document.getElementById('monaco-container');
-        if (container) {
-            container.style.display = 'block';
-            if (this.state.editor) this.state.editor.layout();
-        }
-
         // Update selection
         document.querySelectorAll('.tree-item').forEach(e => e.classList.remove('selected'));
         if (el) el.classList.add('selected');
@@ -419,15 +514,96 @@ const app = {
         this.state.activeFile = path;
         document.getElementById('active-filename').textContent = path;
 
-        // Show loading skeleton for .typ files
-        if (path.endsWith('.typ')) {
-            const container = document.getElementById('preview-container');
-            container.innerHTML = `
-                <div class="preview-loading">
-                    <div class="skeleton-page"></div>
-                    <div class="skeleton-page"></div>
+        const monacoContainer = document.getElementById('monaco-container');
+        const previewContainer = document.getElementById('preview-container');
+        const ext = path.split('.').pop().toLowerCase();
+
+        // Binary file extensions
+        const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico'];
+        const pdfExtension = 'pdf';
+
+        if (ext === pdfExtension) {
+            // PDF: Show in editor area, placeholder in preview
+            monacoContainer.style.display = 'none';
+
+            // Create PDF viewer in editor area (after monaco container)
+            let pdfViewer = document.getElementById('pdf-viewer');
+            if (!pdfViewer) {
+                pdfViewer = document.createElement('div');
+                pdfViewer.id = 'pdf-viewer';
+                pdfViewer.style.cssText = 'flex: 1; width: 100%; height: 100%; background: #1e1e1e; border-radius: 0 0 20px 20px; overflow: hidden;';
+                monacoContainer.parentNode.insertBefore(pdfViewer, monacoContainer.nextSibling);
+            }
+            pdfViewer.style.display = 'block';
+            pdfViewer.innerHTML = `<iframe src="/api/file?path=${encodeURIComponent(path)}&raw=1" style="width: 100%; height: 100%; border: none;"></iframe>`;
+
+            // Preview placeholder
+            previewContainer.innerHTML = `
+                <div class="preview-placeholder">
+                    <i data-lucide="file-text"></i>
+                    <span>Select a .typ file to view preview</span>
                 </div>
             `;
+            if (window.lucide) lucide.createIcons();
+            return;
+
+        } else if (imageExtensions.includes(ext)) {
+            // Image: Show in editor area, placeholder in preview
+            monacoContainer.style.display = 'none';
+
+            let imageViewer = document.getElementById('image-viewer');
+            if (!imageViewer) {
+                imageViewer = document.createElement('div');
+                imageViewer.id = 'image-viewer';
+                imageViewer.style.cssText = 'flex: 1; width: 100%; height: 100%; background: #0a0a0a; border-radius: 0 0 20px 20px; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 20px;';
+                monacoContainer.parentNode.insertBefore(imageViewer, monacoContainer.nextSibling);
+            }
+            imageViewer.style.display = 'flex';
+            imageViewer.innerHTML = `<img src="/api/file?path=${encodeURIComponent(path)}&raw=1" style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">`;
+
+            // Hide PDF viewer if exists
+            const pdfViewer = document.getElementById('pdf-viewer');
+            if (pdfViewer) pdfViewer.style.display = 'none';
+
+            // Preview placeholder
+            previewContainer.innerHTML = `
+                <div class="preview-placeholder">
+                    <i data-lucide="image"></i>
+                    <span>Select a .typ file to view preview</span>
+                </div>
+            `;
+            if (window.lucide) lucide.createIcons();
+            return;
+
+        } else {
+            // Text file: Show Monaco editor
+            monacoContainer.style.display = 'block';
+            if (this.state.editor) this.state.editor.layout();
+
+            // Hide binary viewers
+            const pdfViewer = document.getElementById('pdf-viewer');
+            const imageViewer = document.getElementById('image-viewer');
+            if (pdfViewer) pdfViewer.style.display = 'none';
+            if (imageViewer) imageViewer.style.display = 'none';
+
+            // Show loading skeleton for .typ files
+            if (path.endsWith('.typ')) {
+                previewContainer.innerHTML = `
+                    <div class="preview-loading">
+                        <div class="skeleton-page"></div>
+                        <div class="skeleton-page"></div>
+                    </div>
+                `;
+            } else {
+                // Non-typ text files: show placeholder in preview
+                previewContainer.innerHTML = `
+                    <div class="preview-placeholder">
+                        <i data-lucide="file-code"></i>
+                        <span>Select a .typ file to view preview</span>
+                    </div>
+                `;
+                if (window.lucide) lucide.createIcons();
+            }
         }
 
         // Join file via unified WebSocket (gets content from server)
@@ -615,10 +791,6 @@ const app = {
                 <p>Control how your document looks</p>
                 
                 <div class="form-group">
-                    <label>Display Mode (Theme)</label>
-                    <input type="text" id="const-display-mode" value="${data['display-mode'] || 'default'}" oninput="app.debouncedUpdateConstants()">
-                </div>
-                <div class="form-group">
                     <label>Font</label>
                     <input type="text" id="const-font" value="${data['font'] || ''}" oninput="app.debouncedUpdateConstants()">
                 </div>
@@ -659,7 +831,6 @@ const app = {
     updateConstants: async function () {
         const data = {
             ...this.state.configData.constants,
-            'display-mode': document.getElementById('const-display-mode').value,
             'font': document.getElementById('const-font').value,
             'title-font': document.getElementById('const-title-font').value,
             'chapter-name': document.getElementById('const-chapter-name').value,
@@ -907,6 +1078,8 @@ const app = {
                 cell.className = 'build-cell' + (isSelected ? ' selected' : '');
                 cell.title = page.title || `Page ${pgIdx + 1}`;
                 cell.textContent = pgIdx + 1;
+                cell.dataset.chapterIdx = chIdx;
+                cell.dataset.pageIdx = pgIdx;
                 cell.onclick = () => this.toggleBuildPage(chIdx, pgIdx);
                 pagesEl.appendChild(cell);
             });
@@ -1336,66 +1509,115 @@ const app = {
 
     runBuild: async function () {
         const targets = [];
-        document.querySelectorAll('.grid-cell.selected').forEach(cell => {
+        document.querySelectorAll('.build-cell.selected').forEach(cell => {
             targets.push({
-                chapter: parseInt(cell.dataset.chapterIdx),  // Use chapterIdx (index into hierarchy array)
-                page: parseInt(cell.dataset.id) - 1  // page ID to 0-based index
+                chapter: parseInt(cell.dataset.chapterIdx),
+                page: parseInt(cell.dataset.pageIdx)
             });
         });
 
         const options = {
-            frontmatter: document.getElementById('opt-frontmatter').checked,
-            covers: document.getElementById('opt-covers').checked
+            frontmatter: (document.getElementById('build-opt-frontmatter') || document.getElementById('opt-frontmatter'))?.checked ?? true,
+            covers: (document.getElementById('build-opt-covers') || document.getElementById('opt-covers'))?.checked ?? true
         };
 
-        // Show progress
-        const progress = document.getElementById('build-progress');
-        const progressFill = document.getElementById('progress-fill');
-        const progressPage = document.getElementById('progress-page');
-        const progressPercent = document.getElementById('progress-percent');
+        // Show progress - try Build page IDs first, fall back to modal IDs
+        const progress = document.getElementById('build-progress-new') || document.getElementById('build-progress');
+        const progressFill = document.getElementById('progress-fill-new') || document.getElementById('progress-fill');
+        const progressPage = document.getElementById('progress-page-new') || document.getElementById('progress-page');
+        const progressPercent = document.getElementById('progress-percent-new') || document.getElementById('progress-percent');
         const log = document.getElementById('build-log');
-        const buildBtn = document.getElementById('build-btn');
+        const buildBtn = document.getElementById('build-btn-new') || document.getElementById('build-btn');
 
-        progress.style.display = 'block';
-        log.style.display = 'none';
-        buildBtn.disabled = true;
-        buildBtn.innerHTML = '<i data-lucide="loader"></i> Building...';
+        if (progress) progress.style.display = 'block';
+        if (log) log.style.display = 'none';
+        if (buildBtn) {
+            buildBtn.disabled = true;
+            buildBtn.innerHTML = '<i data-lucide="loader"></i> Building...';
+        }
 
-        progressPage.textContent = 'Preparing...';
-        progressPercent.textContent = '0%';
-        progressFill.style.width = '0%';
+        if (progressPage) progressPage.textContent = 'Preparing...';
+        if (progressPercent) progressPercent.textContent = '0%';
+        if (progressFill) progressFill.style.width = '0%';
 
-        const res = await fetch('/api/build', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ targets, options })
-        });
-        const result = await res.json();
+        // Animated progress - simulate incremental updates
+        let currentProgress = 0;
+        const totalTargets = targets.length + (options.frontmatter ? 5 : 0); // Estimate total items
+        const targetProgress = 90; // Will animate to 90% while building
+        const progressInterval = setInterval(() => {
+            if (currentProgress < targetProgress) {
+                currentProgress += Math.random() * 5 + 1; // Random increment for realism
+                if (currentProgress > targetProgress) currentProgress = targetProgress;
+                if (progressFill) progressFill.style.width = `${currentProgress}%`;
+                if (progressPercent) progressPercent.textContent = `${Math.round(currentProgress)}%`;
 
-        // Update progress to 100%
-        progressFill.style.width = '100%';
-        progressPercent.textContent = '100%';
+                // Update status text based on progress
+                if (progressPage) {
+                    if (currentProgress < 20) {
+                        progressPage.textContent = 'Compiling frontmatter...';
+                    } else if (currentProgress < 50) {
+                        progressPage.textContent = `Building chapters...`;
+                    } else if (currentProgress < 80) {
+                        progressPage.textContent = 'Compiling pages...';
+                    } else {
+                        progressPage.textContent = 'Merging PDF...';
+                    }
+                }
+            }
+        }, 200);
 
-        buildBtn.disabled = false;
-        buildBtn.innerHTML = '<i data-lucide="zap"></i> Build PDF';
+        try {
+            const res = await fetch('/api/build', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targets, options })
+            });
+            const result = await res.json();
 
-        if (result.success) {
-            progressPage.textContent = 'Build complete!';
-            log.style.display = 'block';
-            log.textContent = 'Success! Downloading PDF...';
-            log.style.color = 'var(--success)';
-            // Create a temporary link with cache-busting timestamp
-            const a = document.createElement('a');
-            a.href = '/api/download/output.pdf?t=' + Date.now();
-            a.download = 'output.pdf';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-        } else {
-            progressPage.textContent = 'Build failed';
-            log.style.display = 'block';
-            log.textContent = result.output || 'Unknown error';
-            log.style.color = 'var(--danger)';
+            // Stop animation and complete
+            clearInterval(progressInterval);
+            if (progressFill) progressFill.style.width = '100%';
+            if (progressPercent) progressPercent.textContent = '100%';
+
+            if (buildBtn) {
+                buildBtn.disabled = false;
+                buildBtn.innerHTML = '<i data-lucide="zap"></i> Build PDF';
+            }
+
+            if (result.success) {
+                if (progressPage) progressPage.textContent = 'Build complete!';
+                if (log) {
+                    log.style.display = 'block';
+                    log.textContent = 'Success! Downloading PDF...';
+                    log.style.color = 'var(--success)';
+                }
+                // Create a temporary link with cache-busting timestamp
+                const a = document.createElement('a');
+                a.href = '/api/download/output.pdf?t=' + Date.now();
+                a.download = 'output.pdf';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            } else {
+                if (progressPage) progressPage.textContent = 'Build failed';
+                if (log) {
+                    log.style.display = 'block';
+                    log.textContent = result.output || 'Unknown error';
+                    log.style.color = 'var(--danger)';
+                }
+            }
+        } catch (err) {
+            clearInterval(progressInterval);
+            if (progressPage) progressPage.textContent = 'Build failed';
+            if (log) {
+                log.style.display = 'block';
+                log.textContent = err.message || 'Network error';
+                log.style.color = 'var(--danger)';
+            }
+            if (buildBtn) {
+                buildBtn.disabled = false;
+                buildBtn.innerHTML = '<i data-lucide="zap"></i> Build PDF';
+            }
         }
 
         if (window.lucide) lucide.createIcons();
@@ -1569,6 +1791,10 @@ const app = {
         // Remote cursor rendering via Monaco decorations
         if (!this.state.editor) return;
 
+        // Store cursor positions for "follow user" feature
+        if (!this.state.userCursors) this.state.userCursors = {};
+        this.state.userCursors[msg.userId] = { line: msg.line, column: msg.column };
+
         // Store decorations by user ID
         if (!this.state.remoteCursors) this.state.remoteCursors = {};
 
@@ -1668,8 +1894,33 @@ const app = {
             const avatar = document.createElement('div');
             avatar.className = 'user-avatar';
             avatar.style.backgroundColor = user.color;
-            avatar.title = user.name;
+            avatar.style.cursor = 'pointer';
+
+            // Show file path in tooltip if available
+            const fileInfo = user.file ? `\n📄 ${user.file}` : '';
+            avatar.title = `${user.name}${fileInfo}\nClick to follow`;
             avatar.textContent = user.name.charAt(0).toUpperCase();
+
+            // Click to navigate to their file and cursor position
+            avatar.onclick = () => {
+                if (user.file) {
+                    // Open their file
+                    this.openFile(user.file);
+
+                    // Jump to their cursor position after a short delay (for file to load)
+                    if (this.state.userCursors && this.state.userCursors[user.id]) {
+                        const cursor = this.state.userCursors[user.id];
+                        setTimeout(() => {
+                            if (this.state.editor) {
+                                this.state.editor.revealLineInCenter(cursor.line);
+                                this.state.editor.setPosition({ lineNumber: cursor.line, column: cursor.column });
+                                this.state.editor.focus();
+                            }
+                        }, 200);
+                    }
+                }
+            };
+
             container.appendChild(avatar);
         });
     },
@@ -1686,6 +1937,13 @@ const app = {
         `;
         container.appendChild(div);
         container.scrollTop = container.scrollHeight;
+
+        // Show unread indicator if chat is hidden
+        const panel = document.getElementById('chat-panel');
+        if (panel && panel.classList.contains('hidden')) {
+            const badge = document.getElementById('chat-unread-badge');
+            if (badge) badge.style.display = 'block';
+        }
     },
 
     updatePreview: function (updates) {
@@ -1877,7 +2135,7 @@ const app = {
             body: JSON.stringify(config)
         });
 
-        document.getElementById('config-modal').classList.remove('active');
+        document.getElementById('config-modal-overlay').classList.remove('active');
         this.showSaveStatus('Configuration Saved');
     },
 
@@ -1933,6 +2191,10 @@ const app = {
         if (!panel.classList.contains('hidden')) {
             document.getElementById('chat-input').focus();
             this.scrollChatToBottom();
+
+            // Clear unread badge
+            const badge = document.getElementById('chat-unread-badge');
+            if (badge) badge.style.display = 'none';
         }
     },
 

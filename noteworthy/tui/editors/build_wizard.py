@@ -56,6 +56,12 @@ class BuildWizard(BaseEditor):
         for ci, ch in enumerate(hierarchy):
             for pi in range(len(ch['pages'])):
                 self.selected[(ci, pi)] = (ci, pi) in saved_pages if saved_pages else True
+        
+        # If nothing is selected at all (and we had saved pages that might be stale), revert to Select All
+        if not any(self.selected.values()):
+            for k in self.selected:
+                self.selected[k] = True
+        
         self.cursor_col = 0
         self.cursor_row = 0
         self.scroll_col = 0
@@ -236,7 +242,9 @@ class BuildWizard(BaseEditor):
 
     def start_build(self):
         selected_pages = [(ci, pi) for (ci, pi), v in self.selected.items() if v]
+        self.log(f"Starting build with {len(selected_pages)} pages selected", True)
         if not selected_pages and not self.frontmatter:
+            self.log("No pages selected and no frontmatter - aborting", False)
             return # Nothing to do
 
         save_settings({
