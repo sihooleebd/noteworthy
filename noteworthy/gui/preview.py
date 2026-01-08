@@ -16,15 +16,18 @@ class PreviewManager:
     """Manages live preview compilation and WebSocket updates."""
     
     def __init__(self):
-        self.process = None
-        self.running = False
-        self.monitor_thread = None
-        self.page_mapping = []
-        self.preview_cache = {}
+        # Maps path -> {process, thread, ref_count, cache_dir}
+        self.watchers = {}
         self.callbacks = []
         
-        # Cache directory in project build folder
-        self.cache_dir = BASE_DIR / "build" / ".preview_cache"
+        # Base cache directory
+        self.base_cache_dir = BASE_DIR / "build" / ".preview_cache"
+        if self.base_cache_dir.exists():
+            try:
+                shutil.rmtree(self.base_cache_dir)
+            except:
+                pass
+        self.base_cache_dir.mkdir(parents=True, exist_ok=True)
     
     def _find_typst(self):
         """Find typst binary."""
@@ -41,59 +44,58 @@ class PreviewManager:
     
     def start_watch(self, file_path: str):
         """Start watching a file for changes."""
-        if self.process:
-            self.stop_watch()
+        # Normalize path
+        file_path = str(Path(file_path))
         
-        # Clear cache
-        if self.cache_dir.exists():
-            shutil.rmtree(self.cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        if file_path in self.watchers:
+            self.watchers[file_path]['ref_count'] += 1
+            print(f"[Preview] Incremented ref count for {file_path} to {self.watchers[file_path]['ref_count']}")
+            return
+
+        # Create unique cache dir for this file
+        import hashlib
+        path_hash = hashlib.md5(file_path.encode()).hexdigest()[:8]
+        cache_dir = self.base_cache_dir / path_hash
+        
+        if cache_dir.exists():
+            shutil.rmtree(cache_dir)
+        cache_dir.mkdir(parents=True, exist_ok=True)
         
         typst_bin = self._find_typst()
-        print(f"[Preview] Using typst: {typst_bin}")
+        print(f"[Preview] Starting watch for {file_path} using {typst_bin}")
         
-        # Scan content directory to get actual chapter/page structure
+        # Scan content directory
         content_dir = BASE_DIR / "content"
         chapter_folders = []
         page_folders = {}
         
         if content_dir.exists():
-            # Get sorted chapter directories (numeric order)
             ch_dirs = sorted(
                 [d for d in content_dir.iterdir() if d.is_dir() and d.name.replace('.', '', 1).lstrip('-').isdigit()],
                 key=lambda d: float(d.name) if d.name.replace('.', '', 1).lstrip('-').isdigit() else 999
             )
             for idx, ch_dir in enumerate(ch_dirs):
                 chapter_folders.append(ch_dir.name)
-                # Get sorted page files (numeric order, without .typ extension)
                 pg_files = sorted(
                     [f.stem for f in ch_dir.glob("*.typ") if f.stem.replace('.', '', 1).lstrip('-').isdigit()],
                     key=lambda s: float(s) if s.replace('.', '', 1).lstrip('-').isdigit() else 999
                 )
                 page_folders[str(idx)] = pg_files
         
-        print(f"[Preview] Found chapters: {chapter_folders}")
-        print(f"[Preview] Found pages: {page_folders}")
-        
-        # Parse content file path to find the target
-        # Expected format: content/{chapter_id}/{page_id}.typ
+        # Parse target
         target = None
         if file_path.startswith("content/"):
             parts = file_path.replace("content/", "").replace(".typ", "").split("/")
             if len(parts) == 2:
-                ch_name = parts[0]  # Actual folder name like "0", "1", etc.
-                pg_name = parts[1]  # Actual file name without .typ
-                
-                # Find the index of this chapter
+                ch_name = parts[0]
+                pg_name = parts[1]
                 if ch_name in chapter_folders:
                     ch_idx = chapter_folders.index(ch_name)
                     pg_files = page_folders.get(str(ch_idx), [])
                     if pg_name in pg_files:
                         pg_idx = pg_files.index(pg_name)
                         target = f"{ch_idx}/{pg_idx}"
-                        print(f"[Preview] Target: {target} (chapter {ch_name}, page {pg_name})")
         
-        # Use parser.typ with target input for content files
         if target and RENDERER_FILE.exists():
             watch_file = RENDERER_FILE
         else:
@@ -102,14 +104,11 @@ class PreviewManager:
                 print(f"[Preview] File not found: {watch_file}")
                 return
         
-        cache_pattern = self.cache_dir / "page-{n}.svg"
+        cache_pattern = cache_dir / "page-{n}.svg"
         
         import json
         cmd = [
-            typst_bin,
-            "watch",
-            str(watch_file),
-            str(cache_pattern),
+            typst_bin, "watch", str(watch_file), str(cache_pattern),
             "--root", str(BASE_DIR),
             "--input", f"chapter-folders={json.dumps(chapter_folders)}",
             "--input", f"page-folders={json.dumps(page_folders)}"
@@ -121,67 +120,102 @@ class PreviewManager:
         print(f"[Preview] Running: {' '.join(cmd)}")
         
         try:
-            # Use stderr=STDOUT to combine output, don't block on PIPE
-            self.process = subprocess.Popen(
+            process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1  # Line buffered
+                bufsize=1
             )
-            self.running = True
-            self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
-            self.monitor_thread.start()
             
-            # Also start a thread to read typst output
-            self.output_thread = threading.Thread(target=self._read_output, daemon=True)
-            self.output_thread.start()
+            watcher = {
+                'process': process,
+                'ref_count': 1,
+                'cache_dir': cache_dir,
+                'running': True,
+                'preview_cache': {},
+                'page_mapping': []
+            }
             
+            # Start monitoring threads
+            watcher['monitor_thread'] = threading.Thread(
+                target=self._monitor_loop, 
+                args=(file_path, watcher),
+                daemon=True
+            )
+            watcher['output_thread'] = threading.Thread(
+                target=self._read_output, 
+                args=(process, watcher),
+                daemon=True
+            )
+            
+            watcher['monitor_thread'].start()
+            watcher['output_thread'].start()
+            
+            self.watchers[file_path] = watcher
             print(f"[Preview] Started watching {file_path}")
+            
         except Exception as e:
             print(f"[Preview] Failed to start typst: {e}")
     
-    def _read_output(self):
+    def _read_output(self, process, watcher):
         """Read and log typst output."""
         try:
-            for line in iter(self.process.stdout.readline, ''):
-                if not self.running:
+            for line in iter(process.stdout.readline, ''):
+                if not watcher['running']:
                     break
                 if line:
                     print(f"[Typst] {line.rstrip()}")
         except:
             pass
     
-    def stop_watch(self):
-        """Stop current watch process."""
-        self.running = False
-        if self.process:
-            self.process.terminate()
-            self.process = None
+    def stop_watch(self, file_path: str):
+        """Stop watching a file."""
+        file_path = str(Path(file_path))
+        if file_path not in self.watchers:
+            return
+            
+        watcher = self.watchers[file_path]
+        watcher['ref_count'] -= 1
+        print(f"[Preview] Decremented ref count for {file_path} to {watcher['ref_count']}")
+        
+        if watcher['ref_count'] <= 0:
+            print(f"[Preview] Stopping watch for {file_path}")
+            watcher['running'] = False
+            if watcher['process']:
+                try:
+                    watcher['process'].terminate()
+                except:
+                    pass
+            try:
+                shutil.rmtree(watcher['cache_dir'])
+            except:
+                pass
+            del self.watchers[file_path]
     
     def add_callback(self, cb):
         """Register callback for updates."""
         self.callbacks.append(cb)
     
-    def _monitor_loop(self):
+    def _monitor_loop(self, file_path, watcher):
         """Monitor cache directory for SVG updates."""
         last_mtimes = {}
         
-        while self.running:
-            if not self.process:
+        while watcher['running']:
+            if not watcher['process']:
                 time.sleep(0.1)
                 continue
             
             # Check if process died
-            if self.process.poll() is not None:
-                print(f"[Preview] Typst process exited with code: {self.process.returncode}")
-                self.running = False
-                self.process = None
+            if watcher['process'].poll() is not None:
+                print(f"[Preview] Typst process exited with code: {watcher['process'].returncode}")
+                watcher['running'] = False
+                # Don't delete from watchers yet, let stop_watch handle cleanup
                 break
             
             # Scan for new/updated SVGs
             try:
-                svgs = list(self.cache_dir.glob("page-*.svg"))
+                svgs = list(watcher['cache_dir'].glob("page-*.svg"))
                 current_pages = []
                 updates = []
                 
@@ -192,7 +226,7 @@ class PreviewManager:
                         
                         mtime = svg.stat().st_mtime
                         if mtime != last_mtimes.get(svg.name):
-                            # Read with retry for incomplete writes
+                            # Read with retry
                             content = None
                             for _ in range(5):
                                 if svg.stat().st_size > 0:
@@ -204,32 +238,40 @@ class PreviewManager:
                                 time.sleep(0.005)
                             
                             if content:
-                                self.preview_cache[num] = content.encode('utf-8')
+                                watcher['preview_cache'][num] = content.encode('utf-8')
                                 last_mtimes[svg.name] = mtime
                                 updates.append({'page': num, 'svg': content})
                     except:
                         pass
                 
-                self.page_mapping = sorted(current_pages)
+                watcher['page_mapping'] = sorted(current_pages)
                 
                 if updates:
                     for cb in self.callbacks:
                         try:
-                            cb(updates)
-                        except:
-                            pass
+                            # Pass file_path so hub knows who to send it to
+                            cb(updates, file_path)
+                        except Exception as e:
+                            print(f"[Preview] Callback error: {e}")
             except:
                 pass
             
-            time.sleep(0.02)  # 50Hz
+            time.sleep(0.02)
     
-    def get_status(self):
-        """Get current preview status."""
-        return {
-            "running": self.running and self.process is not None,
-            "pages": self.page_mapping
-        }
+    def get_status(self, file_path: str = None):
+        """Get status for a specific file."""
+        file_path = str(Path(file_path)) if file_path else None
+        if file_path and file_path in self.watchers:
+            watcher = self.watchers[file_path]
+            return {
+                "running": watcher['running'],
+                "pages": watcher['page_mapping']
+            }
+        return {"running": False, "pages": []}
     
-    def get_image(self, page_num):
+    def get_image(self, file_path: str, page_num: int):
         """Get cached image for a page."""
-        return self.preview_cache.get(int(page_num))
+        file_path = str(Path(file_path))
+        if file_path in self.watchers:
+            return self.watchers[file_path]['preview_cache'].get(int(page_num))
+        return None

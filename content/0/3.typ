@@ -1,83 +1,71 @@
 #import "../../templates/templater.typ": *
 
-= Module Overview
+= File Structure
 
-A quick reference for all seven Noteworthy modules.
+Understanding the project layout helps you navigate and extend Noteworthy.
 
-== The Seven Modules
+== Project Root
 
-#grid(
-  columns: (1fr, 1fr),
-  gutter: 1em,
-
-  definition("block")[
-    Semantic content containers.
-
-    *Key exports:*
-    - `definition`, `theorem`, `proof`
-    - `example`, `solution`
-    - `note`, `notation`, `equation`
-  ],
-
-  definition("shape")[
-    2D geometric primitives.
-
-    *Key exports:*
-    - `point`, `line`, `circle`
-    - `polygon`, `angle`
-    - `midpoint`, `intersect-ll`
-  ],
-
-  definition("graph")[
-    Functions and vectors.
-
-    *Key exports:*
-    - `graph`, `func`, `parametric`
-    - `vec`, `vec-add`, `vec-project`
-    - `polar-func`
-  ],
-
-  definition("canvas")[
-    Rendering canvases.
-
-    *Key exports:*
-    - `cartesian-canvas`
-    - `polar-canvas`, `trig-canvas`
-    - `space-canvas`, `graph-canvas`
-  ],
-
-  definition("data")[
-    Data visualization and tables.
-
-    *Key exports:*
-    - `table-plot`, `value-table`
-    - `data-series`, `csv-series`
-    - `curve-through`, `smooth-curve`
-  ],
-
-  definition("cover")[
-    Document covers and title pages.
-
-    *Key exports:*
-    - `cover`, `chapter-cover`
-    - `preface`, `project`
-  ],
-
-  definition("layout")[
-    Page layouts and table of contents.
-
-    *Key exports:*
-    - `outline`
-  ],
-)
-
-== How Modules Work Together
-
-#note("Typical Workflow")[
-  1. Use *block* module to structure your content
-  2. Use *shape* module to create geometric objects
-  3. Use *graph* module for functions and vectors
-  4. Use *canvas* module to render shapes and graphs
-  5. Use *data* module for tables and data plots
-  6. *Cover* and *Layout* modules handle document structure
+#notation("Directory Legend")[
+  - 📁 = Directory
+  - 📄 = File
 ]
+
+```
+noteworthy/
+├── 📁 config/          # Configuration files
+│   ├── hierarchy.json  # Chapter/page structure
+│   ├── metadata.json   # Title, authors, etc.
+│   ├── constants.json  # Display settings
+│   └── schemes/        # Color themes
+├── 📁 content/         # Your document pages
+│   ├── 0/, 1/, 2/...   # Chapter folders
+│   └── images/         # Embedded images
+├── 📁 templates/       # The template system
+│   ├── templater.typ   # Main entry point
+│   ├── core/           # Core utilities
+│   └── module/         # Feature modules
+└── output.pdf          # Compiled document
+```
+
+== Templates Directory
+
+The `templates/` folder contains the template system:
+
+#definition("templater.typ")[
+  The single entry point that re-exports all modules. Content files only need to import this one file.
+]
+
+#definition("core/")[
+  Core utilities shared across all modules:
+  - `setup.typ` — Configuration loading and theme definition
+  - `scheme.typ` — Color scheme management
+  - `parser.typ` — Content parsing for builds
+  - `scanner.typ` — Content discovery
+]
+
+#definition("module/")[
+  Feature modules, each in its own folder with a `mod.typ` entry point:
+  - `block/` — Content blocks
+  - `geometry/` — 2D primitives
+  - `canvas/` — Plotting canvases
+  - `data/` — Tables and data
+  - `cover/` — Document covers
+  - `layout/` — Page layouts
+]
+
+== Module Pattern
+
+Each module follows the same pattern:
+
+#example("Module Structure")[
+  ```
+  module/block/
+  ├── mod.typ      # Entry point (exports themed wrappers)
+  └── block.typ    # Implementation
+  ```
+
+  The `mod.typ` file imports the implementation, applies theming, and exports ready-to-use functions.
+]
+
+

@@ -631,6 +631,126 @@ select {
     font-size: 13px;
 }
 
+.toggle-btn i {
+    width: 14px;
+    height: 14px;
+    stroke-width: 1.5;
+}
+
+/* Error Container */
+.error-container {
+    position: relative;
+}
+
+/* Error Count Indicator */
+.error-count {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 4px;
+    color: #ef4444;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.error-count.visible {
+    display: flex;
+}
+
+.error-count i {
+    width: 12px;
+    height: 12px;
+}
+
+.error-count .error-chevron {
+    width: 10px;
+    height: 10px;
+    margin-left: 2px;
+    transition: transform 0.2s ease;
+}
+
+/* Error Details Panel */
+.error-details {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    min-width: 350px;
+    max-width: 500px;
+    max-height: 300px;
+    overflow-y: auto;
+    background: rgba(20, 20, 25, 0.95);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    padding: 8px;
+    z-index: 100;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.error-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    background: rgba(239, 68, 68, 0.08);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    border-left: 3px solid #ef4444;
+}
+
+.error-item:last-child {
+    margin-bottom: 0;
+}
+
+.error-location {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: rgba(239, 68, 68, 0.8);
+    font-weight: 500;
+}
+
+.error-message {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+    word-wrap: break-word;
+}
+
+/* Preview Loading Skeleton */
+.preview-loading {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+}
+
+.skeleton-page {
+    height: 400px;
+    background: linear-gradient(90deg,
+            rgba(200, 200, 200, 0.3) 0%,
+            rgba(200, 200, 200, 0.5) 50%,
+            rgba(200, 200, 200, 0.3) 100%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+    border-radius: 8px;
+}
+
+@keyframes skeleton-shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
 .icon-btn {
     width: 32px;
     height: 32px;
@@ -1345,6 +1465,17 @@ select option {
     height: 16px;
 }
 
+.unread-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background-color: var(--accent);
+    border-radius: 50%;
+    border: 2px solid var(--glass-bg);
+}
+
 .chat-user-group {
     display: flex;
     align-items: center;
@@ -1402,3 +1533,50 @@ select option {
     border-radius: 4px;
     font-weight: 600;
 }
+/* ============================================
+   COLLABORATION (Avatars & Cursors)
+   ============================================ */
+
+.user-avatars {
+    display: flex;
+    align-items: center;
+    gap: -8px;
+    margin-right: 12px;
+}
+
+.user-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    margin-left: -8px;
+    position: relative;
+    cursor: default;
+}
+
+.user-avatar:first-child {
+    margin-left: 0;
+}
+
+/* Remote Cursor */
+.remote-cursor-line {
+    width: 2px !important;
+    position: absolute;
+    height: 100% !important;
+    z-index: 10;
+    pointer-events: none;
+}
+
+/* Ensure remote cursor background is visible */
+[class*='remote-cursor-'] {
+    position: absolute;
+    pointer-events: none;
+}
+

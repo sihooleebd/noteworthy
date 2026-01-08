@@ -6,10 +6,10 @@ const app = {
         activeFile: null,
         editor: null,
         ws: null,
-        ws: null,
         configData: {},
         editorTheme: localStorage.getItem('editorTheme') || 'vs-dark',
-        sessionName: localStorage.getItem('sessionName') || 'Anonymous'
+        sessionName: localStorage.getItem('sessionName') || 'Anonymous',
+        previewMode: 'file' // Always file mode
     },
 
     // ============================================================
@@ -30,6 +30,9 @@ const app = {
         this.debouncedSavePreface = this.debounce(() => this.savePreface(), 1000);
         this.debouncedSaveIgnored = this.debounce(() => this.saveIgnored(), 1000);
 
+        // Debounced content sync (sends full content after pause)
+        this.debouncedSyncContent = this.debounce(() => this.syncContent(), 150);
+
         // Monaco Editor with saved theme
         require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
         require(['vs/editor/editor.main'], () => {
@@ -47,28 +50,19 @@ const app = {
                 scrollBeyondLastLine: false
             });
 
-            // Auto-save on change
-            let saveTimeout;
+            // On content change - sync to server (debounced)
             this.state.editor.onDidChangeModelContent((e) => {
-                clearTimeout(saveTimeout);
+                if (this.state.applyingRemote) return;  // Skip if applying remote changes
+
                 document.getElementById('save-status').textContent = '● Unsaved';
 
-                // Local Echo: Trigger preview update immediately (optimistic)
-                const path = this.state.activeFile;
-
-                saveTimeout = setTimeout(() => this.saveCurrentFile(), 250); // Fast autosave for responsive preview
-
-                // Broadcast edit
-                if (app.collab && !app.collab.applyingRemoteChanges) {
-                    app.collab.broadcastEdit(e.changes);
-                }
+                // Debounced sync - sends full content after 150ms pause
+                this.debouncedSyncContent();
             });
 
-            // Collaboration: Cursor broadcast
+            // Cursor broadcast
             this.state.editor.onDidChangeCursorPosition((e) => {
-                if (app.collab) {
-                    app.collab.broadcastCursor(e.position);
-                }
+                this.sendCursor(e.position);
             });
 
             // Set theme selector to current value
@@ -76,8 +70,8 @@ const app = {
             if (themeSelect) themeSelect.value = this.state.editorTheme;
         });
 
-        // WebSocket for live preview
-        this.connectWebSocket();
+        // Unified WebSocket for all real-time features
+        this.connectDocSocket();
 
         // Load initial data
         await this.refreshTree();
@@ -85,17 +79,6 @@ const app = {
 
         // Show initial config
         this.showConfigTab('metadata');
-
-        // Initialize Collaboration
-        if (typeof CollaborationManager !== 'undefined') {
-            this.collab = new CollaborationManager(this);
-            this.collab.connect(); // Connect to global session
-
-            // Set initial identity if changed from default
-            if (this.state.sessionName !== 'Anonymous') {
-                this.collab.setIdentity(this.state.sessionName);
-            }
-        }
 
         // Initialize resizer
         this.initResizer();
@@ -250,36 +233,19 @@ const app = {
         this.state.activeFile = path;
         document.getElementById('active-filename').textContent = path;
 
-        // Switch collab file
-        if (this.collab) {
-            this.collab.switchFile(path);
-        }
-
-        // Load file content
-        const res = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
-        const data = await res.json();
-
-        if (this.state.editor && data.content !== undefined) {
-            const ext = path.split('.').pop();
-            const lang = ext === 'typ' ? 'markdown' : (ext === 'json' ? 'json' : 'plaintext');
-            monaco.editor.setModelLanguage(this.state.editor.getModel(), lang);
-            this.state.editor.setValue(data.content);
-        }
-
-        // Start preview for .typ files
+        // Show loading skeleton for .typ files
         if (path.endsWith('.typ')) {
-            document.getElementById('preview-container').innerHTML = '';
-            await fetch('/api/watch', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path })
-            });
-
-            // Connect to collaboration session
-            if (app.collab) {
-                app.collab.connect(path);
-            }
+            const container = document.getElementById('preview-container');
+            container.innerHTML = `
+                <div class="preview-loading">
+                    <div class="skeleton-page"></div>
+                    <div class="skeleton-page"></div>
+                </div>
+            `;
         }
+
+        // Join file via unified WebSocket (gets content from server)
+        this.joinFile(path);
     },
 
     saveCurrentFile: async function () {
@@ -296,6 +262,86 @@ const app = {
 
         document.getElementById('save-status').textContent = 'Saved';
         setTimeout(() => document.getElementById('save-status').textContent = '', 2000);
+    },
+
+
+    // setPreviewMode removed - always using file preview
+
+    toggleErrorDetails: function () {
+        const detailsEl = document.getElementById('error-details');
+        const chevron = document.querySelector('.error-chevron');
+        if (detailsEl) {
+            const isVisible = detailsEl.style.display === 'block';
+            detailsEl.style.display = isVisible ? 'none' : 'block';
+            if (chevron) {
+                chevron.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(180deg)';
+            }
+        }
+    },
+
+    checkDiagnostics: async function () {
+        if (!this.state.editor || !this.state.activeFile || !this.state.activeFile.endsWith('.typ')) return;
+
+        try {
+            const res = await fetch('/api/check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: this.state.activeFile })
+            });
+            const data = await res.json();
+            console.log('[LSP] Received diagnostics:', data);
+
+            // Clear old markers
+            monaco.editor.setModelMarkers(this.state.editor.getModel(), 'owner', []);
+
+            const errorCountEl = document.getElementById('error-count');
+            const errorCountText = document.getElementById('error-count-text');
+            const errorDetailsEl = document.getElementById('error-details');
+
+            if (data.diagnostics && data.diagnostics.length > 0) {
+                const markers = data.diagnostics.map(d => ({
+                    severity: monaco.MarkerSeverity.Error,
+                    startLineNumber: d.line,
+                    startColumn: d.col,
+                    endLineNumber: d.line,
+                    endColumn: d.col + 10,
+                    message: d.message
+                }));
+                monaco.editor.setModelMarkers(this.state.editor.getModel(), 'owner', markers);
+
+                // Update error count UI
+                if (errorCountEl) {
+                    errorCountEl.classList.add('visible');
+                    errorCountText.textContent = `${markers.length} error${markers.length > 1 ? 's' : ''}`;
+                }
+
+                // Show error details
+                if (errorDetailsEl) {
+                    errorDetailsEl.innerHTML = data.diagnostics.map(d => {
+                        const fileName = d.file ? d.file.split('/').pop() : 'unknown';
+                        return `<div class="error-item">
+                            <span class="error-location">${fileName}:${d.line}:${d.col}</span>
+                            <span class="error-message">${d.message}</span>
+                        </div>`;
+                    }).join('');
+                    errorDetailsEl.style.display = 'block';
+                }
+            } else {
+                // No errors
+                if (errorCountEl) {
+                    errorCountEl.classList.remove('visible');
+                }
+                if (errorDetailsEl) {
+                    errorDetailsEl.style.display = 'none';
+                    errorDetailsEl.innerHTML = '';
+                }
+            }
+
+            // Reinit Lucide for dynamic content
+            if (window.lucide) lucide.createIcons();
+        } catch (e) {
+            console.error('Diagnostic error:', e);
+        }
     },
 
     // ============================================================
@@ -1046,51 +1092,298 @@ const app = {
     },
 
     // ============================================================
-    // WEBSOCKET / PREVIEW
+    // UNIFIED WEBSOCKET - Sync, Cursors, Preview, Diagnostics
     // ============================================================
 
-    connectWebSocket: function () {
+    connectDocSocket: function () {
         if (this.state.wsRetryCount === undefined) {
             this.state.wsRetryCount = 0;
         }
 
         try {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            this.state.ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            const name = encodeURIComponent(this.state.sessionName);
 
-            this.state.ws.onopen = () => {
-                console.log('WebSocket connected');
-                this.state.wsRetryCount = 0; // Reset on successful connection
-            };
+            // Generate or retrieve persistent client ID
+            let clientId = sessionStorage.getItem('noteworthy_client_id');
+            if (!clientId) {
+                clientId = Math.random().toString(36).substring(2, 15);
+                sessionStorage.setItem('noteworthy_client_id', clientId);
+            }
 
-            this.state.ws.onmessage = (e) => {
-                const msg = JSON.parse(e.data);
-                if (msg.type === 'init' || msg.type === 'update') {
-                    this.updatePreview(msg.updates);
+            this.state.docSocket = new WebSocket(`${protocol}//${window.location.host}/ws/doc?name=${name}&id=${clientId}`);
+
+            this.state.docSocket.onopen = () => {
+                console.log('[Doc] Connected');
+                this.state.wsRetryCount = 0;
+
+                // Rejoin current file if we have one
+                if (this.state.activeFile) {
+                    this.joinFile(this.state.activeFile);
                 }
             };
 
-            this.state.ws.onclose = () => {
-                // Exponential backoff: 2s, 4s, 8s, 16s, max 30s
-                const delay = Math.min(2000 * Math.pow(2, this.state.wsRetryCount), 30000);
-                this.state.wsRetryCount++;
-                console.log(`WebSocket closed, reconnecting in ${delay / 1000}s...`);
-                setTimeout(() => this.connectWebSocket(), delay);
+            this.state.docSocket.onmessage = (e) => {
+                const msg = JSON.parse(e.data);
+                this.handleDocMessage(msg);
             };
 
-            this.state.ws.onerror = (e) => {
-                // Silently handle errors, onclose will trigger reconnect
+            this.state.docSocket.onclose = () => {
+                const delay = Math.min(2000 * Math.pow(2, this.state.wsRetryCount), 30000);
+                this.state.wsRetryCount++;
+                console.log(`[Doc] Disconnected, reconnecting in ${delay / 1000}s...`);
+                setTimeout(() => this.connectDocSocket(), delay);
+            };
+
+            this.state.docSocket.onerror = (e) => {
+                console.error('[Doc] WebSocket error:', e);
             };
         } catch (e) {
-            console.error('WebSocket error:', e);
+            console.error('[Doc] Connection error:', e);
         }
+    },
+
+    handleDocMessage: function (msg) {
+        switch (msg.type) {
+            case 'joined':
+                // Initial connection - store user ID and populate online users
+                this.state.userId = msg.userId;
+                this.state.userColor = msg.color;
+                console.log(`[Doc] Joined as ${msg.userId}`);
+
+                // Initialize online users from server list
+                if (msg.users && Array.isArray(msg.users)) {
+                    this.state.onlineUsers = {};
+                    msg.users.forEach(u => {
+                        this.state.onlineUsers[u.id] = u;
+                    });
+                    this.renderOnlineUsers();
+                }
+                break;
+
+            case 'init':
+                // Received file content from server
+                if (this.state.editor) {
+                    this.state.applyingRemote = true;
+                    const ext = this.state.activeFile?.split('.').pop() || 'typ';
+                    const lang = ext === 'typ' ? 'markdown' : (ext === 'json' ? 'json' : 'plaintext');
+                    monaco.editor.setModelLanguage(this.state.editor.getModel(), lang);
+                    this.state.editor.setValue(msg.content);
+                    this.state.applyingRemote = false;
+                    document.getElementById('save-status').textContent = '';
+                }
+                break;
+
+            case 'content':
+                // Remote user edited the document
+                if (msg.userId !== this.state.userId && this.state.editor) {
+                    this.state.applyingRemote = true;
+                    // Save cursor position
+                    const pos = this.state.editor.getPosition();
+                    this.state.editor.setValue(msg.content);
+                    // Restore cursor position
+                    if (pos) this.state.editor.setPosition(pos);
+                    this.state.applyingRemote = false;
+                }
+                break;
+
+            case 'cursor':
+                // Remote user cursor update
+                this.updateRemoteCursor(msg);
+                break;
+
+            case 'preview':
+                // Preview updates
+                this.updatePreview(msg.updates);
+                break;
+
+            case 'diagnostics':
+                // LSP diagnostics from server
+                this.applyDiagnostics(msg.diagnostics);
+                break;
+
+            case 'user_joined':
+            case 'user_left':
+            case 'user_updated':
+                // User presence updates
+                this.updateUserPresence(msg);
+                break;
+
+            case 'chat':
+                // Chat message
+                if (typeof CollaborationManager !== 'undefined' && this.collab) {
+                    this.collab.addChatMessage(msg);
+                } else {
+                    this.addChatMessage(msg);
+                }
+                break;
+        }
+    },
+
+    joinFile: function (path) {
+        if (this.state.docSocket && this.state.docSocket.readyState === WebSocket.OPEN) {
+            this.state.docSocket.send(JSON.stringify({
+                type: 'join',
+                path: path
+            }));
+        }
+    },
+
+    syncContent: function () {
+        if (!this.state.activeFile || !this.state.editor) return;
+        if (!this.state.docSocket || this.state.docSocket.readyState !== WebSocket.OPEN) return;
+
+        const content = this.state.editor.getValue();
+        this.state.docSocket.send(JSON.stringify({
+            type: 'edit',
+            path: this.state.activeFile,
+            content: content
+        }));
+
+        // Mark as saved since server will save to disk
+        document.getElementById('save-status').textContent = 'Synced';
+        setTimeout(() => document.getElementById('save-status').textContent = '', 1500);
+    },
+
+    sendCursor: function (position) {
+        if (!this.state.docSocket || this.state.docSocket.readyState !== WebSocket.OPEN) return;
+
+        this.state.docSocket.send(JSON.stringify({
+            type: 'cursor',
+            line: position.lineNumber,
+            column: position.column
+        }));
+    },
+
+    updateRemoteCursor: function (msg) {
+        // Remote cursor rendering via Monaco decorations
+        if (!this.state.editor) return;
+
+        // Store decorations by user ID
+        if (!this.state.remoteCursors) this.state.remoteCursors = {};
+
+        const decorations = [{
+            range: new monaco.Range(msg.line, msg.column, msg.line, msg.column + 1),
+            options: {
+                className: `remote-cursor-${msg.userId}`,
+                hoverMessage: { value: msg.name },
+                beforeContentClassName: 'remote-cursor-line',
+                stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
+            }
+        }];
+
+        // Add dynamic CSS for this user's cursor color
+        this.addCursorStyle(msg.userId, msg.color);
+
+        this.state.remoteCursors[msg.userId] = this.state.editor.deltaDecorations(
+            this.state.remoteCursors[msg.userId] || [],
+            decorations
+        );
+    },
+
+    addCursorStyle: function (userId, color) {
+        const styleId = `cursor-style-${userId}`;
+        if (document.getElementById(styleId)) return;
+
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+            .remote-cursor-${userId} {
+                background-color: ${color}40;
+                border-left: 2px solid ${color};
+            }
+        `;
+        document.head.appendChild(style);
+    },
+
+    applyDiagnostics: function (diagnostics) {
+        if (!this.state.editor) return;
+
+        // Clear old markers
+        monaco.editor.setModelMarkers(this.state.editor.getModel(), 'owner', []);
+
+        const errorCountEl = document.getElementById('error-count');
+        const errorCountText = document.getElementById('error-count-text');
+        const errorDetailsEl = document.getElementById('error-details');
+
+        if (diagnostics && diagnostics.length > 0) {
+            const markers = diagnostics.map(d => ({
+                severity: monaco.MarkerSeverity.Error,
+                startLineNumber: d.line,
+                startColumn: d.col,
+                endLineNumber: d.line,
+                endColumn: d.col + 10,
+                message: d.message
+            }));
+            monaco.editor.setModelMarkers(this.state.editor.getModel(), 'owner', markers);
+
+            // Error overlay removed per user request
+            if (errorCountEl) errorCountEl.style.display = 'none';
+        } else {
+            if (errorCountEl) errorCountEl.style.display = 'none';
+        }
+    },
+
+    updateUserPresence: function (msg) {
+        // Track connected users
+        if (!this.state.onlineUsers) this.state.onlineUsers = {};
+
+        if (msg.type === 'user_joined') {
+            this.state.onlineUsers[msg.user.id] = msg.user;
+        } else if (msg.type === 'user_left') {
+            delete this.state.onlineUsers[msg.userId];
+            // Clean up their cursor decorations
+            if (this.state.remoteCursors && this.state.remoteCursors[msg.userId]) {
+                this.state.editor.deltaDecorations(this.state.remoteCursors[msg.userId], []);
+                delete this.state.remoteCursors[msg.userId];
+            }
+        } else if (msg.type === 'user_updated' && msg.user) {
+            this.state.onlineUsers[msg.user.id] = msg.user;
+        }
+
+        // Re-render user avatars
+        this.renderOnlineUsers();
+    },
+
+    renderOnlineUsers: function () {
+        const container = document.getElementById('online-users');
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        const users = Object.values(this.state.onlineUsers || {});
+        users.forEach(user => {
+            if (user.id === this.state.userId) return; // Skip self
+
+            const avatar = document.createElement('div');
+            avatar.className = 'user-avatar';
+            avatar.style.backgroundColor = user.color;
+            avatar.title = user.name;
+            avatar.textContent = user.name.charAt(0).toUpperCase();
+            container.appendChild(avatar);
+        });
+    },
+
+    addChatMessage: function (msg) {
+        const container = document.getElementById('chat-messages');
+        if (!container) return;
+
+        const div = document.createElement('div');
+        div.className = 'chat-message';
+        div.innerHTML = `
+            <span class="chat-user" style="color: ${msg.color}">${msg.name}</span>
+            <span class="chat-text">${msg.text}</span>
+        `;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
     },
 
     updatePreview: function (updates) {
         const container = document.getElementById('preview-container');
+        if (!container) return;
 
-        // Clear placeholder
-        if (container.querySelector('.preview-placeholder')) {
+        // Clear placeholder or loading skeleton
+        if (container.querySelector('.preview-placeholder') || container.querySelector('.preview-loading')) {
             container.innerHTML = '';
         }
 
@@ -1103,8 +1396,6 @@ const app = {
                 container.appendChild(img);
             }
             img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(u.svg);
-
-            // Store numeric index for sorting
             img.dataset.index = u.page;
         });
 
@@ -1112,9 +1403,9 @@ const app = {
         const pages = Array.from(container.children).sort((a, b) => {
             return parseInt(a.dataset.index) - parseInt(b.dataset.index);
         });
-
         pages.forEach(p => container.appendChild(p));
     },
+
 
     // ============================================================
     // STATUS
@@ -1346,8 +1637,12 @@ const app = {
         const text = input.value.trim();
         if (!text) return;
 
-        if (this.collab) {
-            this.collab.sendChat(text);
+        if (this.state.docSocket && this.state.docSocket.readyState === WebSocket.OPEN) {
+            this.state.docSocket.send(JSON.stringify({
+                type: 'chat',
+                text: text,
+                timestamp: Date.now()
+            }));
             input.value = '';
         }
     },

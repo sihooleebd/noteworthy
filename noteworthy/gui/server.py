@@ -11,6 +11,8 @@ import asyncio
 import subprocess
 import shutil
 import os
+import re
+import tempfile
 
 from ..config import (
     BASE_DIR, BUILD_DIR, OUTPUT_FILE, RENDERER_FILE,
@@ -23,64 +25,101 @@ from .preview import PreviewManager
 app = FastAPI(title="Noteworthy GUI")
 preview_manager = PreviewManager()
 
-# Collaboration Manager
-from .collaboration import collab_manager
+# DocumentHub - Unified sync manager
+from .document_hub import document_hub
+import uuid
 
-@app.websocket("/ws/collab")
-async def collab_endpoint(websocket: WebSocket):
-    user_name = websocket.query_params.get("name", "Anonymous")
+# Connect preview manager to document hub
+document_hub.preview_manager = preview_manager
+
+@app.on_event("startup")
+async def startup_event():
+    """Register global preview callback on startup."""
+    loop = asyncio.get_running_loop()
     
+    def on_preview_bridge(updates, source_path):
+        """Bridge thread callback to asyncio loop."""
+        asyncio.run_coroutine_threadsafe(
+            document_hub.on_preview_update(updates, source_path),
+            loop
+        )
+            
+    preview_manager.add_callback(on_preview_bridge)
+
+
+@app.websocket("/ws/doc")
+async def doc_endpoint(websocket: WebSocket):
+    """
+    Unified document WebSocket.
+    
+    Handles:
+    - Document sync (content updates)
+    - Cursor sharing
+    - Diagnostics updates
+    - Preview updates
+    - Chat
+    """
+    user_name = websocket.query_params.get("name", "Anonymous")
+    user_id = websocket.query_params.get("id", None)
     await websocket.accept()
     
+    user = await document_hub.connect(websocket, user_name, user_id)
+    
     try:
-        user = await collab_manager.connect(websocket, user_name)
-        
-        # Send initial global state
+        # Send initial state
         await websocket.send_text(json.dumps({
             "type": "joined",
             "userId": user.id,
             "color": user.color,
-            "users": collab_manager.get_global_users()
+            "users": document_hub.get_users()
         }))
         
         while True:
             data = await websocket.receive_text()
             msg = json.loads(data)
             
-            if msg["type"] == "file_focus":
-                # User switched file
-                await collab_manager.set_active_file(user.id, msg.get("path"))
+            if msg["type"] == "join":
+                # User opens a file
+                path = msg.get("path", "")
+                doc = await document_hub.join_file(user.id, path)
+                if doc:
+                    await websocket.send_text(json.dumps({
+                        "type": "init",
+                        "content": doc.content,
+                        "version": doc.version
+                    }))
+            
+            elif msg["type"] == "edit":
+                # User edited content
+                path = msg.get("path", "")
+                content = msg.get("content", "")
+                await document_hub.update_content(user.id, path, content)
             
             elif msg["type"] == "cursor":
-                await collab_manager.update_cursor(
-                    user.id, 
-                    msg.get("line", 1), 
-                    msg.get("column", 1),
-                    msg.get("selectionStart"),
-                    msg.get("selectionEnd")
+                await document_hub.update_cursor(
+                    user.id,
+                    msg.get("line", 1),
+                    msg.get("column", 1)
                 )
-            elif msg["type"] == "edit":
-                await collab_manager.broadcast_edit(
-                    user.id, msg.get("changes", [])
-                )
+            
             elif msg["type"] == "identity":
-                await collab_manager.update_user(
-                    user.id, msg.get("name", "Anonymous")
+                await document_hub.update_identity(
+                    user.id, 
+                    msg.get("name", "Anonymous")
                 )
+            
             elif msg["type"] == "chat":
-                await collab_manager.broadcast_global(
-                    {
-                        "type": "chat",
-                        "userId": user.id,
-                        "name": user.name,
-                        "color": user.color,
-                        "text": msg.get("text", ""),
-                        "timestamp": msg.get("timestamp", 0)
-                    }
+                await document_hub.send_chat(
+                    user.id,
+                    msg.get("text", ""),
+                    msg.get("timestamp", 0)
                 )
                 
     except WebSocketDisconnect:
-        await collab_manager.disconnect(user.id)
+        await document_hub.disconnect(user.id, websocket)
+    except Exception as e:
+        print(f"[Doc] Error: {e}")
+        await document_hub.disconnect(user.id, websocket)
 
 
 # Static files
@@ -469,40 +508,18 @@ def download_output():
         )
     return {"error": "No output file found"}
 
-# ============================================================
-# PREVIEW WebSocket
-# ============================================================
+# Legacy endpoints - prevent crash if old clients connect
+@app.websocket("/ws/collab")
+async def legacy_collab(websocket: WebSocket):
+    await websocket.close()
+
+@app.websocket("/ws/sync")
+async def legacy_sync(websocket: WebSocket):
+    await websocket.close()
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    queue = asyncio.Queue()
-    loop = asyncio.get_event_loop()
-    
-    def on_update(updates):
-        loop.call_soon_threadsafe(queue.put_nowait, updates)
-    
-    try:
-        preview_manager.add_callback(on_update)
-        
-        # Send initial state
-        status = preview_manager.get_status()
-        if status['pages']:
-            initial = []
-            for p in status['pages']:
-                content = preview_manager.get_image(p)
-                if content:
-                    initial.append({'page': p, 'svg': content.decode('utf-8')})
-            if initial:
-                await websocket.send_json({"type": "init", "updates": initial})
-        
-        while True:
-            updates = await queue.get()
-            await websocket.send_json({"type": "update", "updates": updates})
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:
-        print(f"WS Error: {e}")
+async def legacy_ws(websocket: WebSocket):
+    await websocket.close()
 
 @app.post("/api/watch")
 def start_watch(data: dict = Body(...)):
@@ -598,6 +615,103 @@ def save_module_config(name: str, data: dict = Body(...)):
     
     config_path.write_text(json.dumps(data, indent=4))
     return {"success": True}
+
+@app.post("/api/check")
+async def check_diagnostics(data: dict = Body(...)):
+    """Run typst compile to get diagnostics."""
+    import shutil
+    
+    # Find typst binary
+    typst_bin = shutil.which("typst")
+    if not typst_bin:
+        # Try common paths
+        for path in ["/opt/homebrew/bin/typst", "/usr/local/bin/typst", os.path.expanduser("~/.cargo/bin/typst")]:
+            if os.path.exists(path):
+                typst_bin = path
+                break
+    
+    if not typst_bin:
+        print("[LSP] typst binary not found!")
+        return {"diagnostics": [], "error": "typst not found"}
+    
+    # Create temp file for output
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp_path = tmp.name
+    
+    try:
+        # Scan content directory to get actual chapter/page structure
+        content_dir = BASE_DIR / "content"
+        chapter_folders = []
+        page_folders = {}
+        
+        if content_dir.exists():
+            # Get sorted chapter directories (numeric order)
+            ch_dirs = sorted(
+                [d for d in content_dir.iterdir() if d.is_dir() and d.name.replace('.', '', 1).lstrip('-').isdigit()],
+                key=lambda d: float(d.name) if d.name.replace('.', '', 1).lstrip('-').isdigit() else 999
+            )
+            for idx, ch_dir in enumerate(ch_dirs):
+                chapter_folders.append(ch_dir.name)
+                # Get sorted page files (numeric order, without .typ extension)
+                pg_files = sorted(
+                    [f.stem for f in ch_dir.glob("*.typ") if f.stem.replace('.', '', 1).lstrip('-').isdigit()],
+                    key=lambda s: float(s) if s.replace('.', '', 1).lstrip('-').isdigit() else 999
+                )
+                page_folders[str(idx)] = pg_files
+        
+        # Run typst compile with folder info
+        result = subprocess.run(
+            [
+                typst_bin, "compile", str(RENDERER_FILE), tmp_path, 
+                "--root", str(BASE_DIR),
+                "--input", f"chapter-folders={json.dumps(chapter_folders)}",
+                "--input", f"page-folders={json.dumps(page_folders)}"
+            ],
+            capture_output=True,
+            text=True
+        )
+        
+        print(f"[LSP] typst stderr: {result.stderr}")
+        print(f"[LSP] typst returncode: {result.returncode}")
+        
+        diagnostics = []
+        lines = result.stderr.split('\n')
+        current_error = None
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            if stripped.startswith("error:"):
+                msg = stripped[6:].strip()
+                current_error = {"message": msg, "severity": "error"}
+            
+            # Typst uses Unicode box-drawing: ┌─ file:line:col
+            elif ("┌" in stripped or "├" in stripped) and current_error:
+                # Extract location after the box character
+                # Format: ┌─ file.typ:line:col or ├─ file.typ:line:col
+                idx = stripped.find("─")
+                if idx != -1:
+                    location = stripped[idx+1:].strip()
+                    parts = location.split(':')
+                    if len(parts) >= 3:
+                        try:
+                            line_num = int(parts[-2])
+                            col_num = int(parts[-1])
+                            path_str = ":".join(parts[:-2]).strip()
+                            
+                            current_error["line"] = line_num
+                            current_error["col"] = col_num
+                            current_error["file"] = path_str
+                            diagnostics.append(current_error)
+                            current_error = None
+                        except ValueError:
+                            pass
+        
+        print(f"[LSP] Parsed diagnostics: {diagnostics}")
+        return {"diagnostics": diagnostics}
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 # ============================================================
 # STATUS API

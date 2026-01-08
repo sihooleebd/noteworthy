@@ -39,6 +39,14 @@
                             <span id="active-filename">Select a file</span>
                         </div>
                         <div id="online-users" class="user-avatars"></div>
+                        <div class="error-container" id="error-container">
+                            <div id="error-count" class="error-count" onclick="app.toggleErrorDetails()">
+                                <i data-lucide="alert-circle"></i>
+                                <span id="error-count-text">0 errors</span>
+                                <i data-lucide="chevron-down" class="error-chevron"></i>
+                            </div>
+                            <div id="error-details" class="error-details"></div>
+                        </div>
                         <div class="editor-actions">
                             <div class="theme-toggle">
                                 <select id="editor-theme" onchange="app.setEditorTheme(this.value)">
@@ -47,8 +55,10 @@
                                     <option value="hc-black">High Contrast</option>
                                 </select>
                             </div>
-                            <button class="icon-btn" onclick="app.toggleChat()" title="Chat">
+                            <button class="icon-btn" onclick="app.toggleChat()" title="Chat" id="chat-toggle-btn"
+                                style="position: relative;">
                                 <i data-lucide="message-square"></i>
+                                <span class="unread-badge" style="display: none;"></span>
                             </button>
                             <span class="save-indicator" id="save-status"></span>
                         </div>
@@ -183,7 +193,6 @@
         </div>
     </div>
 
-    <script src="js/collab.js"></script>
     <script src="js/app.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {

@@ -46,7 +46,7 @@ An example project is available at https://github.com/sihooleebd/math-noteworthy
 
 ### Themes
 
-You can generate a visual catalogue of all available themes (including block styles, typography, and plotting colors) by running:
+Noteworthy comes with **15+** pre-built themes. You can generate a visual catalogue by running:
 
 ```bash
 cd images
@@ -55,53 +55,36 @@ typst compile theme_catalogue.typ --root ..
 
 ### Framework Components
 
-- **Theme System**: 13+ pre-built color schemes with easy customization
-- **Standard Library**: Extensive collection of modules (Math, Plotting, DSA) provided by [noteworthy-modules](https://github.com/sihooleebd/noteworthy-modules)
+- **Theme System**: 15+ pre-built color schemes with easy customization
+- **Standard Library**: Extensive collection of modules (Math, Plotting, DSA) via [noteworthy-modules](https://github.com/sihooleebd/noteworthy-modules)
 - **Document Structure**: Automated table of contents, chapter covers, and page headers
 - **Configuration Layer**: JSON-based settings in `config/`
 - **Build System**: Incremental compilation with automatic PDF merging
-- **Interactive Editors**: TUI-based editors or **Web-based GUI** for real-time preview
+- **Interactive GUI**: Web-based interface for visual editing and real-time collaboration
 
 ## Key Features
 
-- **Theme-Driven Design**: Switch between 13+ themes instantly  
-- **Modular Architecture**: Import only what you need
-- **Rich Typography**: Beautiful math typesetting with custom snippets
-- **Extensible**: Add custom blocks, themes, and plotting functions
-- **Production-Ready**: Used for real educational materials
-- **Incremental Build**: Compile sections individually, merge automatically
+1.  **Theme-Driven Design**: Switch between themes instantly.
+2.  **Modular Architecture**: Import only what you need.
+3.  **Rich Typography**: Beautiful math typesetting.
+4.  **Extensible**: Add custom blocks and plotting functions.
+5.  **Production-Ready**: Used for real educational materials.
 
-## Interactive GUI & Collaboration
+## Interactive GUI
 
 Noteworthy includes a powerful web-based interface for visual editing, configuration, and real-time collaboration.
 
-### Features
-- **Live Preview**: See your changes instantly as you type.
-- **Visual Configuration**: Configure themes, layouts, and modules without editing JSON.
-- **Real-time Collaboration**: Work with others on the same document simultaneously.
-  - **Shared Cursors**: See where others are editing.
-  - **Global Chat**: Communicate via the built-in encrypted chat.
-  - **Conflict-Free**: File-scoped edits ensure data integrity.
+**[Read the full GUI Documentation](./docs/GUI.md)** for details on:
+- **Live Preview & Editing**
+- **Real-time Collaboration (Chat, Cursors)**
+- **Remote Access via ngrok**
+- **Visual Build Grid**
 
-### Running the GUI
+### Quick Start
 ```bash
 python3 noteworthy.py --gui
 ```
-The interface will be available at `http://localhost:8000`.
-
-### Remote Collaboration via Ngrok
-To collaborate with users over the internet (outside your LAN), we recommend using **ngrok**. This provides a secure, encrypted tunnel to your local instance.
-
-1.  Start the Noteworthy GUI:
-    ```bash
-    python3 noteworthy.py --gui
-    ```
-2.  In a separate terminal, expose port 8000:
-    ```bash
-    ngrok http 8000
-    ```
-3.  Share the provided **HTTPS** URL (e.g., `https://xxxx-xx.ngrok-free.app`) with your collaborators.
-
+Access at `http://localhost:8000`.
 
 ## Documentation
 
