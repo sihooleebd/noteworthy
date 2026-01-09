@@ -153,10 +153,15 @@ async def doc_endpoint(websocket: WebSocket):
                 path = msg.get("path", "")
                 doc = await document_hub.join_file(user.id, path)
                 if doc:
+                    # Get other users on this file for cursor sync
+                    other_cursors = document_hub.get_users_on_file(path, exclude_user_id=user.id)
+                    
+                    # Send file content + cursors together
                     await websocket.send_text(json.dumps({
                         "type": "init",
                         "content": doc.content,
-                        "version": doc.version
+                        "version": doc.version,
+                        "cursors": other_cursors
                     }))
             
             elif msg["type"] == "edit":

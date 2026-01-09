@@ -1097,6 +1097,14 @@ const app = {
     },
 
     openFile: async function (path, el) {
+        // Skip if clicking the same file that's already open
+        if (this.state.activeFile === path) {
+            // Still update selection in case called from elsewhere
+            document.querySelectorAll('.tree-item').forEach(e => e.classList.remove('selected'));
+            if (el) el.classList.add('selected');
+            return;
+        }
+
         // FORCE REMOVAL of welcome overlay (don't just hide)
         const overlay = document.getElementById('welcome-overlay');
         if (overlay) {
@@ -2282,8 +2290,16 @@ const app = {
                 // Initialize online users from server list
                 if (msg.users && Array.isArray(msg.users)) {
                     this.state.onlineUsers = {};
+                    this.state.userCursors = {};  // Initialize cursor positions
                     msg.users.forEach(u => {
                         this.state.onlineUsers[u.id] = u;
+                        // Store cursor positions for "follow user" feature
+                        if (u.cursor_line && u.cursor_column) {
+                            this.state.userCursors[u.id] = {
+                                line: u.cursor_line,
+                                column: u.cursor_column
+                            };
+                        }
                     });
                     this.renderOnlineUsers();
                 }
@@ -2299,6 +2315,21 @@ const app = {
                     this.state.editor.setValue(msg.content);
                     this.state.applyingRemote = false;
                     document.getElementById('save-status').textContent = '';
+
+                    // Render cursors of other users on this file (after a frame to ensure editor is ready)
+                    if (msg.cursors && Array.isArray(msg.cursors)) {
+                        requestAnimationFrame(() => {
+                            msg.cursors.forEach(cursor => {
+                                this.updateRemoteCursor({
+                                    userId: cursor.id,
+                                    name: cursor.name,
+                                    color: cursor.color,
+                                    line: cursor.cursor_line,
+                                    column: cursor.cursor_column
+                                });
+                            });
+                        });
+                    }
                 }
                 break;
 

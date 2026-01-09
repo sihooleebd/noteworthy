@@ -423,8 +423,29 @@ class DocumentHub:
     def get_users(self) -> List[dict]:
         """Get all connected users."""
         return [
-            {"id": u.id, "name": u.name, "color": u.color, "file": u.current_file}
+            {
+                "id": u.id, 
+                "name": u.name, 
+                "color": u.color, 
+                "file": u.current_file,
+                "cursor_line": u.cursor_line,
+                "cursor_column": u.cursor_column
+            }
             for u in self.users.values()
+        ]
+    
+    def get_users_on_file(self, path: str, exclude_user_id: str = None) -> List[dict]:
+        """Get users currently on a specific file (for cursor sync)."""
+        return [
+            {
+                "id": u.id,
+                "name": u.name,
+                "color": u.color,
+                "cursor_line": u.cursor_line,
+                "cursor_column": u.cursor_column
+            }
+            for u in self.users.values()
+            if u.current_file == path and u.id != exclude_user_id
         ]
     
     async def _broadcast(self, message: dict, exclude: str = None):
