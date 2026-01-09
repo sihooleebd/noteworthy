@@ -606,6 +606,38 @@ body {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
+/* Page container for inline SVG preview (click-to-navigate) */
+#preview-container .page-container {
+    width: 100%;
+    margin-bottom: 16px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    background: #ffffff;
+}
+
+#preview-container .page-container svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* Source map highlight animation (when clicking preview to jump to source) */
+.source-map-highlight {
+    background-color: rgba(255, 215, 0, 0.4) !important;
+    animation: source-map-pulse 1.5s ease-out;
+}
+
+@keyframes source-map-pulse {
+    0% {
+        background-color: rgba(255, 215, 0, 0.6);
+    }
+
+    100% {
+        background-color: rgba(255, 215, 0, 0);
+    }
+}
+
 .preview-placeholder {
     display: flex;
     flex-direction: column;

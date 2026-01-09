@@ -57,13 +57,13 @@ python3 noteworthy.py -g
 
 ## Features
 
-| Feature         | Description                                     |
-| --------------- | ----------------------------------------------- |
-| **15+ Themes**  | Pre-built color schemes, easy customization     |
-| **Modules**     | Math, plotting, geometry, data structures       |
-| **Web GUI**     | Real-time preview, collaboration, Monaco editor |
-| **Fast Builds** | Parallel compilation, incremental updates       |
-| **PDF Output**  | Merged PDFs with bookmarks and metadata         |
+| Feature         | Description                                                       |
+| --------------- | ----------------------------------------------------------------- |
+| **15+ Themes**  | Pre-built color schemes, easy customization                       |
+| **Modules**     | Math, plotting, geometry, data structures                         |
+| **Web Studio**  | **Google Docs-style** editing, source preview jump, Monaco editor |
+| **Fast Builds** | Parallel compilation, incremental updates                         |
+| **PDF Output**  | Merged PDFs with bookmarks and metadata                           |
 
 ---
 

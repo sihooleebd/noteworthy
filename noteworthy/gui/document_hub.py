@@ -40,6 +40,11 @@ class User:
     current_file: Optional[str] = None
     cursor_line: int = 1
     cursor_column: int = 1
+    # Selection range (Google Docs-style highlighting)
+    selection_start_line: Optional[int] = None
+    selection_start_column: Optional[int] = None
+    selection_end_line: Optional[int] = None
+    selection_end_column: Optional[int] = None
 
 
 @dataclass
@@ -368,26 +373,41 @@ class DocumentHub:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
     
-    async def update_cursor(self, user_id: str, line: int, column: int):
-        """Update user cursor position."""
+    async def update_cursor(self, user_id: str, line: int, column: int,
+                            selection_start_line: int = None, selection_start_column: int = None,
+                            selection_end_line: int = None, selection_end_column: int = None):
+        """Update user cursor position and selection range."""
         if user_id not in self.users:
             return
         
         user = self.users[user_id]
         user.cursor_line = line
         user.cursor_column = column
+        user.selection_start_line = selection_start_line
+        user.selection_start_column = selection_start_column
+        user.selection_end_line = selection_end_line
+        user.selection_end_column = selection_end_column
         
         if not user.current_file:
             return
         
-        await self._broadcast_to_file(user.current_file, {
+        msg = {
             "type": "cursor",
             "userId": user_id,
             "name": user.name,
             "color": user.color,
             "line": line,
             "column": column
-        }, exclude=user_id)
+        }
+        
+        # Include selection range if present
+        if selection_start_line is not None:
+            msg["selectionStartLine"] = selection_start_line
+            msg["selectionStartColumn"] = selection_start_column
+            msg["selectionEndLine"] = selection_end_line
+            msg["selectionEndColumn"] = selection_end_column
+        
+        await self._broadcast_to_file(user.current_file, msg, exclude=user_id)
     
     async def update_identity(self, user_id: str, name: str):
         """Update user's display name."""

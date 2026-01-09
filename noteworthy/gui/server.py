@@ -174,7 +174,11 @@ async def doc_endpoint(websocket: WebSocket):
                 await document_hub.update_cursor(
                     user.id,
                     msg.get("line", 1),
-                    msg.get("column", 1)
+                    msg.get("column", 1),
+                    msg.get("selectionStartLine"),
+                    msg.get("selectionStartColumn"),
+                    msg.get("selectionEndLine"),
+                    msg.get("selectionEndColumn")
                 )
             
             elif msg["type"] == "identity":
@@ -253,6 +257,40 @@ def delete_file(data: dict = Body(...)):
         elif target.is_dir():
             shutil.rmtree(target)
         return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/rename")
+def rename_file(data: dict = Body(...)):
+    """Rename a file relative to project root."""
+    path = data.get("path")
+    new_name = data.get("newName")
+    
+    if not path or not new_name:
+        return {"success": False, "error": "Missing path or newName"}
+    
+    source = BASE_DIR / path
+    if not source.exists():
+        return {"success": False, "error": "File not found"}
+    
+    # Security check - ensure path is within project
+    try:
+        source.resolve().relative_to(BASE_DIR.resolve())
+    except ValueError:
+        return {"success": False, "error": "Invalid path"}
+    
+    # Calculate new path
+    parent_dir = source.parent
+    dest = parent_dir / new_name
+    
+    # Check if destination already exists
+    if dest.exists():
+        return {"success": False, "error": "A file with that name already exists"}
+    
+    try:
+        source.rename(dest)
+        new_path = str(dest.relative_to(BASE_DIR))
+        return {"success": True, "newPath": new_path}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -833,8 +871,21 @@ def get_status():
     }
 
 # ============================================================
+# Mount Yjs CRDT WebSocket (for collaborative editing)
+# ============================================================
+
+try:
+    from .yjs_provider import get_yjs_asgi_app
+    app.mount("/yjs", get_yjs_asgi_app())
+    print("[Server] Yjs CRDT WebSocket mounted at /yjs")
+except ImportError as e:
+    print(f"[Server] Yjs CRDT not available (pycrdt-websocket not installed): {e}")
+    print("[Server] Collaborative editing will use fallback sync mechanism")
+
+# ============================================================
 # Mount Static Files (must be last!)
 # ============================================================
 
 if STATIC_DIR.exists():
     app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+

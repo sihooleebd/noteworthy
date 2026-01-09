@@ -11,8 +11,8 @@ Noteworthy Studio is built with:
 | **Backend**   | FastAPI + Python        |
 | **Real-time** | WebSockets              |
 | **Frontend**  | HTML + CSS + JavaScript |
-| **Editor**    | Monaco Editor           |
-| **Preview**   | PDF.js                  |
+| **Editor**    | Monaco Editor + Yjs     |
+| **Preview**   | PDF.js / SVG            |
 
 ---
 
@@ -76,14 +76,16 @@ The main FastAPI application.
 | `/api/hierarchy` | GET/POST | Chapter structure |
 | `/api/schemes`   | GET      | Available themes  |
 | `/api/build`     | POST     | Trigger build     |
+| `/api/rename`    | POST     | Rename file       |
 | `/api/tree`      | GET      | File tree         |
 | `/api/modules`   | GET      | Module list       |
 
 **WebSocket Endpoints:**
 
-| Endpoint  | Purpose                    |
-| --------- | -------------------------- |
-| `/ws/doc` | Unified document WebSocket |
+| Endpoint  | Purpose                       |
+| --------- | ----------------------------- |
+| `/ws/doc` | Unified document WebSocket    |
+| `/yjs`    | Yjs CRDT WebSocket (Optional) |
 
 ### document_hub.py
 
@@ -121,8 +123,18 @@ class DocumentHub:
     async def join_file(user_id, path) -> Document
     async def update_content(user_id, path, content)
     async def update_cursor(user_id, line, column)
+    async def update_cursor(user_id, line, column, selection=None)
     async def send_chat(user_id, text, timestamp)
 ```
+
+### yjs_provider.py
+
+**NEW** - Yjs CRDT provider for conflict-free editing.
+
+**Responsibilities:**
+- Manages Yjs rooms per file
+- Persists CRDT state to disk
+- Handles broadcasting updates via `pycrdt-websocket`
 
 ### preview.py
 
@@ -189,16 +201,16 @@ UI styling with:
 
 **Server → Client:**
 
-| Type          | Payload                   | Purpose              |
-| ------------- | ------------------------- | -------------------- |
-| `joined`      | `{userId, color, users}`  | Connection confirmed |
-| `init`        | `{content, version}`      | File content         |
-| `update`      | `{path, content, userId}` | Content changed      |
-| `cursor`      | `{userId, line, column}`  | Cursor update        |
-| `user_joined` | `{user}`                  | New user             |
-| `user_left`   | `{userId}`                | User disconnected    |
-| `chat`        | `{userId, name, text}`    | Chat message         |
-| `preview`     | `{data}`                  | Preview update       |
+| Type          | Payload                    | Purpose              |
+| ------------- | -------------------------- | -------------------- |
+| `joined`      | `{userId, color, users}`   | Connection confirmed |
+| `init`        | `{content, version}`       | File content         |
+| `update`      | `{path, content, userId}`  | Content changed      |
+| `cursor`      | `{userId, line, col, sel}` | Cursor/Selection     |
+| `user_joined` | `{user}`                   | New user             |
+| `user_left`   | `{userId}`                 | User disconnected    |
+| `chat`        | `{userId, name, text}`     | Chat message         |
+| `preview`     | `{data}`                   | Preview update       |
 
 ---
 

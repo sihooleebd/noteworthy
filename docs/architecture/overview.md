@@ -83,6 +83,7 @@ The `noteworthy/` package handles:
 | `core/deps.py`          | Dependency checking          |
 | `gui/server.py`         | FastAPI backend              |
 | `gui/document_hub.py`   | Real-time sync               |
+| `gui/yjs_provider.py`   | Yjs CRDT connector           |
 
 ---
 

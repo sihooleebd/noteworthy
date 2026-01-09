@@ -724,9 +724,9 @@ const app = {
                 this.debouncedSyncContent();
             });
 
-            // Cursor broadcast
-            this.state.editor.onDidChangeCursorPosition((e) => {
-                this.sendCursor(e.position);
+            // Cursor and selection broadcast (for collaborative editing)
+            this.state.editor.onDidChangeCursorSelection((e) => {
+                this.sendCursor(e.selection.getPosition(), e.selection);
             });
 
             // Set theme selector to current value
@@ -939,6 +939,7 @@ const app = {
             const el = document.createElement('div');
             el.className = 'tree-item';
             el.style.paddingLeft = `${depth * 16 + 12}px`;
+            el.dataset.path = item.path; // Add data-path for rename targeting
 
             if (item.is_dir) {
                 // Default templates and config to collapsed (false), others to expanded
@@ -946,7 +947,7 @@ const app = {
                 const defaultExpanded = !isBottomFolder;
                 const isExpanded = this.state.expandedFolders?.[item.path] ?? defaultExpanded;
 
-                el.innerHTML = `<i data-lucide="${isExpanded ? 'chevron-down' : 'chevron-right'}" class="tree-arrow"></i><i data-lucide="folder" class="tree-folder"></i> ${item.name}`;
+                el.innerHTML = `<i data-lucide="${isExpanded ? 'chevron-down' : 'chevron-right'}" class="tree-arrow"></i><i data-lucide="folder" class="tree-folder"></i> <span class="tree-file-name">${item.name}</span>`;
                 el.onclick = (e) => {
                     e.stopPropagation();
                     this.toggleFolder(item.path);
@@ -961,9 +962,9 @@ const app = {
             } else {
                 const icon = this.getFileIcon(item.name);
                 if (icon.type === 'svg') {
-                    el.innerHTML = `${icon.value} ${item.name}`;
+                    el.innerHTML = `${icon.value} <span class="tree-file-name">${item.name}</span>`;
                 } else {
-                    el.innerHTML = `<i data-lucide="${icon.value}" class="tree-file" style="fill: none; stroke-width: 2px;"></i> ${item.name}`;
+                    el.innerHTML = `<i data-lucide="${icon.value}" class="tree-file" style="fill: none; stroke-width: 2px;"></i> <span class="tree-file-name">${item.name}</span>`;
                 }
                 el.onclick = () => this.openFile(item.path, el);
                 el.oncontextmenu = (e) => this.showFileContextMenu(e, item.path);
@@ -1034,36 +1035,83 @@ const app = {
         event.target.value = ''; // Reset input
     },
 
-    renameFile: async function () {
+    renameFile: function () {
         const path = this.state.contextMenuFile;
         if (!path) return;
 
-        const filename = path.split('/').pop();
-        const newName = prompt('Rename file:', filename);
-        if (!newName || newName === filename) return;
+        // Find the file item in the tree
+        const fileItem = document.querySelector(`.tree-item[data-path="${path}"]`);
+        if (!fileItem) return;
 
-        try {
-            const res = await fetch('/api/rename', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path, newName })
-            });
-            if (res.ok) {
-                this.showSaveStatus('File Renamed');
-                this.refreshTree();
-                // Update active file if it was renamed
-                if (this.state.activeFile === path) {
-                    const newPath = path.substring(0, path.lastIndexOf('/') + 1) + newName;
-                    this.state.activeFile = newPath;
-                    document.getElementById('active-filename').textContent = newPath;
+        const filename = path.split('/').pop();
+        const nameSpan = fileItem.querySelector('.tree-file-name') || fileItem.querySelector('span:last-child');
+
+        // Replace the name with an editable input
+        const originalText = nameSpan.textContent;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'inline-rename-input';
+        input.value = filename;
+        input.style.cssText = `
+            background: var(--glass-bg);
+            border: 1px solid var(--accent);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-size: 13px;
+            padding: 2px 6px;
+            width: 100%;
+            outline: none;
+        `;
+
+        nameSpan.style.display = 'none';
+        fileItem.appendChild(input);
+        input.focus();
+        input.select();
+
+        const finishRename = async (save) => {
+            const newName = input.value.trim();
+            input.remove();
+            nameSpan.style.display = '';
+
+            if (save && newName && newName !== filename) {
+                try {
+                    const res = await fetch('/api/rename', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path, newName })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        this.showSaveStatus('File Renamed');
+                        this.refreshTree();
+                        // Update active file if it was renamed
+                        if (this.state.activeFile === path) {
+                            this.state.activeFile = result.newPath;
+                            document.getElementById('active-filename').textContent = result.newPath;
+                        }
+                    } else {
+                        this.showSaveStatus(result.error || 'Rename Failed');
+                    }
+                } catch (e) {
+                    console.error('Rename error:', e);
+                    this.showSaveStatus('Rename Error');
                 }
-            } else {
-                this.showSaveStatus('Rename Failed');
             }
-        } catch (e) {
-            console.error('Rename error:', e);
-            this.showSaveStatus('Rename Error');
-        }
+        };
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                finishRename(true);
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                finishRename(false);
+            }
+        });
+
+        input.addEventListener('blur', () => {
+            finishRename(true);
+        });
     },
 
     deleteFile: async function () {
@@ -2404,14 +2452,24 @@ const app = {
         setTimeout(() => document.getElementById('save-status').textContent = '', 1500);
     },
 
-    sendCursor: function (position) {
+    sendCursor: function (position, selection = null) {
         if (!this.state.docSocket || this.state.docSocket.readyState !== WebSocket.OPEN) return;
 
-        this.state.docSocket.send(JSON.stringify({
+        const msg = {
             type: 'cursor',
             line: position.lineNumber,
             column: position.column
-        }));
+        };
+
+        // Include selection range if provided
+        if (selection && !selection.isEmpty()) {
+            msg.selectionStartLine = selection.startLineNumber;
+            msg.selectionStartColumn = selection.startColumn;
+            msg.selectionEndLine = selection.endLineNumber;
+            msg.selectionEndColumn = selection.endColumn;
+        }
+
+        this.state.docSocket.send(JSON.stringify(msg));
     },
 
     updateRemoteCursor: function (msg) {
@@ -2425,7 +2483,10 @@ const app = {
         // Store decorations by user ID
         if (!this.state.remoteCursors) this.state.remoteCursors = {};
 
-        const decorations = [{
+        const decorations = [];
+
+        // Add cursor decoration
+        decorations.push({
             range: new monaco.Range(msg.line, msg.column, msg.line, msg.column + 1),
             options: {
                 className: `remote-cursor-${msg.userId}`,
@@ -2433,9 +2494,24 @@ const app = {
                 beforeContentClassName: 'remote-cursor-line',
                 stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
             }
-        }];
+        });
 
-        // Add dynamic CSS for this user's cursor color
+        // Add selection decoration if present (Google Docs style)
+        if (msg.selectionStartLine && msg.selectionEndLine) {
+            decorations.push({
+                range: new monaco.Range(
+                    msg.selectionStartLine, msg.selectionStartColumn,
+                    msg.selectionEndLine, msg.selectionEndColumn
+                ),
+                options: {
+                    className: `remote-selection-${msg.userId}`,
+                    hoverMessage: { value: `${msg.name}'s selection` },
+                    stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
+                }
+            });
+        }
+
+        // Add dynamic CSS for this user's cursor and selection color
         this.addCursorStyle(msg.userId, msg.color);
 
         this.state.remoteCursors[msg.userId] = this.state.editor.deltaDecorations(
@@ -2454,6 +2530,9 @@ const app = {
             .remote-cursor-${userId} {
                 background-color: ${color}40;
                 border-left: 2px solid ${color};
+            }
+            .remote-selection-${userId} {
+                background-color: ${color}30;
             }
         `;
         document.head.appendChild(style);
@@ -2583,15 +2662,30 @@ const app = {
         }
 
         updates.forEach(u => {
-            let img = document.getElementById(`page-${u.page}`);
-            if (!img) {
-                img = document.createElement('img');
-                img.id = `page-${u.page}`;
-                img.className = 'page-img';
-                container.appendChild(img);
+            let pageContainer = document.getElementById(`page-${u.page}`);
+            if (!pageContainer) {
+                pageContainer = document.createElement('div');
+                pageContainer.id = `page-${u.page}`;
+                pageContainer.className = 'page-container';
+                container.appendChild(pageContainer);
             }
-            img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(u.svg);
-            img.dataset.index = u.page;
+
+            // Use inline SVG for click-to-navigate functionality
+            pageContainer.innerHTML = u.svg;
+            pageContainer.dataset.index = u.page;
+
+            // Make text elements clickable for source navigation
+            const svgElement = pageContainer.querySelector('svg');
+            if (svgElement) {
+                svgElement.style.width = '100%';
+                svgElement.style.height = 'auto';
+                svgElement.style.cursor = 'pointer';
+
+                // Add click handler for text elements
+                svgElement.addEventListener('click', (e) => {
+                    this.handlePreviewClick(e);
+                });
+            }
         });
 
         // Sort pages
@@ -2601,6 +2695,76 @@ const app = {
         pages.forEach(p => container.appendChild(p));
     },
 
+    handlePreviewClick: function (e) {
+        // Extract text from clicked SVG element for source navigation
+        if (!this.state.editor || !this.state.activeFile) return;
+
+        // Find the closest text element
+        let textContent = '';
+        let target = e.target;
+
+        // Walk up the DOM to find text content
+        while (target && !textContent) {
+            if (target.textContent && target.textContent.trim()) {
+                textContent = target.textContent.trim();
+            }
+            if (target.tagName === 'svg') break;
+            target = target.parentElement;
+        }
+
+        // Clean up text - remove extra whitespace, take first meaningful chunk
+        textContent = textContent.replace(/\s+/g, ' ').trim();
+        if (textContent.length > 50) {
+            textContent = textContent.substring(0, 50);
+        }
+
+        if (!textContent || textContent.length < 3) {
+            console.log('[SourceMap] No meaningful text found at click position');
+            return;
+        }
+
+        console.log(`[SourceMap] Searching for: "${textContent}"`);
+
+        // Search for this text in the editor content
+        const model = this.state.editor.getModel();
+        if (!model) return;
+
+        const searchResult = model.findNextMatch(
+            textContent,
+            { lineNumber: 1, column: 1 },
+            false,  // isRegex
+            false,  // matchCase
+            null,   // wordSeparators
+            false   // captureMatches
+        );
+
+        if (searchResult) {
+            const { startLineNumber, startColumn } = searchResult.range;
+
+            // Jump to the matched position
+            this.state.editor.revealLineInCenter(startLineNumber);
+            this.state.editor.setPosition({ lineNumber: startLineNumber, column: startColumn });
+            this.state.editor.focus();
+
+            // Briefly highlight the match
+            const decorations = this.state.editor.deltaDecorations([], [{
+                range: searchResult.range,
+                options: {
+                    className: 'source-map-highlight',
+                    isWholeLine: false
+                }
+            }]);
+
+            // Remove highlight after 1.5 seconds
+            setTimeout(() => {
+                this.state.editor.deltaDecorations(decorations, []);
+            }, 1500);
+
+            console.log(`[SourceMap] Jumped to line ${startLineNumber}`);
+        } else {
+            console.log('[SourceMap] No match found in source');
+        }
+    },
 
     // ============================================================
     // STATUS

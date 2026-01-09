@@ -35,6 +35,7 @@ noteworthy/
     ├── app.py
     ├── server.py
     ├── document_hub.py
+    ├── yjs_provider.py
     ├── preview.py
     └── static/
 ```
@@ -218,6 +219,14 @@ Real-time document synchronization:
 - Cursor tracking
 - Content synchronization
 - Chat messaging
+
+### gui/yjs_provider.py
+
+Yjs CRDT integration:
+
+- Yjs room management
+- CRDT state persistence
+- WebSocket broadcasting
 
 ### gui/preview.py
 

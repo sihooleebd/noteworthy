@@ -8,12 +8,13 @@ Noteworthy Studio supports real-time collaboration, allowing multiple users to e
 
 ### Features
 
-| Feature                   | Description                         |
-| ------------------------- | ----------------------------------- |
-| **Shared Cursors**        | See where others are editing        |
-| **Global Chat**           | Built-in messaging                  |
-| **Live Preview**          | Instant compilation feedback        |
-| **Conflict-Free Editing** | File-scoped edits prevent conflicts |
+| Feature                    | Description                          |
+| -------------------------- | ------------------------------------ |
+| **Shared cursors**         | Real-time cursor tracking            |
+| **Selection Highlighting** | **Google Docs-style** text selection |
+| **Preview Navigation**     | Click preview to jump to source      |
+| **Global Chat**            | Built-in messaging                   |
+| **Conflict-Free**          | Optional Yjs CRDT integration        |
 
 ---
 
@@ -62,6 +63,20 @@ When multiple users are connected:
 - Cursor positions are shown in real-time
 - Click on a user's avatar to jump to their location
 
+### Selection Highlighting
+
+Collaborate like you're in Google Docs:
+- **See what others select**: Text selections are broadcast in real-time
+- **Color-coded**: Selections match the user's assigned color
+- **Conflict awareness**: Helps avoid editing same sentence simultaneously
+
+### Preview Source Navigation
+
+Bidirectional navigation makes editing easier:
+- **Click-to-Source**: Click any text in the preview to jump to that location in the editor
+- **Highlight Animation**: The target line briefly flashes gold to orient you
+- **Contextual Matching**: Uses smart text matching to find the right location even if source maps are approximate
+
 ### Setting Your Name
 
 1. Click the **Settings** icon
@@ -84,16 +99,17 @@ An unread indicator appears when new messages arrive.
 
 ### How It Works
 
-1. User A edits `content/1/1.typ`
-2. Changes sync to server via WebSocket
-3. Server broadcasts to User B
-4. User B sees the update instantly
+Noteworthy uses a hybrid synchronization system:
+
+1. **CRDT Backend (Optional)**: If available, uses `Yjs` for conflict-free real-time editing
+2. **Standard Sync**: Falls back to last-write-wins if CRDT modules (`pycrdt`) are missing
 
 ### Conflict Prevention
 
 - **Single-file scope**: Only one user can save a file at a time
 - **Server authority**: Server version is always canonical
 - **Optimistic UI**: Edits appear instantly, confirm on save
+- **Selection Awareness**: Use selection highlighting to avoid stepping on teammates' toes
 
 ---
 
