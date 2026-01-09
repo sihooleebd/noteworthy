@@ -51,7 +51,7 @@ pip install fastapi uvicorn
 python3 noteworthy.py -g
 ```
 
-**[Full Installation Guide](docs/getting-started/installation.md)**
+**[Full Installation Guide](https://noteworthy.benjaminlee.kr/docs.html#getting-started/installation)**
 
 ---
 
@@ -83,15 +83,15 @@ python3 noteworthy.py -g
 
 ## Documentation
 
-**[Documentation](docs/index.md)**
+**[Documentation](https://noteworthy.benjaminlee.kr/docs.html)**
 
-| Section                                                 | Description                    |
-| ------------------------------------------------------- | ------------------------------ |
-| [Getting Started](docs/getting-started/installation.md) | Installation and first project |
-| [Guides](docs/guides/theming.md)                        | Theming, modules, building     |
-| [Reference](docs/reference/cli.md)                      | CLI, config files, API         |
-| [Architecture](docs/architecture/overview.md)           | System internals               |
-| [Contributing](docs/contributing/development-setup.md)  | Development setup              |
+| Section                                                                                     | Description                    |
+| ------------------------------------------------------------------------------------------- | ------------------------------ |
+| [Getting Started](https://noteworthy.benjaminlee.kr/docs.html#getting-started/installation) | Installation and first project |
+| [Guides](https://noteworthy.benjaminlee.kr/docs.html#guides/theming)                        | Theming, modules, building     |
+| [Reference](https://noteworthy.benjaminlee.kr/docs.html#reference/cli)                      | CLI, config files, API         |
+| [Architecture](https://noteworthy.benjaminlee.kr/docs.html#architecture/overview)           | System internals               |
+| [Contributing](https://noteworthy.benjaminlee.kr/docs.html#contributing/development-setup)  | Development setup              |
 
 ---
 
