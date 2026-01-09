@@ -1,64 +1,90 @@
 # Contributing Guidelines
 
-Thank you for your interest in contributing to **Noteworthy**! This project is a complex ecosystem spanning Python tooling, Typst templating, and user interfaces. 
+Thank you for your interest in contributing to **Noteworthy**!
+
+## Quick Start
+
+```bash
+# Clone and setup
+git clone https://github.com/sihooleebd/noteworthy
+cd noteworthy
+uv sync
+source .venv/bin/activate
+
+# Verify
+noteworthy --help
+uv run ruff check .
+```
+
+📖 **[Full Development Setup →](docs/contributing/development-setup.md)**
+
+---
 
 ## Code of Conduct
 
-We are committed to providing a friendly, safe and welcoming environment for all, regardless of level of experience, gender identity and expression, sexual orientation, disability, personal appearance, body size, race, ethnicity, age, religion, nationality, or other similar characteristic.
+We are committed to providing a friendly, safe, and welcoming environment for all contributors.
 
-## Development Philosophies
+---
 
-Different parts of the Noteworthy codebase follow different design philosophies. Understanding these is crucial for your contribution to be accepted.
+## Development Guides
 
-### 1. The Core Infrastructure (`noteworthy/core/`)
-**Philosophy: Robustness & Isolation**
+| Guide                                                       | Description                |
+| ----------------------------------------------------------- | -------------------------- |
+| [Development Setup](docs/contributing/development-setup.md) | Environment setup with uv  |
+| [Code Style](docs/contributing/code-style.md)               | Formatting and conventions |
+| [Pull Requests](docs/contributing/pull-requests.md)         | Submission process         |
 
-The core Python logic handles the heavy lifting of build automation, PDF processing, and file management.
-- **Dependency Isolation**: Core modules should have minimal external dependencies.
-- **Defensive Programming**: Assume user input is messy. Use robust error handling.
-- **Performance**: Builds should be fast. Optimize large file operations.
+---
 
-### 2. The TUI & CLI (`noteworthy/tui/`, `noteworthy_cli.py`)
-**Philosophy: UX First & Accessibility**
+## Project Architecture
 
-These are the primary touchpoints for the user.
-- **Intuitive Navigation**: Keybindings should follow standard patterns (Arrow keys + Vim bindings).
-- **Clear Feedback**: Every action must have immediate visual feedback.
-- **Aesthetics**: The TUI should look polished. Use color and spacing intentionally.
-- **Parity**: The CLI should mirror TUI capabilities where possible (e.g., using shared `noteworthy/utils.py`).
+Understanding the codebase:
 
-### 3. Typst Templates (`templates/`)
-**Philosophy: Separation of Concerns**
+| Component              | Philosophy                                                   |
+| ---------------------- | ------------------------------------------------------------ |
+| **`noteworthy/core/`** | Robustness & isolation — minimal deps, defensive programming |
+| **`noteworthy/tui/`**  | UX first — intuitive navigation, clear feedback              |
+| **`noteworthy/gui/`**  | Modern web — FastAPI, WebSockets, real-time sync             |
+| **`templates/`**       | Separation of concerns — structure vs. style                 |
 
-We strictly separate **structure** from **style**.
-- **Implementation (`impl.typ`)**: Pure logic and default styling. Accepts a `theme` parameter but never hardcodes color values (e.g., use `theme.primary` not `red`). 
-- **Module Interface (`mod.typ`)**: The public-facing API. It injects the `active-theme` into the implementation functions.
-- **Setup (`examples.typ`)**: Clear, minimal examples of usage.
+📖 **[Architecture Overview →](docs/architecture/overview.md)**
 
-**Example Flow:**
-1. Write logic in `impl.typ`: `#let alert(body, theme: (:)) = block(fill: theme.at("warning", default: yellow), body)`
-2. Export in `mod.typ`: `#import "impl.typ": alert as _alert` -> `#let alert(body) = _alert(body, theme: active-theme)`
+---
 
-### 4. Themes (`templates/themes/`)
-**Philosophy: Coherence & Flexibility**
+## Typst Conventions
 
-Themes define the visual soul of a document.
-- **Standard Keys**: All themes must implement the core color keys (`primary`, `secondary`, `accent`, `background`, `text`).
-- **Scalability**: Designs should look good on both 100-page textbooks and 5-page notes.
+We strictly separate **structure** from **style**:
 
-## Submitting Pull Requests
+- **Implementation (`impl.typ`)**: Pure logic, accepts `theme` parameter, never hardcodes colors
+- **Module Interface (`mod.typ`)**: Public API, injects `active-theme`
 
-1. **Fork & Branch**: Create a descriptive feature branch (e.g., `feature/inverted-grid`).
-2. **Test Locally**: 
-   - Run the TUI: `python3 noteworthy.py`
-   - Run the CLI: `python3 noteworthy_cli.py -c 0`
-   - Test builds: `python3 noteworthy.py -u -f` (if testing updater logic)
-3. **Draft PR**: Open a draft PR early if you need feedback.
-4. **Documentation**: Update `docs/` and `README.md` if you changed user-facing features.
+```typst
+// Implementation - pure function
+#let _alert(body, theme: (:)) = {
+  let color = theme.at("warning", default: yellow)
+  block(fill: color, body)
+}
+
+// Public API - injects theme
+#let alert(body) = _alert(body, theme: active-theme)
+```
+
+---
+
+## Submitting Changes
+
+1. **Fork & Branch**: `git checkout -b feature/my-feature`
+2. **Test**: Run TUI, GUI, and CLI
+3. **Lint**: `uv run ruff check .`
+4. **Commit**: Use [conventional commits](https://www.conventionalcommits.org/)
+5. **PR**: Open a pull request
+
+---
 
 ## Security
 
-Please see existing [SECURITY.md](SECURITY.md) for our disclosure policy.
+See [SECURITY.md](SECURITY.md) for our disclosure policy.
 
 ---
-**Happy Coding!** - *Sihoo & Hojun*
+
+**Happy Coding!** — *Sihoo & Hojun*

@@ -12,6 +12,10 @@ __pycache__/
 venv/
 .venv/
 .env
+.python-version
+
+# uv
+uv.lock
 
 # Editor/IDE
 .vscode/
@@ -20,6 +24,7 @@ venv/
 *.swo
 
 # Project Specific
+build/
 templates/build/
 templates/systemconfig/
 templates/module/
@@ -28,16 +33,16 @@ exports/
 build_settings.json
 .indexignore
 extract_hierarchy.typ
+_update_runner.py
 
 # PDFs
-# Ignore all PDFs in content directory
 content/**/*.pdf
-
-# Ignore all PDFs at root except tutor.pdf
 /*.pdf
 !/tutor.pdf
 
 # Tests
 tests/
+
+# Generated
 templates/core/imports.typ
 config/modules.json
