@@ -73,52 +73,605 @@ const app = {
         // Debounced content sync (sends full content after pause)
         this.debouncedSyncContent = this.debounce(() => this.syncContent(), 150);
 
+        // Apply saved CSS theme to body on page load
+        const savedTheme = this.state.editorTheme;
+        if (savedTheme && savedTheme !== 'noteworthy-dark') {
+            document.body.dataset.theme = savedTheme;
+        }
 
         // Monaco Editor with saved theme
         require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
         require(['vs/editor/editor.main'], () => {
-            // Define luxurious black theme
-            monaco.editor.defineTheme('noteworthy-dark', {
-                base: 'vs-dark',
-                inherit: true,
-                rules: [
-                    { token: '', foreground: 'e0e0e0', background: '000000' },
-                    { token: 'comment', foreground: '6a6a6a', fontStyle: 'italic' },
-                    { token: 'keyword', foreground: 'c792ea', fontStyle: 'bold' },
-                    { token: 'string', foreground: 'c3e88d' },
-                    { token: 'number', foreground: 'f78c6c' },
-                    { token: 'type', foreground: 'ffcb6b' },
-                    { token: 'function', foreground: '82aaff' },
-                    { token: 'variable', foreground: 'f07178' },
-                    { token: 'constant', foreground: '89ddff' },
-                    { token: 'operator', foreground: '89ddff' },
-                    { token: 'tag', foreground: 'f07178' },
-                    { token: 'attribute.name', foreground: 'ffcb6b' },
-                    { token: 'attribute.value', foreground: 'c3e88d' },
-                ],
-                colors: {
-                    'editor.background': '#000000',
-                    'editor.foreground': '#ffffff',
-                    'editor.lineHighlightBackground': '#0a0a0a',
-                    'editor.selectionBackground': '#333333',
-                    'editor.inactiveSelectionBackground': '#222222',
-                    'editorCursor.foreground': '#ffffff',
-                    'editorWhitespace.foreground': '#222222',
-                    'editorLineNumber.foreground': '#444444',
-                    'editorLineNumber.activeForeground': '#888888',
-                    'editorIndentGuide.background': '#1a1a1a',
-                    'editorIndentGuide.activeBackground': '#333333',
-                    'editor.selectionHighlightBackground': '#2a2a2a',
-                    'editorBracketMatch.background': '#333333',
-                    'editorBracketMatch.border': '#555555',
-                    'scrollbarSlider.background': '#222222',
-                    'scrollbarSlider.hoverBackground': '#333333',
-                    'scrollbarSlider.activeBackground': '#444444',
+            // Define all available editor themes
+            const EDITOR_THEMES = {
+                'noteworthy-dark': {
+                    label: 'Noteworthy Dark',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: 'e0e0e0', background: '000000' },
+                        { token: 'comment', foreground: '6a6a6a', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: 'c792ea', fontStyle: 'bold' },
+                        { token: 'string', foreground: 'c3e88d' },
+                        { token: 'number', foreground: 'f78c6c' },
+                        { token: 'type', foreground: 'ffcb6b' },
+                        { token: 'function', foreground: '82aaff' },
+                        { token: 'variable', foreground: 'f07178' },
+                        { token: 'constant', foreground: '89ddff' },
+                        { token: 'operator', foreground: '89ddff' },
+                        { token: 'tag', foreground: 'f07178' },
+                        { token: 'attribute.name', foreground: 'ffcb6b' },
+                        { token: 'attribute.value', foreground: 'c3e88d' },
+                    ],
+                    colors: {
+                        'editor.background': '#000000',
+                        'editor.foreground': '#ffffff',
+                        'editor.lineHighlightBackground': '#0a0a0a',
+                        'editor.selectionBackground': '#333333',
+                        'editor.inactiveSelectionBackground': '#222222',
+                        'editorCursor.foreground': '#ffffff',
+                        'editorWhitespace.foreground': '#222222',
+                        'editorLineNumber.foreground': '#444444',
+                        'editorLineNumber.activeForeground': '#888888',
+                        'editorIndentGuide.background': '#1a1a1a',
+                        'editorIndentGuide.activeBackground': '#333333',
+                        'editor.selectionHighlightBackground': '#2a2a2a',
+                        'editorBracketMatch.background': '#333333',
+                        'editorBracketMatch.border': '#555555',
+                        'scrollbarSlider.background': '#222222',
+                        'scrollbarSlider.hoverBackground': '#333333',
+                        'scrollbarSlider.activeBackground': '#444444',
+                    }
+                },
+                'dracula': {
+                    label: 'Dracula',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: 'f8f8f2', background: '282a36' },
+                        { token: 'comment', foreground: '6272a4', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: 'ff79c6', fontStyle: 'bold' },
+                        { token: 'string', foreground: 'f1fa8c' },
+                        { token: 'number', foreground: 'bd93f9' },
+                        { token: 'type', foreground: '8be9fd', fontStyle: 'italic' },
+                        { token: 'function', foreground: '50fa7b' },
+                        { token: 'variable', foreground: 'f8f8f2' },
+                        { token: 'constant', foreground: 'bd93f9' },
+                        { token: 'operator', foreground: 'ff79c6' },
+                        { token: 'tag', foreground: 'ff79c6' },
+                        { token: 'attribute.name', foreground: '50fa7b' },
+                        { token: 'attribute.value', foreground: 'f1fa8c' },
+                    ],
+                    colors: {
+                        'editor.background': '#282a36',
+                        'editor.foreground': '#f8f8f2',
+                        'editor.lineHighlightBackground': '#44475a',
+                        'editor.selectionBackground': '#44475a',
+                        'editor.inactiveSelectionBackground': '#3d4051',
+                        'editorCursor.foreground': '#f8f8f2',
+                        'editorWhitespace.foreground': '#44475a',
+                        'editorLineNumber.foreground': '#6272a4',
+                        'editorLineNumber.activeForeground': '#f8f8f2',
+                        'editorIndentGuide.background': '#44475a',
+                        'editorIndentGuide.activeBackground': '#6272a4',
+                        'editor.selectionHighlightBackground': '#424450',
+                        'editorBracketMatch.background': '#44475a',
+                        'editorBracketMatch.border': '#ff79c6',
+                        'scrollbarSlider.background': '#44475a80',
+                        'scrollbarSlider.hoverBackground': '#44475a',
+                        'scrollbarSlider.activeBackground': '#6272a4',
+                    }
+                },
+                'one-dark-pro': {
+                    label: 'One Dark Pro',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: 'abb2bf', background: '282c34' },
+                        { token: 'comment', foreground: '5c6370', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: 'c678dd', fontStyle: 'bold' },
+                        { token: 'string', foreground: '98c379' },
+                        { token: 'number', foreground: 'd19a66' },
+                        { token: 'type', foreground: 'e5c07b' },
+                        { token: 'function', foreground: '61afef' },
+                        { token: 'variable', foreground: 'e06c75' },
+                        { token: 'constant', foreground: 'd19a66' },
+                        { token: 'operator', foreground: '56b6c2' },
+                        { token: 'tag', foreground: 'e06c75' },
+                        { token: 'attribute.name', foreground: 'd19a66' },
+                        { token: 'attribute.value', foreground: '98c379' },
+                    ],
+                    colors: {
+                        'editor.background': '#282c34',
+                        'editor.foreground': '#abb2bf',
+                        'editor.lineHighlightBackground': '#2c313a',
+                        'editor.selectionBackground': '#3e4451',
+                        'editor.inactiveSelectionBackground': '#3a3f4b',
+                        'editorCursor.foreground': '#528bff',
+                        'editorWhitespace.foreground': '#3b4048',
+                        'editorLineNumber.foreground': '#495162',
+                        'editorLineNumber.activeForeground': '#abb2bf',
+                        'editorIndentGuide.background': '#3b4048',
+                        'editorIndentGuide.activeBackground': '#4b5263',
+                        'editor.selectionHighlightBackground': '#3e4451',
+                        'editorBracketMatch.background': '#3e4451',
+                        'editorBracketMatch.border': '#528bff',
+                        'scrollbarSlider.background': '#4e566680',
+                        'scrollbarSlider.hoverBackground': '#5a6375',
+                        'scrollbarSlider.activeBackground': '#747d91',
+                    }
+                },
+                'solarized-dark': {
+                    label: 'Solarized Dark',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: '839496', background: '002b36' },
+                        { token: 'comment', foreground: '586e75', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: '859900', fontStyle: 'bold' },
+                        { token: 'string', foreground: '2aa198' },
+                        { token: 'number', foreground: 'd33682' },
+                        { token: 'type', foreground: 'b58900' },
+                        { token: 'function', foreground: '268bd2' },
+                        { token: 'variable', foreground: 'cb4b16' },
+                        { token: 'constant', foreground: '6c71c4' },
+                        { token: 'operator', foreground: '859900' },
+                        { token: 'tag', foreground: '268bd2' },
+                        { token: 'attribute.name', foreground: '93a1a1' },
+                        { token: 'attribute.value', foreground: '2aa198' },
+                    ],
+                    colors: {
+                        'editor.background': '#002b36',
+                        'editor.foreground': '#839496',
+                        'editor.lineHighlightBackground': '#073642',
+                        'editor.selectionBackground': '#073642',
+                        'editor.inactiveSelectionBackground': '#064050',
+                        'editorCursor.foreground': '#839496',
+                        'editorWhitespace.foreground': '#073642',
+                        'editorLineNumber.foreground': '#586e75',
+                        'editorLineNumber.activeForeground': '#93a1a1',
+                        'editorIndentGuide.background': '#073642',
+                        'editorIndentGuide.activeBackground': '#586e75',
+                        'editor.selectionHighlightBackground': '#0a4050',
+                        'editorBracketMatch.background': '#073642',
+                        'editorBracketMatch.border': '#268bd2',
+                        'scrollbarSlider.background': '#07364280',
+                        'scrollbarSlider.hoverBackground': '#586e75',
+                        'scrollbarSlider.activeBackground': '#839496',
+                    }
+                },
+                'nord': {
+                    label: 'Nord',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: 'd8dee9', background: '2e3440' },
+                        { token: 'comment', foreground: '616e88', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: '81a1c1', fontStyle: 'bold' },
+                        { token: 'string', foreground: 'a3be8c' },
+                        { token: 'number', foreground: 'b48ead' },
+                        { token: 'type', foreground: '8fbcbb' },
+                        { token: 'function', foreground: '88c0d0' },
+                        { token: 'variable', foreground: 'd8dee9' },
+                        { token: 'constant', foreground: 'b48ead' },
+                        { token: 'operator', foreground: '81a1c1' },
+                        { token: 'tag', foreground: '81a1c1' },
+                        { token: 'attribute.name', foreground: '8fbcbb' },
+                        { token: 'attribute.value', foreground: 'a3be8c' },
+                    ],
+                    colors: {
+                        'editor.background': '#2e3440',
+                        'editor.foreground': '#d8dee9',
+                        'editor.lineHighlightBackground': '#3b4252',
+                        'editor.selectionBackground': '#434c5e',
+                        'editor.inactiveSelectionBackground': '#3b4252',
+                        'editorCursor.foreground': '#d8dee9',
+                        'editorWhitespace.foreground': '#434c5e',
+                        'editorLineNumber.foreground': '#4c566a',
+                        'editorLineNumber.activeForeground': '#d8dee9',
+                        'editorIndentGuide.background': '#434c5e',
+                        'editorIndentGuide.activeBackground': '#4c566a',
+                        'editor.selectionHighlightBackground': '#434c5e80',
+                        'editorBracketMatch.background': '#434c5e',
+                        'editorBracketMatch.border': '#88c0d0',
+                        'scrollbarSlider.background': '#434c5e80',
+                        'scrollbarSlider.hoverBackground': '#4c566a',
+                        'scrollbarSlider.activeBackground': '#5e6779',
+                    }
+                },
+                'monokai': {
+                    label: 'Monokai',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: 'f8f8f2', background: '272822' },
+                        { token: 'comment', foreground: '88846f', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: 'f92672', fontStyle: 'bold' },
+                        { token: 'string', foreground: 'e6db74' },
+                        { token: 'number', foreground: 'ae81ff' },
+                        { token: 'type', foreground: '66d9ef', fontStyle: 'italic' },
+                        { token: 'function', foreground: 'a6e22e' },
+                        { token: 'variable', foreground: 'f8f8f2' },
+                        { token: 'constant', foreground: 'ae81ff' },
+                        { token: 'operator', foreground: 'f92672' },
+                        { token: 'tag', foreground: 'f92672' },
+                        { token: 'attribute.name', foreground: 'a6e22e' },
+                        { token: 'attribute.value', foreground: 'e6db74' },
+                    ],
+                    colors: {
+                        'editor.background': '#272822',
+                        'editor.foreground': '#f8f8f2',
+                        'editor.lineHighlightBackground': '#3e3d32',
+                        'editor.selectionBackground': '#49483e',
+                        'editor.inactiveSelectionBackground': '#3e3d32',
+                        'editorCursor.foreground': '#f8f8f2',
+                        'editorWhitespace.foreground': '#464741',
+                        'editorLineNumber.foreground': '#90908a',
+                        'editorLineNumber.activeForeground': '#c2c2bf',
+                        'editorIndentGuide.background': '#464741',
+                        'editorIndentGuide.activeBackground': '#767771',
+                        'editor.selectionHighlightBackground': '#49483e80',
+                        'editorBracketMatch.background': '#3e3d32',
+                        'editorBracketMatch.border': '#f92672',
+                        'scrollbarSlider.background': '#49483e80',
+                        'scrollbarSlider.hoverBackground': '#5b5a50',
+                        'scrollbarSlider.activeBackground': '#6d6c64',
+                    }
+                },
+                'github-dark': {
+                    label: 'GitHub Dark',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: 'c9d1d9', background: '0d1117' },
+                        { token: 'comment', foreground: '8b949e', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: 'ff7b72', fontStyle: 'bold' },
+                        { token: 'string', foreground: 'a5d6ff' },
+                        { token: 'number', foreground: '79c0ff' },
+                        { token: 'type', foreground: 'ffa657' },
+                        { token: 'function', foreground: 'd2a8ff' },
+                        { token: 'variable', foreground: 'ffa657' },
+                        { token: 'constant', foreground: '79c0ff' },
+                        { token: 'operator', foreground: 'ff7b72' },
+                        { token: 'tag', foreground: '7ee787' },
+                        { token: 'attribute.name', foreground: '79c0ff' },
+                        { token: 'attribute.value', foreground: 'a5d6ff' },
+                    ],
+                    colors: {
+                        'editor.background': '#0d1117',
+                        'editor.foreground': '#c9d1d9',
+                        'editor.lineHighlightBackground': '#161b22',
+                        'editor.selectionBackground': '#264f78',
+                        'editor.inactiveSelectionBackground': '#1d2d3e',
+                        'editorCursor.foreground': '#c9d1d9',
+                        'editorWhitespace.foreground': '#21262d',
+                        'editorLineNumber.foreground': '#484f58',
+                        'editorLineNumber.activeForeground': '#c9d1d9',
+                        'editorIndentGuide.background': '#21262d',
+                        'editorIndentGuide.activeBackground': '#30363d',
+                        'editor.selectionHighlightBackground': '#3fb95040',
+                        'editorBracketMatch.background': '#264f78',
+                        'editorBracketMatch.border': '#79c0ff',
+                        'scrollbarSlider.background': '#484f5880',
+                        'scrollbarSlider.hoverBackground': '#6e7681',
+                        'scrollbarSlider.activeBackground': '#8b949e',
+                    }
+                },
+                'aether': {
+                    label: 'Aether',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: 'CBD5E1', background: '0F172A' },
+                        { token: 'comment', foreground: '64748B', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: '6B8799', fontStyle: 'bold' },
+                        { token: 'string', foreground: '88B09D' },
+                        { token: 'number', foreground: 'CFA098' },
+                        { token: 'type', foreground: 'D6B57E' },
+                        { token: 'function', foreground: '85A8CC' },
+                        { token: 'variable', foreground: 'CBD5E1' },
+                        { token: 'constant', foreground: 'CFA098' },
+                        { token: 'operator', foreground: '89A3B5' },
+                    ],
+                    colors: {
+                        'editor.background': '#0F172A',
+                        'editor.foreground': '#CBD5E1',
+                        'editor.lineHighlightBackground': '#1E293B',
+                        'editor.selectionBackground': '#334155',
+                        'editor.inactiveSelectionBackground': '#1E293B',
+                        'editorCursor.foreground': '#CBD5E1',
+                        'editorWhitespace.foreground': '#1E293B',
+                        'editorLineNumber.foreground': '#64748B',
+                        'editorLineNumber.activeForeground': '#CBD5E1',
+                        'editorIndentGuide.background': '#1E293B',
+                        'editorIndentGuide.activeBackground': '#334155',
+                        'scrollbarSlider.background': '#1E293B80',
+                        'scrollbarSlider.hoverBackground': '#334155',
+                        'scrollbarSlider.activeBackground': '#475569',
+                    }
+                },
+                'catppuccin-mocha': {
+                    label: 'Catppuccin Mocha',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: 'cdd6f4', background: '1e1e2e' },
+                        { token: 'comment', foreground: '6c7086', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: 'cba6f7', fontStyle: 'bold' },
+                        { token: 'string', foreground: 'a6e3a1' },
+                        { token: 'number', foreground: 'fab387' },
+                        { token: 'type', foreground: 'f9e2af' },
+                        { token: 'function', foreground: '89b4fa' },
+                        { token: 'variable', foreground: 'cdd6f4' },
+                        { token: 'constant', foreground: 'fab387' },
+                        { token: 'operator', foreground: '89dceb' },
+                    ],
+                    colors: {
+                        'editor.background': '#1e1e2e',
+                        'editor.foreground': '#cdd6f4',
+                        'editor.lineHighlightBackground': '#313244',
+                        'editor.selectionBackground': '#45475a',
+                        'editor.inactiveSelectionBackground': '#313244',
+                        'editorCursor.foreground': '#f5e0dc',
+                        'editorWhitespace.foreground': '#313244',
+                        'editorLineNumber.foreground': '#6c7086',
+                        'editorLineNumber.activeForeground': '#cdd6f4',
+                        'editorIndentGuide.background': '#313244',
+                        'editorIndentGuide.activeBackground': '#45475a',
+                        'scrollbarSlider.background': '#31324480',
+                        'scrollbarSlider.hoverBackground': '#45475a',
+                        'scrollbarSlider.activeBackground': '#585b70',
+                    }
+                },
+                'catppuccin-latte': {
+                    label: 'Catppuccin Latte',
+                    base: 'vs',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: '4c4f69', background: 'eff1f5' },
+                        { token: 'comment', foreground: '9ca0b0', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: '8839ef', fontStyle: 'bold' },
+                        { token: 'string', foreground: '40a02b' },
+                        { token: 'number', foreground: 'fe640b' },
+                        { token: 'type', foreground: 'df8e1d' },
+                        { token: 'function', foreground: '1e66f5' },
+                        { token: 'variable', foreground: '4c4f69' },
+                        { token: 'constant', foreground: 'fe640b' },
+                        { token: 'operator', foreground: '04a5e5' },
+                    ],
+                    colors: {
+                        'editor.background': '#eff1f5',
+                        'editor.foreground': '#4c4f69',
+                        'editor.lineHighlightBackground': '#e6e9ef',
+                        'editor.selectionBackground': '#acb0be',
+                        'editor.inactiveSelectionBackground': '#bcc0cc',
+                        'editorCursor.foreground': '#dc8a78',
+                        'editorWhitespace.foreground': '#bcc0cc',
+                        'editorLineNumber.foreground': '#9ca0b0',
+                        'editorLineNumber.activeForeground': '#4c4f69',
+                        'editorIndentGuide.background': '#bcc0cc',
+                        'editorIndentGuide.activeBackground': '#acb0be',
+                        'scrollbarSlider.background': '#bcc0cc80',
+                        'scrollbarSlider.hoverBackground': '#acb0be',
+                        'scrollbarSlider.activeBackground': '#9ca0b0',
+                    }
+                },
+                'everforest': {
+                    label: 'Everforest',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: 'd3c6aa', background: '2d353b' },
+                        { token: 'comment', foreground: '859289', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: 'e67e80', fontStyle: 'bold' },
+                        { token: 'string', foreground: 'a7c080' },
+                        { token: 'number', foreground: 'd699b6' },
+                        { token: 'type', foreground: 'dbbc7f' },
+                        { token: 'function', foreground: '7fbbb3' },
+                        { token: 'variable', foreground: 'd3c6aa' },
+                        { token: 'constant', foreground: 'e69875' },
+                        { token: 'operator', foreground: 'e67e80' },
+                    ],
+                    colors: {
+                        'editor.background': '#2d353b',
+                        'editor.foreground': '#d3c6aa',
+                        'editor.lineHighlightBackground': '#343f44',
+                        'editor.selectionBackground': '#3d484d',
+                        'editor.inactiveSelectionBackground': '#343f44',
+                        'editorCursor.foreground': '#d3c6aa',
+                        'editorWhitespace.foreground': '#343f44',
+                        'editorLineNumber.foreground': '#859289',
+                        'editorLineNumber.activeForeground': '#d3c6aa',
+                        'editorIndentGuide.background': '#343f44',
+                        'editorIndentGuide.activeBackground': '#3d484d',
+                        'scrollbarSlider.background': '#343f4480',
+                        'scrollbarSlider.hoverBackground': '#3d484d',
+                        'scrollbarSlider.activeBackground': '#475258',
+                    }
+                },
+                'gruvbox': {
+                    label: 'Gruvbox',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: 'ebdbb2', background: '282828' },
+                        { token: 'comment', foreground: '928374', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: 'fb4934', fontStyle: 'bold' },
+                        { token: 'string', foreground: 'b8bb26' },
+                        { token: 'number', foreground: 'd3869b' },
+                        { token: 'type', foreground: 'fabd2f' },
+                        { token: 'function', foreground: '83a598' },
+                        { token: 'variable', foreground: 'ebdbb2' },
+                        { token: 'constant', foreground: 'fe8019' },
+                        { token: 'operator', foreground: '8ec07c' },
+                    ],
+                    colors: {
+                        'editor.background': '#282828',
+                        'editor.foreground': '#ebdbb2',
+                        'editor.lineHighlightBackground': '#32302f',
+                        'editor.selectionBackground': '#3c3836',
+                        'editor.inactiveSelectionBackground': '#32302f',
+                        'editorCursor.foreground': '#ebdbb2',
+                        'editorWhitespace.foreground': '#3c3836',
+                        'editorLineNumber.foreground': '#928374',
+                        'editorLineNumber.activeForeground': '#ebdbb2',
+                        'editorIndentGuide.background': '#3c3836',
+                        'editorIndentGuide.activeBackground': '#504945',
+                        'scrollbarSlider.background': '#3c383680',
+                        'scrollbarSlider.hoverBackground': '#504945',
+                        'scrollbarSlider.activeBackground': '#665c54',
+                    }
+                },
+                'rose-pine': {
+                    label: 'Rosé Pine',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: 'e0def4', background: '191724' },
+                        { token: 'comment', foreground: '6e6a86', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: 'eb6f92', fontStyle: 'bold' },
+                        { token: 'string', foreground: 'f6c177' },
+                        { token: 'number', foreground: 'c4a7e7' },
+                        { token: 'type', foreground: 'ebbcba' },
+                        { token: 'function', foreground: '9ccfd8' },
+                        { token: 'variable', foreground: 'e0def4' },
+                        { token: 'constant', foreground: 'c4a7e7' },
+                        { token: 'operator', foreground: '31748f' },
+                    ],
+                    colors: {
+                        'editor.background': '#191724',
+                        'editor.foreground': '#e0def4',
+                        'editor.lineHighlightBackground': '#1f1d2e',
+                        'editor.selectionBackground': '#26233a',
+                        'editor.inactiveSelectionBackground': '#1f1d2e',
+                        'editorCursor.foreground': '#e0def4',
+                        'editorWhitespace.foreground': '#1f1d2e',
+                        'editorLineNumber.foreground': '#6e6a86',
+                        'editorLineNumber.activeForeground': '#e0def4',
+                        'editorIndentGuide.background': '#1f1d2e',
+                        'editorIndentGuide.activeBackground': '#26233a',
+                        'scrollbarSlider.background': '#1f1d2e80',
+                        'scrollbarSlider.hoverBackground': '#26233a',
+                        'scrollbarSlider.activeBackground': '#393552',
+                    }
+                },
+                'tokyo-night': {
+                    label: 'Tokyo Night',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: 'c0caf5', background: '1a1b26' },
+                        { token: 'comment', foreground: '565f89', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: 'bb9af7', fontStyle: 'bold' },
+                        { token: 'string', foreground: '9ece6a' },
+                        { token: 'number', foreground: 'ff9e64' },
+                        { token: 'type', foreground: 'e0af68' },
+                        { token: 'function', foreground: '7aa2f7' },
+                        { token: 'variable', foreground: 'c0caf5' },
+                        { token: 'constant', foreground: 'ff9e64' },
+                        { token: 'operator', foreground: '89ddff' },
+                    ],
+                    colors: {
+                        'editor.background': '#1a1b26',
+                        'editor.foreground': '#c0caf5',
+                        'editor.lineHighlightBackground': '#1f2335',
+                        'editor.selectionBackground': '#283457',
+                        'editor.inactiveSelectionBackground': '#1f2335',
+                        'editorCursor.foreground': '#c0caf5',
+                        'editorWhitespace.foreground': '#1f2335',
+                        'editorLineNumber.foreground': '#565f89',
+                        'editorLineNumber.activeForeground': '#c0caf5',
+                        'editorIndentGuide.background': '#1f2335',
+                        'editorIndentGuide.activeBackground': '#292e42',
+                        'scrollbarSlider.background': '#1f233580',
+                        'scrollbarSlider.hoverBackground': '#292e42',
+                        'scrollbarSlider.activeBackground': '#3b4261',
+                    }
+                },
+                'moonlight': {
+                    label: 'Moonlight',
+                    base: 'vs-dark',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: 'c8d3f5', background: '212337' },
+                        { token: 'comment', foreground: '7a88cf', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: 'c099ff', fontStyle: 'bold' },
+                        { token: 'string', foreground: 'c3e88d' },
+                        { token: 'number', foreground: 'ff966c' },
+                        { token: 'type', foreground: 'ffc777' },
+                        { token: 'function', foreground: '82aaff' },
+                        { token: 'variable', foreground: 'c8d3f5' },
+                        { token: 'constant', foreground: 'ff966c' },
+                        { token: 'operator', foreground: '86e1fc' },
+                    ],
+                    colors: {
+                        'editor.background': '#212337',
+                        'editor.foreground': '#c8d3f5',
+                        'editor.lineHighlightBackground': '#2f334d',
+                        'editor.selectionBackground': '#444a73',
+                        'editor.inactiveSelectionBackground': '#2f334d',
+                        'editorCursor.foreground': '#c8d3f5',
+                        'editorWhitespace.foreground': '#2f334d',
+                        'editorLineNumber.foreground': '#7a88cf',
+                        'editorLineNumber.activeForeground': '#c8d3f5',
+                        'editorIndentGuide.background': '#2f334d',
+                        'editorIndentGuide.activeBackground': '#444a73',
+                        'scrollbarSlider.background': '#2f334d80',
+                        'scrollbarSlider.hoverBackground': '#444a73',
+                        'scrollbarSlider.activeBackground': '#545c7e',
+                    }
+                },
+                'solarized-light': {
+                    label: 'Solarized Light',
+                    base: 'vs',
+                    inherit: true,
+                    rules: [
+                        { token: '', foreground: '657b83', background: 'fdf6e3' },
+                        { token: 'comment', foreground: '93a1a1', fontStyle: 'italic' },
+                        { token: 'keyword', foreground: '859900', fontStyle: 'bold' },
+                        { token: 'string', foreground: '2aa198' },
+                        { token: 'number', foreground: 'd33682' },
+                        { token: 'type', foreground: 'b58900' },
+                        { token: 'function', foreground: '268bd2' },
+                        { token: 'variable', foreground: 'cb4b16' },
+                        { token: 'constant', foreground: '6c71c4' },
+                        { token: 'operator', foreground: '859900' },
+                    ],
+                    colors: {
+                        'editor.background': '#fdf6e3',
+                        'editor.foreground': '#657b83',
+                        'editor.lineHighlightBackground': '#eee8d5',
+                        'editor.selectionBackground': '#d3d0c8',
+                        'editor.inactiveSelectionBackground': '#eee8d5',
+                        'editorCursor.foreground': '#657b83',
+                        'editorWhitespace.foreground': '#eee8d5',
+                        'editorLineNumber.foreground': '#93a1a1',
+                        'editorLineNumber.activeForeground': '#586e75',
+                        'editorIndentGuide.background': '#eee8d5',
+                        'editorIndentGuide.activeBackground': '#d3d0c8',
+                        'scrollbarSlider.background': '#d3d0c880',
+                        'scrollbarSlider.hoverBackground': '#c0bcb0',
+                        'scrollbarSlider.activeBackground': '#93a1a1',
+                    }
                 }
+            };
+
+            // Store themes globally for access in settings
+            this.EDITOR_THEMES = EDITOR_THEMES;
+
+            // Register all themes with Monaco
+            Object.keys(EDITOR_THEMES).forEach(themeId => {
+                const theme = EDITOR_THEMES[themeId];
+                monaco.editor.defineTheme(themeId, {
+                    base: theme.base,
+                    inherit: theme.inherit,
+                    rules: theme.rules,
+                    colors: theme.colors
+                });
             });
 
-            // Use custom theme by default
-            const themeToUse = this.state.editorTheme === 'vs-dark' ? 'noteworthy-dark' : this.state.editorTheme;
+            // Use saved theme or default to noteworthy-dark
+            const themeToUse = this.state.editorTheme || 'noteworthy-dark';
 
             this.state.editor = monaco.editor.create(document.getElementById('monaco-container'), {
                 value: '',
@@ -278,9 +831,20 @@ const app = {
     setEditorTheme: function (theme) {
         this.state.editorTheme = theme;
         localStorage.setItem('editorTheme', theme);
-        if (this.state.editor) {
-            monaco.editor.setTheme(theme);
+
+        // Apply CSS theme to body (for full UI theming)
+        if (theme === 'noteworthy-dark') {
+            document.body.removeAttribute('data-theme');
+        } else {
+            document.body.dataset.theme = theme;
         }
+
+        // Apply Monaco editor theme
+        if (this.state.editor && window.monaco) {
+            window.monaco.editor.setTheme(theme);
+        }
+
+        this.showSaveStatus('Theme Updated');
     },
 
     // ============================================================
@@ -1991,6 +2555,15 @@ const app = {
     },
 
     renderSessionTab: function (container) {
+        // Generate theme options from EDITOR_THEMES
+        const themeOptions = this.EDITOR_THEMES
+            ? Object.keys(this.EDITOR_THEMES).map(id => {
+                const theme = this.EDITOR_THEMES[id];
+                const selected = this.state.editorTheme === id ? 'selected' : '';
+                return `<option value="${id}" ${selected}>${theme.label}</option>`;
+            }).join('')
+            : '<option value="noteworthy-dark">Noteworthy Dark</option>';
+
         container.innerHTML = `
             <div class="config-section">
                 <h3>Session Settings</h3>
@@ -2001,6 +2574,16 @@ const app = {
                     <input type="text" id="session-name" value="${this.state.sessionName}" oninput="app.updateSessionName(this.value)" placeholder="Anonymous">
                     <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
                         This name will be visible to other users editing the same file. It is saved in your browser storage.
+                    </p>
+                </div>
+
+                <div class="form-group">
+                    <label>Editor Theme</label>
+                    <select id="editor-theme-select" onchange="app.setEditorTheme(this.value)">
+                        ${themeOptions}
+                    </select>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
+                        Choose a color scheme for the code editor. Your preference is saved in your browser.
                     </p>
                 </div>
             </div>
