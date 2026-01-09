@@ -6,7 +6,7 @@ Understanding how Noteworthy projects are organized.
 
 ```
 myproject/
-├── noteworthy.py          # Entry point (legacy launcher)
+├── noteworthy.py          # Bootstrap entry point
 ├── noteworthy_cli.py      # CLI build tool
 ├── pyproject.toml         # Project configuration
 ├── uv.lock                # Dependency lockfile

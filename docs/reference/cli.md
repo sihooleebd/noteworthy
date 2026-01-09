@@ -6,11 +6,11 @@ Complete command-line reference for Noteworthy.
 
 Noteworthy provides three executables:
 
-| Command             | Purpose                           |
-| ------------------- | --------------------------------- |
-| `noteworthy`        | Main launcher (TUI/GUI)           |
-| `noteworthy_cli.py` | Non-interactive CLI builder       |
-| `noteworthy.py`     | Legacy launcher (backward compat) |
+| Command             | Purpose                     |
+| ------------------- | --------------------------- |
+| `noteworthy`        | Main launcher (TUI/GUI)     |
+| `noteworthy_cli.py` | Non-interactive CLI builder |
+| `noteworthy.py`     | Bootstrap launcher          |
 
 ---
 
