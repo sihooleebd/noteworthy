@@ -39,9 +39,9 @@ git clone https://github.com/sihooleebd/noteworthy-modules
 cp -r noteworthy-modules/canvas templates/module/
 ```
 
-### Via GUI
+### Via Noteworthy Studio
 
-1. Open the GUI: `noteworthy -g`
+1. Open Noteworthy Studio: `noteworthy -g`
 2. Navigate to **Settings → Modules**
 3. Click **Install** next to the desired module
 
@@ -77,7 +77,7 @@ Modules are automatically available after the templater import:
 
 Many modules have configurable options. Configuration is stored in `config/modules/<module>.json`.
 
-### Via GUI
+### Via Noteworthy Studio
 
 1. Open **Settings → Module Settings**
 2. Select a module

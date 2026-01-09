@@ -115,7 +115,7 @@ usage: noteworthy [-h] [--print-inputs] [-g] [-p PORT] [-u] [-n] [-f] ...
 Noteworthy Launcher
 
 options:
-  -g, --gui       Launch web GUI instead of TUI
+  -g, --gui       Launch Noteworthy Studio
   -u, --update    Update noteworthy
   ...
 ```

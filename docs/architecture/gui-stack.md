@@ -1,10 +1,10 @@
-# GUI Stack
+# Noteworthy Studio Stack
 
-Architecture of the Noteworthy web GUI.
+Architecture of Noteworthy Studio.
 
 ## Overview
 
-The GUI is built with:
+Noteworthy Studio is built with:
 
 | Layer         | Technology              |
 | ------------- | ----------------------- |
@@ -242,7 +242,7 @@ sequenceDiagram
 ## Security Considerations
 
 > [!CAUTION]
-> The GUI has **no authentication**. Anyone with URL access can:
+> Noteworthy Studio has **no authentication**. Anyone with URL access can:
 > - Read all files
 > - Edit any content
 > - See other users' work

@@ -236,7 +236,7 @@ Defined by each module's `blueprint.json`:
 
 ## Validation
 
-The GUI validates settings against module blueprints. Invalid values are rejected with error messages.
+Noteworthy Studio validates settings against module blueprints. Invalid values are rejected with error messages.
 
 ---
 

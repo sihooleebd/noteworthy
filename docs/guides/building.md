@@ -1,20 +1,20 @@
 # Building
 
-Learn how to compile your Noteworthy documents using the TUI, CLI, or GUI.
+Learn how to compile your Noteworthy documents using the TUI, CLI, or Noteworthy Studio.
 
 ## Build Methods
 
 Noteworthy offers three ways to build:
 
-| Method  | Command                    | Best For                      |
-| ------- | -------------------------- | ----------------------------- |
-| **GUI** | `noteworthy -g`            | Visual editing, collaboration |
-| **TUI** | `noteworthy`               | Interactive terminal use      |
-| **CLI** | `python noteworthy_cli.py` | Scripts, CI/CD                |
+| Method     | Command                    | Best For                      |
+| ---------- | -------------------------- | ----------------------------- |
+| **Studio** | `noteworthy -g`            | Visual editing, collaboration |
+| **TUI**    | `noteworthy`               | Interactive terminal use      |
+| **CLI**    | `python noteworthy_cli.py` | Scripts, CI/CD                |
 
 ---
 
-## GUI Build
+## Studio Build
 
 The web interface provides visual build control.
 
@@ -150,7 +150,7 @@ typst compile templates/core/parser.typ section.pdf --root . --input target=0/0
 | File          | Description                               |
 | ------------- | ----------------------------------------- |
 | `output.pdf`  | Final merged document                     |
-| `preview.pdf` | Quick preview (if using GUI)              |
+| `preview.pdf` | Quick preview (if using Studio)           |
 | `build/`      | Temporary artifacts (deleted after merge) |
 
 ---

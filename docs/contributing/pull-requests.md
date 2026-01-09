@@ -48,7 +48,7 @@ uv run ruff check .
 # Test TUI
 noteworthy
 
-# Test GUI
+# Test Noteworthy Studio
 noteworthy -g
 
 # Test CLI

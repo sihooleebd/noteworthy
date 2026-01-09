@@ -15,7 +15,7 @@ cd images
 typst compile theme_catalogue.typ --root ..
 ```
 
-Or view them in the GUI under **Settings → Theme & Display**.
+Or view them in Noteworthy Studio under **Settings → Theme & Display**.
 
 ### Setting a Theme
 
@@ -27,7 +27,7 @@ Edit `config/constants.json`:
 }
 ```
 
-Or in the GUI: **Settings → Theme & Display → Theme selector**
+Or in Noteworthy Studio: **Settings → Theme & Display → Theme selector**
 
 ### Available Themes
 

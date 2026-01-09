@@ -231,7 +231,7 @@ Inline code: `` `variable` ``
 2. **Use blocks** — Semantic structure helps readers
 3. **Consistent headings** — Start each page with `=`
 4. **Relative paths** — Use `../` for cross-directory links
-5. **Preview often** — Use the GUI for instant feedback
+5. **Preview often** — Use Noteworthy Studio for instant feedback
 
 ---
 

@@ -8,7 +8,7 @@ High-level system architecture of Noteworthy.
 graph TB
     subgraph User["User Interface"]
         TUI["TUI (Terminal)"]
-        GUI["GUI (Web)"]
+        GUI["Studio (Web)"]
         CLI["CLI (Scripts)"]
     end
 
@@ -160,4 +160,4 @@ typst compile parser.typ output.pdf \
 
 - [Python Layer](python-layer.md)
 - [Typst Layer](typst-layer.md)
-- [GUI Stack](gui-stack.md)
+- [Studio Stack](gui-stack.md)

@@ -46,7 +46,7 @@ Edit `config/metadata.json`:
 }
 ```
 
-## 4. Build with GUI
+## 4. Build with Noteworthy Studio
 
 Launch the web interface:
 

@@ -49,7 +49,7 @@ The main entry point handles:
 
 1. **Argument parsing** — `-g`, `-u`, `-p`, etc.
 2. **Update logic** — Downloads from GitHub
-3. **Mode dispatch** — TUI, GUI, or CLI
+3. **Mode dispatch** — TUI, Studio, or CLI
 
 ```python
 def main():
@@ -184,13 +184,13 @@ Setup wizards:
 
 ---
 
-## GUI Module
+## Studio Module
 
 The web interface uses FastAPI + WebSockets.
 
 ### gui/app.py
 
-GUI launcher:
+Studio launcher:
 
 ```python
 def run_gui(host="127.0.0.1", port=8000):
@@ -208,7 +208,7 @@ FastAPI application with:
 - File operations
 - Build API
 
-See [GUI Stack](gui-stack.md) for details.
+See [Studio Stack](gui-stack.md) for details.
 
 ### gui/document_hub.py
 
@@ -250,5 +250,5 @@ graph LR
 ## See Also
 
 - [Architecture Overview](overview.md)
-- [GUI Stack](gui-stack.md)
+- [Studio Stack](gui-stack.md)
 - [CLI Reference](../reference/cli.md)

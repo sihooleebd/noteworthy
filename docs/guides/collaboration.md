@@ -1,10 +1,10 @@
 # Collaboration
 
-Real-time collaborative editing with the Noteworthy GUI.
+Real-time collaborative editing with Noteworthy Studio.
 
 ## Overview
 
-The Noteworthy GUI supports real-time collaboration, allowing multiple users to edit the same document simultaneously.
+Noteworthy Studio supports real-time collaboration, allowing multiple users to edit the same document simultaneously.
 
 ### Features
 
@@ -130,7 +130,7 @@ Each browser tab is a separate session. Avoid editing the same file in multiple 
 ## Security Notes
 
 > [!WARNING]
-> The Noteworthy GUI does not have authentication. Anyone with the URL can:
+> Noteworthy Studio does not have authentication. Anyone with the URL can:
 > - View all files
 > - Edit any content
 > - See chat messages
@@ -145,4 +145,4 @@ For sensitive projects:
 ## Next Steps
 
 - [Building Guide →](building.md)
-- [GUI Architecture →](../architecture/gui-stack.md)
+- [Studio Architecture →](../architecture/gui-stack.md)

@@ -6,9 +6,12 @@ Complete command-line reference for Noteworthy.
 
 Noteworthy provides three executables:
 
+> [!NOTE]
+> **Noteworthy Studio** is our web-based GUI for visual editing and real-time collaboration.
+
 | Command             | Purpose                     |
 | ------------------- | --------------------------- |
-| `noteworthy`        | Main launcher (TUI/GUI)     |
+| `noteworthy`        | Main launcher (TUI/Studio)  |
 | `noteworthy_cli.py` | Non-interactive CLI builder |
 | `noteworthy.py`     | Bootstrap launcher          |
 
@@ -26,14 +29,14 @@ noteworthy [OPTIONS]
 
 ### Options
 
-| Flag      | Long             | Description                       |
-| --------- | ---------------- | --------------------------------- |
-| `-g`      | `--gui`          | Launch web GUI instead of TUI     |
-| `-p PORT` | `--port PORT`    | GUI server port (default: 8000)   |
-| `-u`      | `--update`       | Update from GitHub                |
-| `-n`      | `--nightly`      | Use nightly branch (with `-u`)    |
-| `-f`      | `--force`        | Force clean reinstall (with `-u`) |
-|           | `--print-inputs` | Print Typst input flags           |
+| Flag      | Long             | Description                        |
+| --------- | ---------------- | ---------------------------------- |
+| `-g`      | `--gui`          | Launch Noteworthy Studio           |
+| `-p PORT` | `--port PORT`    | Studio server port (default: 8000) |
+| `-u`      | `--update`       | Update from GitHub                 |
+| `-n`      | `--nightly`      | Use nightly branch (with `-u`)     |
+| `-f`      | `--force`        | Force clean reinstall (with `-u`)  |
+|           | `--print-inputs` | Print Typst input flags            |
 
 ### Examples
 
@@ -41,10 +44,10 @@ noteworthy [OPTIONS]
 # Launch TUI
 noteworthy
 
-# Launch GUI
+# Launch Noteworthy Studio
 noteworthy -g
 
-# GUI on custom port
+# Studio on custom port
 noteworthy -g -p 3000
 
 # Update to latest

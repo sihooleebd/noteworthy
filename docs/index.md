@@ -16,13 +16,13 @@ New to Noteworthy? Start here:
 
 In-depth tutorials for common workflows:
 
-| Guide                                            | Description                        |
-| ------------------------------------------------ | ---------------------------------- |
-| [Theming](guides/theming.md)                     | Customize colors and visual styles |
-| [Modules](guides/modules.md)                     | Install and use extension modules  |
-| [Content Authoring](guides/content-authoring.md) | Writing Typst content files        |
-| [Building](guides/building.md)                   | TUI, CLI, and GUI build workflows  |
-| [Collaboration](guides/collaboration.md)         | Real-time editing with the web GUI |
+| Guide                                            | Description                              |
+| ------------------------------------------------ | ---------------------------------------- |
+| [Theming](guides/theming.md)                     | Customize colors and visual styles       |
+| [Modules](guides/modules.md)                     | Install and use extension modules        |
+| [Content Authoring](guides/content-authoring.md) | Writing Typst content files              |
+| [Building](guides/building.md)                   | TUI, CLI, and Studio build workflows     |
+| [Collaboration](guides/collaboration.md)         | Real-time editing with Noteworthy Studio |
 
 ## Reference
 
@@ -58,7 +58,7 @@ Deep dives into system internals:
 | [Overview](architecture/overview.md)         | System architecture and component diagram |
 | [Python Layer](architecture/python-layer.md) | The `noteworthy/` package                 |
 | [Typst Layer](architecture/typst-layer.md)   | The `templates/` structure                |
-| [GUI Stack](architecture/gui-stack.md)       | FastAPI + WebSocket + Monaco              |
+| [Studio Stack](architecture/gui-stack.md)    | FastAPI + WebSocket + Monaco              |
 
 ## Contributing
 
