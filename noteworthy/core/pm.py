@@ -1,68 +1,527 @@
 import json
-import urllib.request
-import urllib.error
-import base64
+import subprocess
+import shutil
 from pathlib import Path
+from datetime import datetime
 from ..utils import load_json_safe
 from ..config import MODULES_CONFIG_FILE
 
 MODULES_DIR = Path("templates/module")
 REPO_OWNER = "sihooleebd"
 REPO_NAME = "noteworthy-modules"
-API_BASE = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents"
+REPO_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}.git"
+CACHE_DIR = Path.home() / ".cache/noteworthy/modules-repo"
 
-def fetch_remote_modules():
-    """Fetch list of available module directories from remote (excludes 'core')."""
+
+# ============================================================================
+# Git-based Module Cache
+# ============================================================================
+
+def ensure_module_cache(callback=None):
+    """Clone or update the modules repo cache. Returns cache path or None on failure."""
     try:
-        req = urllib.request.Request(API_BASE)
-        req.add_header('User-Agent', 'Noteworthy-PM')
-        with urllib.request.urlopen(req, timeout=5) as response:
-            contents = json.loads(response.read().decode())
-        
-        modules = []
-        for item in contents:
-            if item['type'] == 'dir' and not item['name'].startswith('.') and item['name'] != 'core':
-                modules.append(item['name'])
-        return sorted(modules)
+        if not CACHE_DIR.exists():
+            if callback:
+                callback("Cloning module repository...")
+            CACHE_DIR.parent.mkdir(parents=True, exist_ok=True)
+            result = subprocess.run(
+                ["git", "clone", "--depth", "1", REPO_URL, str(CACHE_DIR)],
+                capture_output=True, text=True, timeout=60
+            )
+            if result.returncode != 0:
+                return None
+        else:
+            if callback:
+                callback("Fetching updates...")
+            # Fetch latest changes
+            subprocess.run(
+                ["git", "-C", str(CACHE_DIR), "fetch", "--depth", "1", "origin", "main"],
+                capture_output=True, text=True, timeout=30
+            )
+            subprocess.run(
+                ["git", "-C", str(CACHE_DIR), "reset", "--hard", "origin/main"],
+                capture_output=True, text=True, timeout=10
+            )
+        return CACHE_DIR
     except Exception:
-        return []
+        return None
 
-def fetch_core_submodules():
-    """Fetch list of submodules inside 'core' folder."""
+
+def get_cache_commit_sha():
+    """Get current commit SHA from the cache."""
     try:
-        req = urllib.request.Request(f"{API_BASE}/core")
-        req.add_header('User-Agent', 'Noteworthy-PM')
-        with urllib.request.urlopen(req, timeout=5) as response:
-            contents = json.loads(response.read().decode())
-        
-        submodules = []
-        for item in contents:
-            if item['type'] == 'dir' and not item['name'].startswith('.'):
-                submodules.append(item['name'])
-        return sorted(submodules)
+        result = subprocess.run(
+            ["git", "-C", str(CACHE_DIR), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
     except Exception:
-        return []
+        pass
+    return None
 
-def get_installed_modules():
+
+def get_module_sha_from_cache(module_name, is_core=False):
+    """Get the tree SHA for a specific module folder from git."""
+    try:
+        if is_core:
+            path = f"core/{module_name}"
+        else:
+            path = module_name
+        
+        result = subprocess.run(
+            ["git", "-C", str(CACHE_DIR), "rev-parse", f"HEAD:{path}"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+def check_module_updates(config):
+    """
+    Check which modules have updates available.
+    Compares stored SHA with current cache SHA.
+    Returns set of module names that have updates.
+    """
+    outdated = set()
+    
+    # Check default modules
+    for name, state in config.get("modules", {}).items():
+        if state.get("status") == "disabled":
+            continue
+        stored_sha = state.get("sha")
+        current_sha = get_module_sha_from_cache(name, is_core=False)
+        if current_sha and stored_sha != current_sha:
+            outdated.add(name)
+    
+    # Check core modules
+    for name, state in config.get("core_modules", {}).items():
+        stored_sha = state.get("sha")
+        current_sha = get_module_sha_from_cache(name, is_core=True)
+        if current_sha and stored_sha != current_sha:
+            outdated.add(f"core/{name}")
+    
+    return outdated
+
+
+# ============================================================================
+# Module Discovery
+# ============================================================================
+
+def parse_metadata(meta_path):
+    """Parse a metadata.json file, return dict or None if invalid."""
+    try:
+        if meta_path.exists():
+            with open(meta_path, 'r') as f:
+                data = json.load(f)
+            # Validate required fields
+            if isinstance(data, dict) and "name" in data:
+                return data
+    except Exception:
+        pass
+    return None
+
+
+def discover_modules_from_cache():
+    """
+    Discover all modules from cached repo.
+    Returns: (core_modules, default_modules) dicts with metadata.
+    """
+    core_modules = {}
+    default_modules = {}
+    
+    if not CACHE_DIR.exists():
+        return core_modules, default_modules
+    
+    # Core modules (under core/ directory)
+    core_dir = CACHE_DIR / "core"
+    if core_dir.exists():
+        for d in core_dir.iterdir():
+            if d.is_dir() and not d.name.startswith('.'):
+                meta = parse_metadata(d / "metadata.json")
+                if meta:
+                    core_modules[d.name] = meta
+                else:
+                    core_modules[d.name] = {"name": d.name, "dependencies": [], "exports": []}
+    
+    # Default modules (top-level, excluding core, .git, etc.)
+    skip_dirs = {'core', '.git'}
+    for d in CACHE_DIR.iterdir():
+        if d.is_dir() and d.name not in skip_dirs and not d.name.startswith('.'):
+            meta = parse_metadata(d / "metadata.json")
+            if meta:
+                default_modules[d.name] = meta
+            else:
+                default_modules[d.name] = {"name": d.name, "dependencies": [], "exports": []}
+    
+    return core_modules, default_modules
+
+
+def discover_local_modules(remote_module_names):
+    """
+    Discover locally created modules (not in remote repo).
+    Returns dict of local module name -> metadata.
+    """
+    local_modules = {}
+    
+    if not MODULES_DIR.exists():
+        return local_modules
+    
+    skip_dirs = set(remote_module_names) | {'core', '.git'}
+    
+    for d in MODULES_DIR.iterdir():
+        if d.is_dir() and d.name not in skip_dirs and not d.name.startswith('.'):
+            meta = parse_metadata(d / "metadata.json")
+            if meta:
+                local_modules[d.name] = meta
+    
+    return local_modules
+
+
+# ============================================================================
+# Config Management
+# ============================================================================
+
+def load_full_config():
+    """Load the full modules.json config."""
     if not MODULES_CONFIG_FILE.exists():
-        return {}
-    return load_json_safe(MODULES_CONFIG_FILE).get("modules", {})
+        return {
+            "core_modules": {},
+            "modules": {},
+            "local_modules": {},
+            "meta": {}
+        }
+    config = load_json_safe(MODULES_CONFIG_FILE)
+    # Ensure all sections exist
+    config.setdefault("core_modules", {})
+    config.setdefault("modules", {})
+    config.setdefault("local_modules", {})
+    config.setdefault("meta", {})
+    return config
 
-def save_modules_config(modules):
-    config = load_json_safe(MODULES_CONFIG_FILE) if MODULES_CONFIG_FILE.exists() else {}
-    config["modules"] = modules
+
+def save_full_config(config):
+    """Save the full modules.json config."""
     MODULES_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(MODULES_CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=4)
 
+
+def sync_modules_config(callback=None):
+    """
+    Sync modules.json with git repo and local filesystem.
+    This is the main sanity check function.
+    Returns the synchronized config.
+    """
+    # Ensure cache is up to date
+    cache = ensure_module_cache(callback)
+    
+    # Discover modules from cache
+    if cache:
+        core_remote, default_remote = discover_modules_from_cache()
+    else:
+        core_remote, default_remote = {}, {}
+    
+    # Load current config
+    config = load_full_config()
+    
+    # Sync core modules (always global, always enabled)
+    for name, meta in core_remote.items():
+        if name not in config["core_modules"]:
+             config["core_modules"][name] = {}
+        
+        # Update metadata while preserving SHA if present
+        cm = config["core_modules"][name]
+        cm["status"] = "global"
+        cm["source"] = "core"
+        cm["description"] = meta.get("description", "")
+        cm["exports"] = meta.get("exports", [])
+    
+    # Remove core modules that no longer exist in remote
+    for name in list(config["core_modules"].keys()):
+        if name not in core_remote:
+            del config["core_modules"][name]
+    
+    # Sync default modules
+    for name, meta in default_remote.items():
+        if name not in config["modules"]:
+            # New module, default to disabled
+            config["modules"][name] = {
+                "status": "disabled",
+                "source": "remote",
+                "description": meta.get("description", ""),
+                "dependencies": meta.get("dependencies", [])
+            }
+        else:
+            # Update metadata but keep user's status
+            config["modules"][name]["description"] = meta.get("description", "")
+            config["modules"][name]["dependencies"] = meta.get("dependencies", [])
+    
+    # Mark modules that were removed from remote
+    for name in list(config["modules"].keys()):
+        if name not in default_remote and config["modules"][name].get("source") == "remote":
+            config["modules"][name]["source"] = "orphaned"
+            
+    # Verify local integrity of enabled modules (Removed to allow auto-restore)
+    # for name, state in config["modules"].items():
+    #     if state.get("status") != "disabled":
+    #         mod_path = MODULES_DIR / name
+    #         if not mod_path.exists() or not (mod_path / "metadata.json").exists():
+    #             state["status"] = "disabled"
+
+    
+    # Discover and sync local modules
+    local_discovered = discover_local_modules(set(default_remote.keys()))
+    for name, meta in local_discovered.items():
+        if name not in config["local_modules"]:
+            config["local_modules"][name] = {
+                "status": "qualified",
+                "source": "local",
+                "description": meta.get("description", "")
+            }
+    
+    # Remove local modules that no longer have valid metadata
+    for name in list(config["local_modules"].keys()):
+        if name not in local_discovered:
+            local_path = MODULES_DIR / name
+            if not local_path.exists() or not parse_metadata(local_path / "metadata.json"):
+                del config["local_modules"][name]
+    
+    # Update meta
+    config["meta"]["last_sync"] = datetime.now().isoformat()
+    if cache:
+        config["meta"]["repo_commit"] = get_cache_commit_sha()
+    
+    save_full_config(config)
+    return config
+
+
+# ============================================================================
+# Module Installation
+# ============================================================================
+
+def copy_module_from_cache(module_name, is_core=False, callback=None, current_local_sha=None):
+    """
+    Copy a module from cache to templates/module/.
+    If current_local_sha is provided, only copy changed files (git diff).
+    """
+    if is_core:
+        src = CACHE_DIR / "core" / module_name
+        dest = MODULES_DIR / "core" / module_name
+        rel_path = f"core/{module_name}"
+    else:
+        src = CACHE_DIR / module_name
+        dest = MODULES_DIR / module_name
+        rel_path = module_name
+    
+    if not src.exists():
+        if callback:
+            callback(f"Module {module_name} not found in cache")
+        return False
+    
+    # Check if we can do differential update
+    if current_local_sha:
+        try:
+            # Get changed files between stored SHA and HEAD
+            cmd = ["git", "-C", str(CACHE_DIR), "diff", "--name-only", current_local_sha, "HEAD", "--", rel_path]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                changed_files = [f for f in result.stdout.splitlines() if f.strip()]
+                if not changed_files:
+                    if callback: callback(f"No changes for {module_name}")
+                    return True # Already up to date
+                
+                if callback:
+                    callback(f"Updating {module_name} ({len(changed_files)} files changed)...")
+                
+                # Copy only changed files
+                for changed_file in changed_files:
+                    # changed_file is relative to repo root, e.g. "core/block/mod.typ"
+                    # We need to map it to dest
+                    file_rel_path = Path(changed_file).relative_to(rel_path)
+                    src_file = CACHE_DIR / changed_file
+                    dest_file = dest / file_rel_path
+                    
+                    if src_file.exists():
+                        dest_file.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(src_file, dest_file)
+                    elif dest_file.exists():
+                        # File deleted in remote
+                        dest_file.unlink()
+                
+                return True
+        except Exception:
+            # Fallback to full copy if diff fails
+            pass
+
+    if callback:
+        callback(f"Installing {module_name}...")
+    
+    # Remove existing and copy fresh (full install)
+    if dest.exists():
+        shutil.rmtree(dest)
+    
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(src, dest)
+    return True
+
+
+def install_modules(module_names, callback=None, current_config=None):
+    """
+    Install a list of default modules from cache.
+    Returns dict of {module_name: sha} for successfully installed modules.
+    """
+    # Ensure cache exists
+    if not ensure_module_cache(callback):
+        if callback:
+            callback("Failed to access module cache")
+        return {}
+    
+    installed = {}
+    total = len(module_names)
+    for i, name in enumerate(module_names, 1):
+        if callback:
+            callback(f"Installing {name} ({i}/{total})...")
+            
+        # Get current local SHA if available for differential update
+        current_sha = None
+        if current_config and name in current_config.get("modules", {}):
+            current_sha = current_config["modules"][name].get("sha")
+            
+        if copy_module_from_cache(name, is_core=False, callback=callback, current_local_sha=current_sha):
+            # Get the SHA for this module
+            sha = get_module_sha_from_cache(name, is_core=False)
+            if sha:
+                installed[name] = sha
+    
+    if callback:
+        callback("Installation complete.")
+    
+    return installed
+
+
+def install_core_modules_with_sha(callback=None, current_config=None):
+    """
+    Install all core modules from cache.
+    Returns dict of {module_name: sha} for installed core modules.
+    """
+    # Ensure cache exists
+    if not ensure_module_cache(callback):
+        return {}
+    
+    installed = {}
+    core_dir = CACHE_DIR / "core"
+    if not core_dir.exists():
+        return installed
+    
+    for d in core_dir.iterdir():
+        if d.is_dir() and not d.name.startswith('.'):
+            # Get current local SHA if available
+            current_sha = None
+            if current_config and d.name in current_config.get("core_modules", {}):
+                current_sha = current_config["core_modules"][d.name].get("sha")
+            
+            if copy_module_from_cache(d.name, is_core=True, callback=callback, current_local_sha=current_sha):
+                sha = get_module_sha_from_cache(d.name, is_core=True)
+                if sha:
+                    installed[d.name] = sha
+    
+    return installed
+
+
+
+def install_core_modules(callback=None):
+    """Install all core modules from cache."""
+    # Ensure cache exists
+    if not ensure_module_cache(callback):
+        return
+    
+    core_dir = CACHE_DIR / "core"
+    if not core_dir.exists():
+        return
+    
+    for d in core_dir.iterdir():
+        if d.is_dir() and not d.name.startswith('.'):
+            copy_module_from_cache(d.name, is_core=True, callback=callback)
+
+
+def ensure_core_modules_installed(callback=None):
+    """Ensure all core modules are installed locally."""
+    # Ensure cache exists
+    if not ensure_module_cache(callback):
+        return
+    
+    core_local = MODULES_DIR / "core"
+    core_remote, _ = discover_modules_from_cache()
+    
+    for name in core_remote:
+        local_path = core_local / name
+        if not local_path.exists():
+
+            copy_module_from_cache(name, is_core=True, callback=callback)
+
+
+# ============================================================================
+# Legacy compatibility functions
+# ============================================================================
+
+def get_installed_modules():
+    """Get installed default modules (legacy compatibility)."""
+    config = load_full_config()
+    return config.get("modules", {})
+
+
+def save_modules_config(modules):
+    """Save default modules (legacy compatibility)."""
+    config = load_full_config()
+    config["modules"] = modules
+    save_full_config(config)
+
+
+def get_modules_meta():
+    """Get meta section (legacy compatibility)."""
+    config = load_full_config()
+    return config.get("meta", {})
+
+
+def save_modules_meta(meta):
+    """Save meta section (legacy compatibility)."""
+    config = load_full_config()
+    config["meta"] = meta
+    save_full_config(config)
+
+
+def fetch_remote_modules():
+    """Fetch list of default module names from cache (legacy compatibility)."""
+    _, default_modules = discover_modules_from_cache()
+    return sorted(default_modules.keys())
+
+
+def fetch_core_submodules():
+    """Fetch list of core module names from cache (legacy compatibility)."""
+    core_modules, _ = discover_modules_from_cache()
+    return sorted(core_modules.keys())
+
+
+# ============================================================================
+# Module helpers
+# ============================================================================
+
 def check_dependencies(module_name, index, enabled_modules):
+    """Check if module's dependencies are enabled."""
     if module_name not in index:
         return []
     mod_meta = index[module_name]
     deps = mod_meta.get("dependencies", [])
     return [d for d in deps if d not in enabled_modules]
 
+
 def create_custom_module(name):
+    """Create a new custom/local module."""
     mod_dir = MODULES_DIR / name
     if mod_dir.exists():
         return False
@@ -70,243 +529,30 @@ def create_custom_module(name):
     (mod_dir / "mod.typ").write_text(f"// Custom module: {name}\n#let hello() = [Hello from {name}!]\n")
     meta = {"name": name, "version": "0.1.0", "dependencies": [], "exports": ["hello"]}
     (mod_dir / "metadata.json").write_text(json.dumps(meta, indent=4))
+    
+    # Add to config
+    config = load_full_config()
+    config["local_modules"][name] = {"status": "qualified", "source": "local"}
+    save_full_config(config)
     return True
 
-def _download_file(url):
-    try:
-        req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'Noteworthy-PM')
-        with urllib.request.urlopen(req, timeout=10) as r:
-            return r.read()
-    except:
-        return None
 
-def _recurse_download(api_url, local_base, callback, msg_prefix):
-    """Recursively download directory contents from GitHub API."""
-    try:
-        req = urllib.request.Request(api_url)
-        req.add_header('User-Agent', 'Noteworthy-PM')
-        with urllib.request.urlopen(req, timeout=10) as r:
-            items = json.loads(r.read().decode())
-        
-        for item in items:
-            name = item['name']
-            if name.startswith('.'):
-                continue
-            
-            if item['type'] == 'file':
-                if callback:
-                    callback(f"{msg_prefix}: {name}")
-                content = _download_file(item['download_url'])
-                if content is not None:
-                    dest = local_base / name
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    dest.write_bytes(content)
-            elif item['type'] == 'dir':
-                _recurse_download(item['url'], local_base / name, callback, msg_prefix)
-    except Exception as e:
-        if callback:
-            callback(f"Error: {e}")
-
-def download_modules(modules_to_download, callback=None):
-    """Download a list of module names from remote."""
-    total = len(modules_to_download)
-    for i, name in enumerate(modules_to_download, 1):
-        if callback:
-            callback(f"Downloading {name} ({i}/{total})...")
-        
-        target_dir = MODULES_DIR / name
-        target_dir.mkdir(parents=True, exist_ok=True)
-        api_url = f"{API_BASE}/{name}"
-        
-        try:
-            _recurse_download(api_url, target_dir, callback, f"Downloading {name}")
-        except Exception as e:
-            if callback:
-                callback(f"Failed {name}: {e}")
+def get_all_enabled_modules():
+    """Get list of all enabled module names (core + default + local)."""
+    config = load_full_config()
+    enabled = []
     
-    if callback:
-        callback("Download Complete.")
-
-def get_changed_files(old_sha, new_sha):
-    """Get list of changed file paths between two commits."""
-    if not old_sha or not new_sha:
-        return None  # Force full download
+    # Core modules are always enabled
+    enabled.extend(config.get("core_modules", {}).keys())
     
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/compare/{old_sha}...{new_sha}"
-    try:
-        req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'Noteworthy-PM')
-        with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read().decode())
-        
-        changed = set()
-        for f in data.get('files', []):
-            path = f['filename']
-            parts = path.split('/')
-            if len(parts) >= 1:
-                changed.add(parts[0])  # Top-level module name
-        return changed
-    except:
-        return None
-
-def download_changed_modules(modules, changed_set, callback=None):
-    """Download only modules that have changed."""
-    to_download = [m for m in modules if m in changed_set]
-    if to_download:
-        download_modules(to_download, callback)
-    return to_download
-
-    # Update SHAs for downloaded modules
-    # We need to fetch the tree again or cache it to get the new SHAs? 
-    # Or we can just get the latest HEAD sha of the repo? 
-    # Ideally we want the sha of the specific folder we just got.
-    # Let's fetch the tree one more time or pass it in. Check module_updates already fetches it.
-    # For simplicity, we'll fetch latest repo tree and update specific modules.
-    try:
-        url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/git/trees/HEAD?recursive=1"
-        req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'Noteworthy-PM')
-        with urllib.request.urlopen(req, timeout=5) as r:
-            data = json.loads(r.read().decode())
-        
-        tree = {i['path']: i['sha'] for i in data.get('tree', [])}
-        config = load_json_safe(MODULES_CONFIG_FILE)
-        
-        for name in modules_to_download:
-            if name in tree and "modules" in config and name in config["modules"]:
-                config["modules"][name]["sha"] = tree[name]
-        
-        save_modules_config(config["modules"])
-    except:
-        pass
-
-def get_latest_commit_sha():
-    """Fetch the latest commit SHA from the GitHub repository."""
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/commits/HEAD"
-    try:
-        req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'Noteworthy-PM')
-        with urllib.request.urlopen(req, timeout=5) as r:
-            data = json.loads(r.read().decode())
-            return data['sha']
-    except:
-        return None
-
-def get_commit_log(since_sha, until_sha):
-    """Fetch commit messages between two SHAs."""
-    if not since_sha:
-        url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/commits?per_page=5"
-    else:
-        url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/compare/{since_sha}...{until_sha}"
+    # Enabled default modules
+    for name, state in config.get("modules", {}).items():
+        if state.get("status") != "disabled":
+            enabled.append(name)
     
-    try:
-        req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'Noteworthy-PM')
-        with urllib.request.urlopen(req, timeout=5) as r:
-            data = json.loads(r.read().decode())
-            
-            commits = []
-            if 'commits' in data:
-                for c in data['commits']:
-                    msg = c['commit']['message'].split('\n')[0]
-                    commits.append(f"- {msg}")
-            elif isinstance(data, list):
-                for c in data:
-                    msg = c['commit']['message'].split('\n')[0]
-                    commits.append(f"- {msg}")
-            return list(filter(None, commits))
-    except:
-        return ["Error fetching commit log"]
-
-def get_modules_meta():
-    if not MODULES_CONFIG_FILE.exists():
-        return {}
-    return load_json_safe(MODULES_CONFIG_FILE).get("meta", {})
-
-def save_modules_meta(meta):
-    config = load_json_safe(MODULES_CONFIG_FILE) if MODULES_CONFIG_FILE.exists() else {}
-    config["meta"] = meta
-    MODULES_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(MODULES_CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=4)
-
-def check_module_updates(installed_modules):
-    """
-    Check relevant modules for updates by comparing local versions/content with remote.
-    Returns a set of module names that have updates.
-    """
-    # For efficiency, we can fetch the tree of the repo and compare SHAs of module folders/files
-    # api.github.com/repos/.../git/trees/HEAD?recursive=1 
-    # That gives us sha for every path.
-    # But installed_modules doesn't store the installed sha currently, only global meta["commit"].
-    # Ideally we should store sha per module in modules.json
+    # Enabled local modules
+    for name, state in config.get("local_modules", {}).items():
+        if state.get("status") != "disabled":
+            enabled.append(name)
     
-    # Strategy:
-    # 1. Fetch remote tree
-    # 2. For each installed remote module, check if remote folder sha != stored sha (if we store it)
-    #    OR if not stored, we assume up to date unless we can check version in metadata.json?
-    #    Checking version requires downloading metadata.json for each module => slow.
-    
-    # We will assume "version" field in metadata.json is the source of truth if available,
-    # OR we start storing 'sha' in installed_modules.
-    
-    # Let's try to fetch the remote metadata for all installed remote modules.
-    # This might be N requests so we should be careful.
-    # Alternatively, fetch repo tree (1 request) and ignore version, just look for change.
-    
-    # If we don't have local SHAs, we can't do SHA comparison. 
-    # Our current module state is just {"source": "remote", "status": "..."}.
-    # We should start storing the installed SHA.
-    
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/git/trees/HEAD?recursive=1"
-    try:
-        req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'Noteworthy-PM')
-        with urllib.request.urlopen(req, timeout=5) as r:
-            data = json.loads(r.read().decode())
-    except:
-        return set() # Fail safe
-        
-    remote_shas = {} # path -> sha
-    for item in data.get('tree', []):
-        remote_shas[item['path']] = item['sha']
-        
-    outdated = set()
-    current_config = load_json_safe(MODULES_CONFIG_FILE)
-    modules_config = current_config.get("modules", {})
-    
-    # We update the config with SHAs if they are missing (first run after update) 
-    # But if they are missing, we can't know if they are outdated without checking content.
-    # Use global commit as proxy for "all updated" if we lack granular info?
-    # Or just assume fresh install = latest.
-    
-    # Let's verify against what we have on disk?
-    # For now, let's implement the logic to return outdated based on 'sha' field in module config.
-    # If 'sha' is missing, we claim update available to force sync once? Or assume updated.
-    
-    idx_changes = False
-    
-    for name, state in modules_config.items():
-        if state.get("source") != "remote":
-            continue
-            
-        # The path in repo for module 'name' is just 'name' (folder)
-        # But 'tree' api returns sha for the folder.
-        remote_sha = remote_shas.get(name)
-        if not remote_sha: continue # Module might have been renamed or moved
-        
-        local_sha = state.get("sha")
-        
-        if local_sha != remote_sha:
-            outdated.add(name)
-            # We don't update local sha here, only on successful download
-            
-    return outdated
-
-def update_module_sha(module_name, sha):
-    config = load_json_safe(MODULES_CONFIG_FILE)
-    if "modules" in config and module_name in config["modules"]:
-        config["modules"][module_name]["sha"] = sha
-        save_modules_config(config["modules"]) 
-
+    return enabled

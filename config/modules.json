@@ -1,61 +1,108 @@
 {
     "meta": {
-        "commit": "68783483ad642cc6a2bb0c0b403df348129aa2b5"
+        "commit": "68783483ad642cc6a2bb0c0b403df348129aa2b5",
+        "last_sync": "2026-01-08T15:30:20.745393",
+        "repo_commit": "2061e34b760c1a803e541406884fde736bdaf9fa"
     },
     "modules": {
         "layout": {
             "source": "remote",
             "version": "0.1.0",
-            "status": "global"
+            "status": "disabled",
+            "description": "Page layouts and document configuration",
+            "dependencies": []
         },
         "trees": {
             "source": "remote",
             "version": "0.1.0",
-            "status": "global"
+            "status": "disabled",
+            "description": "Tree visualizations for hierarchical data",
+            "dependencies": []
         },
         "shape": {
             "source": "remote",
             "version": "0.1.0",
-            "status": "global"
+            "status": "disabled",
+            "description": "2D geometric primitives: points, lines, circles, polygons",
+            "dependencies": []
         },
         "data": {
             "source": "remote",
             "version": "0.1.0",
-            "status": "global"
+            "status": "disabled",
+            "description": "Data visualization: tables, series, and curve interpolation",
+            "dependencies": []
         },
         "graph": {
             "source": "remote",
             "version": "0.1.0",
-            "status": "global"
+            "status": "disabled",
+            "description": "Function plotting and vector visualization",
+            "dependencies": []
         },
         "block": {
-            "source": "remote",
+            "source": "orphaned",
             "version": "0.1.0",
-            "status": "global"
+            "status": "disabled"
         },
         "canvas": {
             "source": "remote",
             "version": "0.1.0",
-            "status": "global"
+            "status": "disabled",
+            "description": "Plotting canvases for graphs, shapes, and diagrams",
+            "dependencies": [
+                "shape"
+            ]
         },
         "dsa": {
             "source": "remote",
             "version": "0.1.0",
-            "status": "global"
+            "status": "disabled",
+            "description": "Data structures: linked lists, stacks, queues, graphs",
+            "dependencies": []
         },
         "cover": {
-            "source": "remote",
+            "source": "orphaned",
             "version": "0.1.0",
-            "status": "global"
+            "status": "disabled"
         },
         "combi": {
             "source": "remote",
             "version": "0.1.0",
-            "status": "global"
+            "status": "disabled",
+            "description": "Combinatorics: permutations, combinations, counting trees",
+            "dependencies": []
         },
         "timeline": {
             "source": "remote",
-            "status": "global"
+            "status": "disabled",
+            "description": "Create vertical and horizontal timelines for events and milestones",
+            "dependencies": []
         }
-    }
+    },
+    "core_modules": {
+        "block": {
+            "status": "global",
+            "source": "core",
+            "description": "Semantic content blocks: definitions, theorems, proofs, examples",
+            "exports": [
+                "definition",
+                "theorem",
+                "proof",
+                "example",
+                "note",
+                "solution"
+            ]
+        },
+        "cover": {
+            "status": "global",
+            "source": "core",
+            "description": "Document covers and title pages",
+            "exports": [
+                "cover-page",
+                "chapter-cover"
+            ]
+        }
+    },
+    "local_modules": {}
 }

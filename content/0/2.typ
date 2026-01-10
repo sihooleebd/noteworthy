@@ -3,6 +3,8 @@
 = File Structure
 
 Understanding the project layout helps you navigate and extend Noteworthy.
+sdfsdfsdfsdf
+sdfsdf
 
 == Project Root
 

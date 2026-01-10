@@ -111,6 +111,10 @@ class CollaborationManager {
                 this.handleEdit(msg);
                 break;
 
+            case 'sync':
+                this.handleSync(msg);
+                break;
+
             case 'user_updated':
                 this.handleUserUpdated(msg.user);
                 break;
@@ -201,6 +205,49 @@ class CollaborationManager {
         }
     }
 
+    handleSync(data) {
+        // Full content sync from server (e.g., from Emacs edits)
+        if (!this.app.state.editor) return;
+        
+        // Check if this sync is for the currently open file
+        const currentFile = this.filePath;
+        if (data.file && data.file !== currentFile) {
+            console.log(`Sync for different file: ${data.file} (current: ${currentFile})`);
+            return;
+        }
+
+        // Don't apply our own changes
+        if (data.userId === this.app.state.user?.id) return;
+
+        console.log(`Applying sync from ${data.source || 'server'}: ${data.file}`);
+        
+        this.applyingRemoteChanges = true;
+        try {
+            const model = this.app.state.editor.getModel();
+            const currentValue = model.getValue();
+            
+            // Only update if content actually changed
+            if (data.content !== currentValue) {
+                // Save cursor position
+                const position = this.app.state.editor.getPosition();
+                const scrollTop = this.app.state.editor.getScrollTop();
+                
+                // Replace content
+                model.setValue(data.content);
+                
+                // Restore cursor position (best effort)
+                if (position) {
+                    this.app.state.editor.setPosition(position);
+                }
+                this.app.state.editor.setScrollTop(scrollTop);
+                
+                console.log(`Synced ${data.file} (v${data.version}, ${data.content.length} chars)`);
+            }
+        } finally {
+            this.applyingRemoteChanges = false;
+        }
+    }
+
     broadcastCursor(position) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({
@@ -213,6 +260,26 @@ class CollaborationManager {
 
     broadcastEdit(changes) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            // Add character offsets for CRDT integration
+            const model = this.app.state.editor?.getModel();
+            if (model) {
+                changes = changes.map(change => {
+                    const fromOffset = model.getOffsetAt({
+                        lineNumber: change.range.startLineNumber,
+                        column: change.range.startColumn
+                    });
+                    const toOffset = model.getOffsetAt({
+                        lineNumber: change.range.endLineNumber,
+                        column: change.range.endColumn
+                    });
+                    return {
+                        ...change,
+                        fromOffset,
+                        toOffset
+                    };
+                });
+            }
+            
             this.ws.send(JSON.stringify({
                 type: 'edit',
                 changes: changes

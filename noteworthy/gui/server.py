@@ -19,12 +19,28 @@ from ..config import (
     MODULES_CONFIG_FILE, INDEXIGNORE_FILE
 )
 from .preview import PreviewManager
+from .crdt_manager import CRDTManager, init_crdt_manager, get_crdt_manager
+import uuid
 
 app = FastAPI(title="Noteworthy GUI")
 preview_manager = PreviewManager()
 
-# Collaboration Manager
+# Initialize CRDT Manager (low save_delay for responsive tinymist preview)
+CRDT_SAVE_DELAY = float(os.environ.get("CRDT_SAVE_DELAY", "0.15"))
+crdt_manager = init_crdt_manager(BASE_DIR, save_delay=CRDT_SAVE_DELAY)
+
+# Collaboration Manager (legacy web collab)
 from .collaboration import collab_manager
+
+# User colors for Emacs clients
+EMACS_USER_COLORS = [
+    "#FF6B6B", "#4ECDC4", "#FFE66D", "#95E1D3",
+    "#F38181", "#AA96DA", "#FCBAD3", "#A8D8EA"
+]
+emacs_color_index = 0
+
+# Track connected Emacs clients
+emacs_clients: dict = {}  # user_id -> {"websocket": ws, "name": str, "color": str, "file": str}
 
 @app.websocket("/ws/collab")
 async def collab_endpoint(websocket: WebSocket):
@@ -60,9 +76,54 @@ async def collab_endpoint(websocket: WebSocket):
                     msg.get("selectionEnd")
                 )
             elif msg["type"] == "edit":
-                await collab_manager.broadcast_edit(
-                    user.id, msg.get("changes", [])
-                )
+                # Apply edit to CRDT and broadcast to all clients
+                changes = msg.get("changes", [])
+                file_path = user.active_file
+                
+                if file_path and changes:
+                    print(f"[Web] RECV edit from {user.name}: file={file_path}, changes={changes}")
+                    
+                    # Convert web changes to CRDT ops and apply
+                    # Web format: {from: {line, ch}, to: {line, ch}, text: [...], removed: [...]}
+                    for change in changes:
+                        try:
+                            from_offset = change.get("fromOffset")  # Character offset
+                            to_offset = change.get("toOffset")      # Character offset
+                            text = change.get("text", [""])
+                            
+                            if isinstance(text, list):
+                                text = "\n".join(text)
+                            
+                            if from_offset is not None:
+                                ops = []
+                                if from_offset > 0:
+                                    ops.append({"retain": from_offset})
+                                if to_offset and to_offset > from_offset:
+                                    ops.append({"delete": to_offset - from_offset})
+                                if text:
+                                    ops.append({"insert": text})
+                                
+                                if ops:
+                                    success = crdt_manager.apply_delta(file_path, ops, source_user=user.id)
+                                    print(f"[Web] apply_delta result: {success}")
+                        except Exception as e:
+                            print(f"[Web] Error converting change: {e}")
+                    
+                    # Broadcast edit to web clients (original behavior)
+                    await collab_manager.broadcast_edit(user.id, changes)
+                    
+                    # Broadcast full content to Emacs clients
+                    content = crdt_manager.get_content(file_path)
+                    version = crdt_manager.get_version(file_path)
+                    if content is not None:
+                        await broadcast_to_emacs_file(file_path, {
+                            "type": "sync",
+                            "file": file_path,
+                            "content": content,
+                            "version": version,
+                            "source": "web",
+                            "userId": user.id
+                        })
             elif msg["type"] == "identity":
                 await collab_manager.update_user(
                     user.id, msg.get("name", "Anonymous")
@@ -81,6 +142,365 @@ async def collab_endpoint(websocket: WebSocket):
                 
     except WebSocketDisconnect:
         await collab_manager.disconnect(user.id)
+
+
+# ============================================================
+# EMACS CRDT WebSocket - Real-time collaboration for Emacs
+# ============================================================
+
+# Tinymist preview process
+tinymist_process: subprocess.Popen = None
+TINYMIST_PORT = int(os.environ.get("TINYMIST_PORT", "23625"))
+
+@app.on_event("startup")
+async def startup_crdt():
+    """Initialize CRDT manager with event loop."""
+    loop = asyncio.get_running_loop()
+    crdt_manager.set_event_loop(loop)
+    print("[Server] CRDT manager initialized")
+
+@app.on_event("startup")
+async def startup_tinymist_preview():
+    """Start tinymist preview server for Emacs xwidget integration."""
+    global tinymist_process
+    
+    # Find main typst file
+    master_candidates = [
+        BASE_DIR / "templates" / "core" / "parser.typ",
+        BASE_DIR / "templates" / "parser.typ",
+        BASE_DIR / "main.typ",
+    ]
+    
+    master_file = None
+    for candidate in master_candidates:
+        if candidate.exists():
+            master_file = candidate
+            break
+    
+    if not master_file:
+        # Try to find any .typ file
+        typ_files = list(BASE_DIR.glob("**/*.typ"))
+        if typ_files:
+            master_file = typ_files[0]
+    
+    if not master_file:
+        print("[Tinymist] No .typ file found, preview disabled")
+        return
+    
+    # Check if tinymist is available
+    tinymist_bin = shutil.which("tinymist")
+    if not tinymist_bin:
+        print("[Tinymist] tinymist not found in PATH, preview disabled")
+        return
+    
+    try:
+        cmd = [
+            tinymist_bin, "preview",
+            str(master_file),
+            "--root", str(BASE_DIR),
+            "--no-open",  # Don't open browser
+        ]
+        print(f"[Tinymist] Starting: {' '.join(cmd)}")
+        print(f"[Tinymist] Preview will be at http://127.0.0.1:{TINYMIST_PORT}")
+        
+        tinymist_process = subprocess.Popen(
+            cmd,
+            cwd=str(BASE_DIR),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        
+        # Give it a moment to start
+        await asyncio.sleep(1)
+        
+        if tinymist_process.poll() is None:
+            print(f"[Tinymist] Preview running on http://127.0.0.1:{TINYMIST_PORT}")
+        else:
+            print(f"[Tinymist] Failed to start (exit code: {tinymist_process.returncode})")
+            tinymist_process = None
+    except Exception as e:
+        print(f"[Tinymist] Error starting preview: {e}")
+        tinymist_process = None
+
+@app.on_event("shutdown")
+async def shutdown_tinymist():
+    """Stop tinymist preview server."""
+    global tinymist_process
+    if tinymist_process:
+        print("[Tinymist] Stopping preview server...")
+        tinymist_process.terminate()
+        try:
+            tinymist_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            tinymist_process.kill()
+        tinymist_process = None
+
+
+@app.websocket("/ws/emacs")
+async def emacs_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for Emacs clients.
+    
+    Uses simple JSON protocol for CRDT synchronization.
+    All edits go through CRDT - no direct file saves from Emacs.
+    """
+    global emacs_color_index
+    
+    await websocket.accept()
+    
+    # Assign user identity
+    user_name = websocket.query_params.get("name", "Emacs User")
+    user_id = str(uuid.uuid4())[:8]
+    user_color = EMACS_USER_COLORS[emacs_color_index % len(EMACS_USER_COLORS)]
+    emacs_color_index += 1
+    
+    current_file = None
+    observer_callback = None
+    
+    # Register client
+    emacs_clients[user_id] = {
+        "websocket": websocket,
+        "name": user_name,
+        "color": user_color,
+        "file": None
+    }
+    
+    print(f"[Emacs] Client connected: {user_name} ({user_id})")
+    
+    # Send welcome message
+    await websocket.send_json({
+        "type": "welcome",
+        "userId": user_id,
+        "color": user_color
+    })
+    
+    # Log helper
+    async def send_log(level: str, message: str):
+        try:
+            await websocket.send_json({
+                "type": "log",
+                "level": level,
+                "message": message
+            })
+        except:
+            pass
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            
+            if msg_type == "join":
+                # Join a file's CRDT session
+                file_path = data.get("file", "")
+                
+                # Leave previous file if any
+                if current_file and observer_callback:
+                    crdt_manager.remove_observer(current_file, observer_callback)
+                
+                current_file = file_path
+                emacs_clients[user_id]["file"] = file_path
+                
+                # Get or create document
+                doc_state = crdt_manager.get_or_create(file_path)
+                content = crdt_manager.get_content(file_path)
+                version = crdt_manager.get_version(file_path)
+                
+                # Create observer for this client
+                async def on_crdt_change(path: str, delta: list, ver: int):
+                    """Handle CRDT changes and forward to this Emacs client."""
+                    # Check for special "saved" notification
+                    if delta and len(delta) == 1 and delta[0].get("saved"):
+                        try:
+                            await websocket.send_json({
+                                "type": "saved",
+                                "file": path,
+                                "version": ver
+                            })
+                        except:
+                            pass
+                        return
+                    
+                    # Forward delta to client
+                    try:
+                        await websocket.send_json({
+                            "type": "delta",
+                            "file": path,
+                            "ops": delta,
+                            "version": ver,
+                            "userId": "server"  # Could track source user
+                        })
+                    except:
+                        pass
+                
+                # Wrap async callback for sync observer
+                def observer_wrapper(path, delta, ver):
+                    asyncio.create_task(on_crdt_change(path, delta, ver))
+                
+                observer_callback = observer_wrapper
+                crdt_manager.add_observer(file_path, observer_callback)
+                
+                # Send current content
+                await websocket.send_json({
+                    "type": "sync",
+                    "file": file_path,
+                    "content": content,
+                    "version": version
+                })
+                
+                await send_log("info", f"Joined: {file_path}")
+                
+                # Notify other Emacs clients
+                await broadcast_to_emacs_file(file_path, {
+                    "type": "users",
+                    "file": file_path,
+                    "users": get_emacs_users_in_file(file_path)
+                }, exclude=user_id)
+            
+            elif msg_type == "delta":
+                # Apply client's delta to CRDT
+                file_from_msg = data.get("file")
+                ops = data.get("ops", [])
+                target_file = file_from_msg or current_file
+                
+                print(f"[Emacs] RECV delta from {user_name}: file={target_file}, ops={ops}")
+                
+                if not target_file:
+                    print(f"[Emacs] ERROR: No target file for delta! current_file={current_file}, msg_file={file_from_msg}")
+                    await send_log("error", "No file specified for delta")
+                    continue
+                
+                if ops:
+                    success = crdt_manager.apply_delta(target_file, ops, source_user=user_id)
+                    print(f"[Emacs] apply_delta result: {success}")
+                    if success:
+                        # Broadcast to other Emacs clients in same file
+                        await broadcast_to_emacs_file(target_file, {
+                            "type": "delta",
+                            "file": target_file,
+                            "ops": ops,
+                            "userId": user_id,
+                            "userName": user_name
+                        }, exclude=user_id)
+                        
+                        # Also broadcast to web clients (they need full content refresh)
+                        content = crdt_manager.get_content(target_file)
+                        await broadcast_to_web_file(target_file, {
+                            "type": "sync",
+                            "file": target_file,
+                            "content": content,
+                            "source": "emacs",
+                            "userId": user_id
+                        })
+                    else:
+                        await send_log("error", f"Failed to apply delta to {target_file}")
+            
+            elif msg_type == "cursor":
+                # Broadcast cursor position to other clients in same file
+                if current_file:
+                    await broadcast_to_emacs_file(current_file, {
+                        "type": "cursor",
+                        "file": current_file,
+                        "userId": user_id,
+                        "name": user_name,
+                        "color": user_color,
+                        "line": data.get("line", 1),
+                        "col": data.get("col", 1)
+                    }, exclude=user_id)
+            
+            elif msg_type == "leave":
+                # Leave current file
+                if current_file and observer_callback:
+                    crdt_manager.remove_observer(current_file, observer_callback)
+                    await send_log("info", f"Left: {current_file}")
+                    
+                    # Notify others
+                    await broadcast_to_emacs_file(current_file, {
+                        "type": "users",
+                        "file": current_file,
+                        "users": get_emacs_users_in_file(current_file)
+                    }, exclude=user_id)
+                    
+                current_file = None
+                emacs_clients[user_id]["file"] = None
+                observer_callback = None
+            
+            elif msg_type == "identity":
+                # Update user name
+                new_name = data.get("name", user_name)
+                user_name = new_name
+                emacs_clients[user_id]["name"] = new_name
+                await send_log("info", f"Identity updated: {new_name}")
+    
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"[Emacs] Error for {user_id}: {e}")
+    finally:
+        # Cleanup
+        if current_file and observer_callback:
+            crdt_manager.remove_observer(current_file, observer_callback)
+        
+        if user_id in emacs_clients:
+            file_path = emacs_clients[user_id].get("file")
+            del emacs_clients[user_id]
+            
+            # Notify others if was in a file
+            if file_path:
+                await broadcast_to_emacs_file(file_path, {
+                    "type": "users",
+                    "file": file_path,
+                    "users": get_emacs_users_in_file(file_path)
+                })
+        
+        print(f"[Emacs] Client disconnected: {user_name} ({user_id})")
+
+
+async def broadcast_to_emacs_file(file_path: str, message: dict, exclude: str = None):
+    """Broadcast message to all Emacs clients editing a specific file."""
+    msg_json = json.dumps(message)
+    for uid, client in list(emacs_clients.items()):
+        if uid == exclude:
+            continue
+        if client.get("file") == file_path:
+            try:
+                await client["websocket"].send_text(msg_json)
+            except:
+                pass
+
+
+async def broadcast_to_web_file(file_path: str, message: dict, exclude: str = None):
+    """Broadcast message to all web clients editing a specific file."""
+    msg_json = json.dumps(message)
+    for user_id, user in collab_manager.users.items():
+        if user_id == exclude:
+            continue
+        if user.active_file == file_path:
+            try:
+                await user.websocket.send_text(msg_json)
+            except:
+                pass
+
+
+async def broadcast_to_all_file(file_path: str, message: dict, exclude: str = None, exclude_type: str = None):
+    """Broadcast to both Emacs and web clients on a file."""
+    if exclude_type != "emacs":
+        await broadcast_to_emacs_file(file_path, message, exclude)
+    if exclude_type != "web":
+        await broadcast_to_web_file(file_path, message, exclude)
+
+
+def get_emacs_users_in_file(file_path: str) -> list:
+    """Get list of Emacs users currently in a file."""
+    users = []
+    for uid, client in emacs_clients.items():
+        if client.get("file") == file_path:
+            users.append({
+                "id": uid,
+                "name": client["name"],
+                "color": client["color"]
+            })
+    return users
 
 
 # Static files
@@ -609,7 +1029,12 @@ def get_status():
     return {
         "project": BASE_DIR.name,
         "path": str(BASE_DIR),
-        "preview": preview_manager.get_status()
+        "preview": preview_manager.get_status(),
+        "tinymist": {
+            "running": tinymist_process is not None and tinymist_process.poll() is None,
+            "port": TINYMIST_PORT,
+            "url": f"http://127.0.0.1:{TINYMIST_PORT}" if tinymist_process else None
+        }
     }
 
 # ============================================================
