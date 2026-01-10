@@ -783,6 +783,13 @@ const app = {
 
         // ESC key handler for saving config changes
         document.addEventListener('keydown', (e) => {
+            // Alt+O: Sync preview scroll to cursor
+            if (e.altKey && (e.key === 'o' || e.key === 'O')) {
+                e.preventDefault();
+                this.syncPreviewScroll();
+                return;
+            }
+
             if (e.key === 'Escape') {
                 // Save current config tab on ESC
                 const activePage = document.querySelector('.page.active');
@@ -2455,6 +2462,11 @@ const app = {
                     this.addChatMessage(msg);
                 }
                 break;
+
+            case 'log':
+                // Log message from server
+                this.addLogEntry(msg.level || 'info', msg.message || '', msg.timestamp || Date.now());
+                break;
         }
     },
 
@@ -3096,6 +3108,89 @@ const app = {
     scrollChatToBottom: function () {
         const container = document.getElementById('chat-messages');
         container.scrollTop = container.scrollHeight;
+    },
+
+    // ============================================================
+    // PREVIEW MODE TOGGLE
+    // ============================================================
+
+    togglePreviewMode: async function () {
+        const toggle = document.getElementById('preview-mode-toggle');
+        const label = document.getElementById('preview-mode-label');
+        const container = document.getElementById('preview-container');
+
+        if (toggle.checked) {
+            // Switch to Full preview
+            label.textContent = 'Full';
+
+            // Use fixed port 23625 on current hostname
+            const hostname = window.location.hostname;
+            const url = `http://${hostname}:23625`;
+
+            // Replace container content with iframe
+            container.innerHTML = `<iframe id="full-preview-iframe" src="${url}"></iframe>`;
+            this.state.previewMode = 'full';
+        } else {
+            // Switch to Partial preview
+            label.textContent = 'Partial';
+            this.state.previewMode = 'partial';
+
+            // Restore placeholder or trigger reload of current file preview
+            container.innerHTML = `
+                <div class="preview-placeholder">
+                    <i data-lucide="eye"></i>
+                    <span>Select a .typ file</span>
+                </div>
+            `;
+            lucide.createIcons();
+
+            // If we have an active file, restart partial preview
+            if (this.state.activeFile && this.state.activeFile.endsWith('.typ')) {
+                this.startPreview(this.state.activeFile);
+            }
+        }
+    },
+
+    toggleLogPanel: function () {
+        const panel = document.getElementById('log-panel');
+        panel.classList.toggle('hidden');
+    },
+
+    clearLogs: function () {
+        const container = document.getElementById('log-messages');
+        container.innerHTML = '';
+    },
+
+    addLogEntry: function (level, message, timestamp) {
+        const container = document.getElementById('log-messages');
+        const entry = document.createElement('div');
+        entry.className = `log-entry ${level}`;
+
+        const time = new Date(timestamp).toLocaleTimeString();
+        entry.innerHTML = `<span class="log-timestamp">${time}</span>${message}`;
+
+        container.appendChild(entry);
+        container.scrollTop = container.scrollHeight;
+    },
+
+    syncPreviewScroll: function () {
+        // Get current cursor position
+        if (!this.state.editor) return;
+
+        const position = this.state.editor.getPosition();
+        const line = position.lineNumber;
+        const column = position.column;
+
+        console.log(`[Sync] Scrolling preview to line ${line}, col ${column}`);
+
+        // TODO: Implement actual scroll sync with tinymist/preview
+        // This would require either:
+        // 1. Tinymist JS API (if available)
+        // 2. postMessage to iframe
+        // 3. WebSocket message to backend
+
+        // For now, just log it
+        this.addLogEntry('info', `Sync requested: line ${line}, column ${column}`, Date.now());
     }
 };
 

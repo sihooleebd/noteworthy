@@ -2087,3 +2087,129 @@ select option {
     color: var(--text-secondary);
     letter-spacing: 0.05em;
 }
+
+/* ============================================
+   PREVIEW TOOLBAR
+   ============================================ */
+
+.preview-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Toggle Switch */
+.toggle-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.toggle-switch input {
+    display: none;
+}
+
+.toggle-slider {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    transition: background 0.2s;
+}
+
+.toggle-slider::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: var(--text-secondary);
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-slider::after {
+    transform: translateX(16px);
+    background: white;
+}
+
+.toggle-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ============================================
+   LOG PANEL
+   ============================================ */
+
+.log-panel {
+    border-top: 1px solid var(--glass-border);
+    max-height: 200px;
+    display: flex;
+    flex-direction: column;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.log-panel.hidden {
+    display: none;
+}
+
+.log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--glass-border);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+}
+
+.log-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.log-entry {
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.log-entry.error {
+    color: var(--danger);
+}
+
+.log-entry.warning {
+    color: var(--warning);
+}
+
+.log-entry.info {
+    color: var(--text-secondary);
+}
+
+.log-timestamp {
+    color: var(--text-muted);
+    margin-right: 8px;
+}
+
+/* Full preview iframe */
+#full-preview-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}

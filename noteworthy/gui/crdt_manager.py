@@ -56,12 +56,17 @@ class CRDTManager:
     async def apply_delta(self, file_path: str, ops: List[dict], source_user: str = None) -> bool:
         """
         Apply delta operations from an Emacs client to the Yjs doc.
+        
+        Includes bounds checking to prevent errors from stale client state.
         """
         print(f"[CRDT] apply_delta called: file={file_path}, ops={ops}")
         
         try:
             room = await self.get_or_create_room(file_path)
             text = room.ydoc.get("content", type=Text)
+            
+            # Get current document length for bounds checking
+            doc_len = len(text)
             
             # We need to calculate current position based on character length
             # because pycrdt works on characters.
@@ -70,14 +75,29 @@ class CRDTManager:
             with room.ydoc.transaction():
                 for op in ops:
                     if "retain" in op:
-                        pos += op["retain"]
+                        retain_count = op["retain"]
+                        # Clamp retain to not exceed document bounds
+                        if pos + retain_count > doc_len:
+                            retain_count = max(0, doc_len - pos)
+                        pos += retain_count
                     elif "insert" in op:
                         insert_text = op["insert"]
+                        # Clamp position to document bounds
+                        if pos > doc_len:
+                            pos = doc_len
                         text.insert(pos, insert_text)
                         pos += len(insert_text)
+                        doc_len += len(insert_text)  # Update length after insert
                     elif "delete" in op:
                         delete_count = op["delete"]
-                        del text[pos:pos + delete_count]
+                        # Clamp delete to not exceed remaining content
+                        remaining = doc_len - pos
+                        if delete_count > remaining:
+                            print(f"[CRDT] WARNING: delete {delete_count} exceeds remaining {remaining}, clamping")
+                            delete_count = remaining
+                        if delete_count > 0:
+                            del text[pos:pos + delete_count]
+                            doc_len -= delete_count  # Update length after delete
             
             return True
             

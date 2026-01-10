@@ -68,6 +68,16 @@ async def startup_event():
             
     preview_manager.add_callback(on_preview_bridge)
     
+    # Register log callback to broadcast to all clients
+    def on_log_bridge(level, message):
+        """Bridge log messages to asyncio loop for broadcasting."""
+        asyncio.run_coroutine_threadsafe(
+            document_hub.broadcast_log(level, message),
+            loop
+        )
+    
+    preview_manager.add_log_callback(on_log_bridge)
+    
     # Sanity check modules.json
     validate_modules_json()
 
@@ -738,6 +748,28 @@ def start_watch(data: dict = Body(...)):
     return {"success": True}
 
 # ============================================================
+# FULL PREVIEW API
+# ============================================================
+
+@app.get("/api/preview/full/url")
+def get_full_preview_url():
+    """Get the URL for the full document preview (tinymist)."""
+    url = preview_manager.get_full_preview_url()
+    return {"url": url, "running": preview_manager.full_preview_running}
+
+@app.post("/api/preview/full/start")
+def start_full_preview():
+    """Start the full document preview."""
+    url = preview_manager.start_full_preview()
+    return {"success": url is not None, "url": url}
+
+@app.post("/api/preview/full/stop")
+def stop_full_preview():
+    """Stop the full document preview."""
+    preview_manager.stop_full_preview()
+    return {"success": True}
+
+# ============================================================
 # MODULES API
 # ============================================================
 
@@ -1075,7 +1107,16 @@ async def emacs_endpoint(websocket: WebSocket):
                         # PASS OPS SO THEY CAN BE BROADCAST AS DELTAS
                         await document_hub.update_content(user_id, target_file, content, skip_crdt=True, ops=ops)
                     else:
-                        await send_log("error", f"Failed to apply delta to {target_file}")
+                        await send_log("error", f"Failed to apply delta to {target_file}, sending full sync")
+                        # Send full sync so client can recover
+                        content = await crdt_manager.get_content(target_file)
+                        version = await crdt_manager.get_version(target_file)
+                        await websocket.send_json({
+                            "type": "sync",
+                            "file": target_file,
+                            "content": content,
+                            "version": version
+                        })
             
             elif msg_type == "cursor":
                 current_file = emacs_clients[user_id].get("file")

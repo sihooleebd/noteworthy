@@ -15,6 +15,7 @@ import uuid
 import subprocess
 import tempfile
 import os
+import time
 import difflib
 from typing import Dict, Optional, List, Callable
 from dataclasses import dataclass, field
@@ -522,6 +523,15 @@ class DocumentHub:
             "timestamp": timestamp
         })
     
+    async def broadcast_log(self, level: str, message: str):
+        """Broadcast log message to all clients (Web + Emacs)."""
+        await self._broadcast({
+            "type": "log",
+            "level": level,
+            "message": message,
+            "timestamp": int(time.time() * 1000)
+        })
+    
     def get_users(self) -> List[dict]:
         """Get all connected users."""
         return [
@@ -587,24 +597,32 @@ class DocumentHub:
                     pass
 
     def _apply_ops_to_string(self, content: str, ops: List[dict]) -> str:
-        """Apply a linear sequence of ops to a string."""
+        """Apply a linear sequence of ops to a string with bounds checking."""
         new_content = []
         pos = 0
+        content_len = len(content)
+        
         for op in ops:
             if 'retain' in op:
                 retain = op['retain']
-                # Retain characters from original
-                if pos + retain > len(content):
-                    retain = len(content) - pos
-                new_content.append(content[pos:pos+retain])
-                pos += retain
+                # Clamp retain to remaining content
+                if pos + retain > content_len:
+                    retain = content_len - pos
+                if retain > 0:
+                    new_content.append(content[pos:pos+retain])
+                    pos += retain
             elif 'insert' in op:
                 new_content.append(op['insert'])
             elif 'delete' in op:
-                pos += op['delete']
+                delete_count = op['delete']
+                # Clamp delete to remaining content
+                remaining = content_len - pos
+                if delete_count > remaining:
+                    delete_count = remaining
+                pos += delete_count
         
         # Append remaining content (implicit trailing retain)
-        if pos < len(content):
+        if pos < content_len:
             new_content.append(content[pos:])
             
         return "".join(new_content)
