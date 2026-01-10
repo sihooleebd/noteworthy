@@ -714,13 +714,40 @@ const app = {
                 scrollBeyondLastLine: false
             });
 
-            // On content change - sync to server (debounced)
+            // On content change - sync to server (delta + debounced full sync)
             this.state.editor.onDidChangeModelContent((e) => {
                 if (this.state.applyingRemote) return;  // Skip if applying remote changes
 
                 document.getElementById('save-status').textContent = '● Unsaved';
 
-                // Debounced sync - sends full content after 150ms pause
+                // 1. Send immediate delta(s)
+                if (this.state.docSocket && this.state.docSocket.readyState === WebSocket.OPEN && this.state.activeFile) {
+                    // Process changes (Sort descending by offset to allow sequential application without index shifting)
+                    const changes = [...e.changes].sort((a, b) => b.rangeOffset - a.rangeOffset);
+
+                    changes.forEach(change => {
+                        const ops = [];
+                        if (change.rangeOffset > 0) {
+                            ops.push({ retain: change.rangeOffset });
+                        }
+                        if (change.rangeLength > 0) {
+                            ops.push({ delete: change.rangeLength });
+                        }
+                        if (change.text) {
+                            ops.push({ insert: change.text });
+                        }
+
+                        if (ops.length > 0) {
+                            this.state.docSocket.send(JSON.stringify({
+                                type: 'delta',
+                                path: this.state.activeFile,
+                                ops: ops
+                            }));
+                        }
+                    });
+                }
+
+                // 2. Schedule debounced full sync as backup / eventual consistency
                 this.debouncedSyncContent();
             });
 
@@ -2354,15 +2381,19 @@ const app = {
                 break;
 
             case 'init':
+                console.time('[Doc] Init');
                 // Received file content from server
                 if (this.state.editor) {
                     this.state.applyingRemote = true;
                     const ext = this.state.activeFile?.split('.').pop() || 'typ';
                     const lang = ext === 'typ' ? 'markdown' : (ext === 'json' ? 'json' : 'plaintext');
                     monaco.editor.setModelLanguage(this.state.editor.getModel(), lang);
+                    console.time('[Doc] SetValue');
                     this.state.editor.setValue(msg.content);
+                    console.timeEnd('[Doc] SetValue');
                     this.state.applyingRemote = false;
                     document.getElementById('save-status').textContent = '';
+                    console.timeEnd('[Doc] Init');
 
                     // Render cursors of other users on this file (after a frame to ensure editor is ready)
                     if (msg.cursors && Array.isArray(msg.cursors)) {

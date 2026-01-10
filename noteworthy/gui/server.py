@@ -21,9 +21,28 @@ from ..config import (
     MODULES_CONFIG_FILE, INDEXIGNORE_FILE
 )
 from .preview import PreviewManager
+from .crdt_manager import crdt_manager, get_crdt_manager
 
 app = FastAPI(title="Noteworthy GUI")
+
+# Add CORS middleware to allow all origins
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 preview_manager = PreviewManager()
+
+# Emacs Client State
+emacs_clients: dict = {}  # user_id -> {"websocket": ws, "name": str, "color": str, "file": str}
+EMACS_USER_COLORS = [
+    "#FF6B6B", "#4ECDC4", "#FFE66D", "#95E1D3",
+    "#F38181", "#AA96DA", "#FCBAD3", "#A8D8EA"
+]
+emacs_color_index = 0
 
 # DocumentHub - Unified sync manager
 from .document_hub import document_hub
@@ -31,6 +50,9 @@ import uuid
 
 # Connect preview manager to document hub
 document_hub.preview_manager = preview_manager
+
+# Share emacs_clients with document_hub for unified broadcasting
+document_hub.emacs_clients = emacs_clients
 
 @app.on_event("startup")
 async def startup_event():
@@ -119,6 +141,15 @@ def regenerate_modules_json():
 
 @app.websocket("/ws/doc")
 async def doc_endpoint(websocket: WebSocket):
+    # Log connection attempt
+    # print(f"[Server] WS Connect attempt from {websocket.client}")
+    try:
+        await websocket.accept()
+        # print(f"[Server] WS Connected: {websocket.client}")
+    except Exception as e:
+        print(f"[Server] WS Accept failed: {e}")
+        return
+
     """
     Unified document WebSocket.
     
@@ -131,7 +162,7 @@ async def doc_endpoint(websocket: WebSocket):
     """
     user_name = websocket.query_params.get("name", "Anonymous")
     user_id = websocket.query_params.get("id", None)
-    await websocket.accept()
+    # await websocket.accept() - ALREADY ACCEPTED ABOVE
     
     user = await document_hub.connect(websocket, user_name, user_id)
     
@@ -151,24 +182,45 @@ async def doc_endpoint(websocket: WebSocket):
             if msg["type"] == "join":
                 # User opens a file
                 path = msg.get("path", "")
+                import time
+                t0 = time.time()
                 doc = await document_hub.join_file(user.id, path)
+                t1 = time.time()
+                
                 if doc:
                     # Get other users on this file for cursor sync
                     other_cursors = document_hub.get_users_on_file(path, exclude_user_id=user.id)
                     
                     # Send file content + cursors together
-                    await websocket.send_text(json.dumps({
+                    payload = json.dumps({
                         "type": "init",
                         "content": doc.content,
                         "version": doc.version,
                         "cursors": other_cursors
-                    }))
+                    })
+                    t2 = time.time()
+                    await websocket.send_text(payload)
+                    t3 = time.time()
+                    
+                    print(f"[Profiling] Join {path}:")
+                    print(f"  Load Doc: {(t1-t0)*1000:.2f}ms")
+                    print(f"  Serialize: {(t2-t1)*1000:.2f}ms")
+                    print(f"  Send WS: {(t3-t2)*1000:.2f}ms")
+                    print(f"  Total: {(t3-t0)*1000:.2f}ms")
+                    print(f"  Content Len: {len(doc.content)} chars")
             
             elif msg["type"] == "edit":
                 # User edited content
                 path = msg.get("path", "")
                 content = msg.get("content", "")
                 await document_hub.update_content(user.id, path, content)
+
+            elif msg["type"] == "delta":
+                # User sent direct delta ops
+                path = msg.get("path", "")
+                ops = msg.get("ops", [])
+                if path and ops:
+                    await document_hub.update_content(user.id, path, None, ops=ops)
             
             elif msg["type"] == "cursor":
                 await document_hub.update_cursor(
@@ -225,13 +277,23 @@ def get_file(path: str, raw: int = 0):
     return {"error": "File not found"}
 
 @app.post("/api/file")
-def save_file(data: dict = Body(...)):
-    """Write a file relative to project root."""
+async def save_file(data: dict = Body(...)):
+    """
+    Write a file relative to project root.
+    
+    Updated to use DocumentHub for unified sync. 
+    This ensures changes via HTTP (Web App) are broadcast to Emacs/CRDT.
+    """
     path = data.get("path")
     content = data.get("content", "")
-    target = BASE_DIR / path
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(content, encoding='utf-8')
+    
+    # Use DocumentHub to update content
+    # This will:
+    # 1. Update CRDT state
+    # 2. Broadcast to Emacs and other Web clients
+    # 3. Trigger debounced save to disk via YjsProvider
+    await document_hub.update_content("http_api", path, content)
+    
     return {"success": True}
 
 @app.post("/api/delete")
@@ -663,6 +725,9 @@ async def legacy_sync(websocket: WebSocket):
 
 @app.websocket("/ws")
 async def legacy_ws(websocket: WebSocket):
+    print(f"[Server] LEGACY /ws HIT by {websocket.client}. Client is likely OUTDATED.")
+    await websocket.accept()
+    await websocket.send_text("Error: Endpoint moved to /ws/doc. Please reload.")
     await websocket.close()
 
 @app.post("/api/watch")
@@ -856,6 +921,216 @@ async def check_diagnostics(data: dict = Body(...)):
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+# ============================================================
+# EMACS CRDT WebSocket - Real-time collaboration for Emacs
+# ============================================================
+
+@app.websocket("/ws/emacs")
+async def emacs_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for Emacs clients.
+    
+    Uses simple JSON protocol for CRDT synchronization as a bridge to YjsProvider.
+    """
+    global emacs_color_index
+    
+    await websocket.accept()
+    
+    # Assign user identity
+    user_name = websocket.query_params.get("name", "Emacs User")
+    user_id = str(uuid.uuid4())[:8]
+    user_color = EMACS_USER_COLORS[emacs_color_index % len(EMACS_USER_COLORS)]
+    emacs_color_index += 1
+    
+    current_file = None
+    observer_callback = None
+    
+    # Register client
+    emacs_clients[user_id] = {
+        "websocket": websocket,
+        "name": user_name,
+        "color": user_color,
+        "file": None
+    }
+    
+    print(f"[Emacs] Client connected: {user_name} ({user_id})")
+
+    # Connect to DocumentHub to enable cursor/presence sharing
+    # We pass the same websocket so Hub can broadcast to it if needed
+    hub_user = await document_hub.connect(websocket, user_name, user_id)
+    # Override color to match Emacs specific color if desirable, or let Hub decide
+    hub_user.color = user_color
+
+    # Send welcome message
+    await websocket.send_json({
+        "type": "welcome",
+        "userId": user_id,
+        "color": user_color
+    })
+    
+    async def send_log(level: str, message: str):
+        try:
+            await websocket.send_json({
+                "type": "log",
+                "level": level,
+                "message": message
+            })
+        except:
+            pass
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            
+            if msg_type == "join":
+                file_path = data.get("file", "")
+
+                try:
+                    if os.path.isabs(file_path):
+                        file_path = str(Path(file_path).relative_to(BASE_DIR))
+                except ValueError:
+                    pass
+                
+                # Leave previous file
+                if current_file and observer_callback:
+                    crdt_manager.remove_observer(current_file, observer_callback)
+                
+                # Update Hub state for this user so get_users_on_file works
+                if current_file:
+                    hub_user.current_file = None
+                
+                current_file = file_path
+                emacs_clients[user_id]["file"] = file_path
+                hub_user.current_file = file_path # CRITICAL for cursor broadcast routing
+                
+                # Ensure document room exists via adapter
+                await crdt_manager.get_or_create_room(file_path)
+                content = await crdt_manager.get_content(file_path)
+                version = await crdt_manager.get_version(file_path)
+                
+                # Restore observer to get updates from Yjs (Web) -> Emacs
+                # This callback runs in the Yjs thread/context, so we need to bridge to async
+                loop = asyncio.get_running_loop()
+                
+                def observer_callback_sync(fpath, delta, ver):
+                    # Only send if it's for our file
+                    if fpath == file_path:
+                        print(f"[EmacsObserver] Sending delta to {user_id} for {fpath}: {delta}")
+                        # Schedule sending on the event loop
+                        asyncio.run_coroutine_threadsafe(
+                            websocket.send_json({
+                                "type": "delta",
+                                "file": fpath,
+                                "ops": delta,
+                                "version": ver,
+                                "source": "web" # Indicate this came from web/others
+                            }),
+                            loop
+                        )
+                    else:
+                        print(f"[EmacsObserver] Ignoring update for {fpath} (watching {file_path})")
+                
+                observer_callback = observer_callback_sync
+                crdt_manager.add_observer(file_path, observer_callback)
+                
+                # Send initial content
+                await websocket.send_json({
+                    "type": "sync", 
+                    "file": file_path, 
+                    "content": content, 
+                    "version": version
+                })
+                
+                await send_log("info", f"Joined: {file_path}")
+                
+                # Notify others
+                await broadcast_to_emacs_file(file_path, {
+                    "type": "users",
+                    "file": file_path,
+                    "users": get_emacs_users_in_file(file_path)
+                }, exclude=user_id)
+            
+            elif msg_type == "delta":
+                file_from_msg = data.get("file")
+                ops = data.get("ops", [])
+                target_file = file_from_msg or current_file
+                
+                if target_file and ops:
+                    # Normalize path: Emacs might send absolute path
+                    try:
+                        if os.path.isabs(target_file):
+                            target_file = str(Path(target_file).relative_to(BASE_DIR))
+                    except ValueError:
+                        pass
+
+                    # Apply delta to CRDT (updates the document)
+                    success = await crdt_manager.apply_delta(target_file, ops, source_user=user_id)
+                    if success:
+                        # Get updated content and broadcast via unified hub
+                        content = await crdt_manager.get_content(target_file)
+                        
+                        # PASS OPS SO THEY CAN BE BROADCAST AS DELTAS
+                        await document_hub.update_content(user_id, target_file, content, skip_crdt=True, ops=ops)
+                    else:
+                        await send_log("error", f"Failed to apply delta to {target_file}")
+            
+            elif msg_type == "cursor":
+                current_file = emacs_clients[user_id].get("file")
+                if current_file:
+                    # Update hub state and broadcast to ALL clients (Web + Emacs)
+                    await document_hub.update_cursor(
+                        user_id, 
+                        data.get("line", 1), 
+                        data.get("col", 1)
+                    )
+            
+            elif msg_type == "leave":
+                current_file = emacs_clients[user_id].get("file")
+                observer_callback = emacs_clients[user_id].get("observer_callback")
+                if current_file and observer_callback:
+                    crdt_manager.remove_observer(current_file, observer_callback)
+                emacs_clients[user_id]["file"] = None
+                emacs_clients[user_id]["observer_callback"] = None
+    
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"[Emacs] Error for {user_id}: {e}")
+    finally:
+        if current_file and observer_callback:
+            crdt_manager.remove_observer(current_file, observer_callback)
+        if user_id in emacs_clients:
+            del emacs_clients[user_id]
+        
+        # Cleanup from DocumentHub (broadcasts user_left)
+        await document_hub.disconnect(user_id)
+            
+        print(f"[Emacs] Disconnected: {user_name}")
+
+
+async def broadcast_to_emacs_file(file_path: str, message: dict, exclude: str = None):
+    msg_json = json.dumps(message)
+    for uid, client in list(emacs_clients.items()):
+        if uid == exclude: continue
+        if client.get("file") == file_path:
+            try:
+                await client["websocket"].send_text(msg_json)
+            except: pass
+
+def get_emacs_users_in_file(file_path: str) -> list:
+    users = []
+    for uid, client in emacs_clients.items():
+        if client.get("file") == file_path:
+            users.append({
+                "id": uid, 
+                "name": client["name"], 
+                "color": client["color"]
+            })
+    return users
+
 
 # ============================================================
 # STATUS API

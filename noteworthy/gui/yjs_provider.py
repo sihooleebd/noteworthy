@@ -3,13 +3,15 @@ Yjs/CRDT WebSocket Provider for Noteworthy GUI
 
 Uses pycrdt-websocket for collaborative editing with CRDT-based conflict resolution.
 This runs alongside the existing document hub for presence/cursor sharing.
+
+Updated for pycrdt-websocket 0.16+ API.
 """
 import asyncio
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Callable, Awaitable, Any
 from pycrdt import Doc, Text
-from pycrdt_websocket import WebsocketServer
-from pycrdt_websocket.yroom import YRoom
+from pycrdt.websocket import WebsocketServer, ASGIServer
+from pycrdt.websocket.yroom import YRoom
 
 from ..config import BASE_DIR
 
@@ -21,12 +23,16 @@ class NoteworthyRoom(YRoom):
     """
     
     def __init__(self, room_name: str, *args, **kwargs):
-        super().__init__(ready=False, *args, **kwargs)
+        super().__init__(ready=True, *args, **kwargs)  # Start ready since we load sync
         self.room_name = room_name
         self._file_path = BASE_DIR / room_name
+        self._initialized = False
         
-    async def _init_from_disk(self):
+    async def initialize(self):
         """Load initial content from disk into the CRDT document."""
+        if self._initialized:
+            return
+        
         if self._file_path.exists():
             try:
                 content = self._file_path.read_text(encoding='utf-8')
@@ -35,32 +41,49 @@ class NoteworthyRoom(YRoom):
                 # Only set if empty (first load)
                 if len(text) == 0:
                     text += content
+                print(f"[YjsRoom] Loaded {self.room_name}: {len(content)} chars")
             except Exception as e:
                 print(f"[YjsRoom] Error loading {self.room_name}: {e}")
+        else:
+            print(f"[YjsRoom] File not found, starting empty: {self.room_name}")
         
-        # Mark room as ready
-        self._ready_event.set()
-    
-    async def started(self):
-        """Called when room starts."""
-        await super().started()
-        await self._init_from_disk()
-        
-        # Set up change callback
+        # Set up change callback for persistence
         text = self.ydoc.get("content", type=Text)
         text.observe(self._on_change)
+        
+        self._initialized = True
     
-    def _on_change(self, event):
-        """Persist changes to disk when document changes."""
-        # Get current content
+    async def _debounced_save(self):
+        """Save content to disk after delay."""
+        await asyncio.sleep(1.0) # 1 second debounce
+        
+        # Check if we are still the latest scheduled save
+        # This is a simple debounce: if a new change happened, it would have cancelled this task
+        # But here we just assume the task holds the latest state when it runs.
+        # A better pattern is to use a timer handle that we cancel.
+        
         text = self.ydoc.get("content", type=Text)
         content = str(text)
         
         try:
             self._file_path.parent.mkdir(parents=True, exist_ok=True)
             self._file_path.write_text(content, encoding='utf-8')
+            # print(f"[YjsRoom] Saved {self.room_name}")
         except Exception as e:
             print(f"[YjsRoom] Error saving {self.room_name}: {e}")
+        
+        self._save_task = None
+
+    def _on_change(self, event):
+        """Persist changes to disk (debounced)."""
+        print(f"[YjsRoom] Change detected in {self.room_name}")
+        # Cancel existing task if any
+        if hasattr(self, '_save_task') and self._save_task:
+            self._save_task.cancel()
+        
+        # Create new task
+        loop = asyncio.get_running_loop()
+        self._save_task = loop.create_task(self._debounced_save())
 
 
 class YjsProvider:
@@ -103,12 +126,40 @@ def get_yjs_asgi_app():
     Create the ASGI application for Yjs WebSocket handling.
     
     This is mounted at /yjs in the main FastAPI app.
+    
+    pycrdt-websocket 0.16+ uses a different pattern:
+    - WebsocketServer is created first
+    - ASGIServer wraps it
+    - Room management is handled via on_connect callback
     """
-    from pycrdt_websocket import ASGIServer
     
-    async def room_getter(name: str, create: bool = True):
-        """Called by pycrdt-websocket to get/create rooms."""
-        return yjs_provider.get_room(name)
+    # Create the websocket server
+    server = WebsocketServer(rooms_ready=True, auto_clean_rooms=False)
+    yjs_provider.server = server
     
-    server = WebsocketServer(get_room=room_getter, auto_clean_rooms=False)
-    return ASGIServer(server)
+    async def on_connect(scope: dict, state: dict) -> bool:
+        """
+        Called when a client connects.
+        The room name comes from the websocket path.
+        """
+        # Extract room name from path (e.g., /yjs/content/1/1.typ -> content/1/1.typ)
+        path = scope.get("path", "")
+        if path.startswith("/yjs/"):
+            room_name = path[5:]  # Remove /yjs/ prefix
+        elif path.startswith("/"):
+            room_name = path[1:]
+        else:
+            room_name = path
+        
+        # Get or create the room
+        room = yjs_provider.get_room(room_name)
+        
+        # Initialize from disk if needed
+        await room.initialize()
+        
+        # Store room in state for the connection
+        state["room"] = room
+        
+        return True  # Accept connection
+    
+    return ASGIServer(server, on_connect=on_connect)
