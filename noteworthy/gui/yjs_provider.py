@@ -53,15 +53,8 @@ class NoteworthyRoom(YRoom):
         
         self._initialized = True
     
-    async def _debounced_save(self):
-        """Save content to disk after delay."""
-        await asyncio.sleep(1.0) # 1 second debounce
-        
-        # Check if we are still the latest scheduled save
-        # This is a simple debounce: if a new change happened, it would have cancelled this task
-        # But here we just assume the task holds the latest state when it runs.
-        # A better pattern is to use a timer handle that we cancel.
-        
+    async def _save(self):
+        """Save content to disk immediately."""
         text = self.ydoc.get("content", type=Text)
         content = str(text)
         
@@ -71,19 +64,13 @@ class NoteworthyRoom(YRoom):
             # print(f"[YjsRoom] Saved {self.room_name}")
         except Exception as e:
             print(f"[YjsRoom] Error saving {self.room_name}: {e}")
-        
-        self._save_task = None
 
     def _on_change(self, event):
-        """Persist changes to disk (debounced)."""
-        print(f"[YjsRoom] Change detected in {self.room_name}")
-        # Cancel existing task if any
-        if hasattr(self, '_save_task') and self._save_task:
-            self._save_task.cancel()
-        
-        # Create new task
+        """Persist changes to disk immediately."""
+        # print(f"[YjsRoom] Change detected in {self.room_name}")
+        # Create save task immediately
         loop = asyncio.get_running_loop()
-        self._save_task = loop.create_task(self._debounced_save())
+        loop.create_task(self._save())
 
 
 class YjsProvider:
