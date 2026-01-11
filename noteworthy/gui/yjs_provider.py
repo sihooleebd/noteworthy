@@ -53,24 +53,25 @@ class NoteworthyRoom(YRoom):
         
         self._initialized = True
     
-    async def _save(self):
+    async def save(self):
         """Save content to disk immediately."""
+        print(f"[YjsRoom] Starting save for {self.room_name}")
         text = self.ydoc.get("content", type=Text)
         content = str(text)
         
         try:
             self._file_path.parent.mkdir(parents=True, exist_ok=True)
             self._file_path.write_text(content, encoding='utf-8')
-            # print(f"[YjsRoom] Saved {self.room_name}")
+            print(f"[YjsRoom] Saved {self.room_name} ({len(content)} chars)")
         except Exception as e:
             print(f"[YjsRoom] Error saving {self.room_name}: {e}")
 
     def _on_change(self, event):
         """Persist changes to disk immediately."""
-        # print(f"[YjsRoom] Change detected in {self.room_name}")
+        print(f"[YjsRoom] Change detected in {self.room_name}")
         # Create save task immediately
         loop = asyncio.get_running_loop()
-        loop.create_task(self._save())
+        loop.create_task(self.save())
 
 
 class YjsProvider:

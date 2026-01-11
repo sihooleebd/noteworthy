@@ -99,6 +99,9 @@ class CRDTManager:
                             del text[pos:pos + delete_count]
                             doc_len -= delete_count  # Update length after delete
             
+            # Explicitly save changes since local pycrdt updates don't trigger observers
+            await room.save()
+            print(f"[CRDT] Delta applied. New doc length: {len(text)}")
             return True
             
         except Exception as e:
