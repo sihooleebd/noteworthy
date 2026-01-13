@@ -2718,11 +2718,11 @@ const app = {
 
         // Connect to WebSocket
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // pycrdt-websocket expects room name in the URL path: /yjs/path/to/file
-        // We must encode the path to handle special characters, though typically paths are safe
+        // Manual URL construction to ensure correct path on server
+        // We pass '' as roomname to provider to prevent it from appending path again
         const wsUrl = `${protocol}//${window.location.host}/yjs/${path}`;
 
-        const provider = new WebsocketProvider(wsUrl, path, ydoc);
+        const provider = new WebsocketProvider(wsUrl, '', ydoc);
 
         provider.on('status', event => {
             if (event.status === 'connected') {
