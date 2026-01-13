@@ -3,7 +3,6 @@ CRDT Manager for Noteworthy Real-time Collaboration.
 
 ADAPTER LAYER:
 This bridges the custom Emacs JSON delta protocol to the standard YjsProvider.
-It no longer manages document persistence or ownership - that is delegated to YjsProvider.
 """
 import asyncio
 import json
@@ -99,8 +98,7 @@ class CRDTManager:
                             del text[pos:pos + delete_count]
                             doc_len -= delete_count  # Update length after delete
             
-            # Explicitly save changes since local pycrdt updates don't trigger observers
-            await room.save()
+            # File is automatically saved by the _on_change observer in NoteworthyRoom
             print(f"[CRDT] Delta applied. New doc length: {len(text)}")
             return True
             
