@@ -714,46 +714,190 @@ const app = {
                 scrollBeyondLastLine: false
             });
 
-            // On content change - sync to server (delta + debounced full sync)
+            // On content change - capture and send operations for OT
             this.state.editor.onDidChangeModelContent((e) => {
                 if (this.state.applyingRemote) return;  // Skip if applying remote changes
 
                 document.getElementById('save-status').textContent = '● Unsaved';
 
-                // 1. Send immediate delta(s)
-                if (this.state.docSocket && this.state.docSocket.readyState === WebSocket.OPEN && this.state.activeFile) {
-                    // Process changes (Sort descending by offset to allow sequential application without index shifting)
-                    const changes = [...e.changes].sort((a, b) => b.rangeOffset - a.rangeOffset);
+                // Convert Monaco changes to OT operations and send immediately
+                for (const change of e.changes) {
+                    // Each change has: rangeOffset, rangeLength, text
+                    // rangeLength > 0 means deletion, text.length > 0 means insertion
 
-                    changes.forEach(change => {
-                        const ops = [];
-                        if (change.rangeOffset > 0) {
-                            ops.push({ retain: change.rangeOffset });
-                        }
-                        if (change.rangeLength > 0) {
-                            ops.push({ delete: change.rangeLength });
-                        }
-                        if (change.text) {
-                            ops.push({ insert: change.text });
-                        }
+                    if (change.rangeLength > 0) {
+                        // Delete operation
+                        this.sendOperation({
+                            type: 'delete',
+                            position: change.rangeOffset,
+                            length: change.rangeLength
+                        });
+                    }
 
-                        if (ops.length > 0) {
-                            this.state.docSocket.send(JSON.stringify({
-                                type: 'delta',
-                                path: this.state.activeFile,
-                                ops: ops
-                            }));
-                        }
-                    });
+                    if (change.text.length > 0) {
+                        // Insert operation
+                        this.sendOperation({
+                            type: 'insert',
+                            position: change.rangeOffset,
+                            text: change.text
+                        });
+                    }
                 }
-
-                // 2. Schedule debounced full sync as backup / eventual consistency
-                this.debouncedSyncContent();
             });
 
             // Cursor and selection broadcast (for collaborative editing)
             this.state.editor.onDidChangeCursorSelection((e) => {
                 this.sendCursor(e.selection.getPosition(), e.selection);
+            });
+
+            // ============================================================
+            // SMART EDITOR BEHAVIORS
+            // ============================================================
+
+            // Key handler for list auto-generation, indentation, and $ autocomplete
+            this.state.editor.onKeyDown((e) => {
+                const model = this.state.editor.getModel();
+                const position = this.state.editor.getPosition();
+                if (!model || !position) return;
+
+                const lineContent = model.getLineContent(position.lineNumber);
+
+                // ---- ENTER: List auto-generation ----
+                if (e.keyCode === monaco.KeyCode.Enter && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+                    // Bullet list pattern: optional whitespace + dash + space
+                    const bulletMatch = lineContent.match(/^(\s*)([-*+])\s(.*)$/);
+                    // Numbered list pattern: optional whitespace + number + dot + space
+                    const numberedMatch = lineContent.match(/^(\s*)(\d+)\.\s(.*)$/);
+
+                    if (bulletMatch) {
+                        const [, indent, marker, content] = bulletMatch;
+                        if (content.trim() === '') {
+                            // Empty bullet item - remove it
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const range = new monaco.Range(position.lineNumber, 1, position.lineNumber, lineContent.length + 1);
+                            this.state.editor.executeEdits('', [{ range, text: '' }]);
+                        } else {
+                            // Add new bullet with same indent
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const newLine = `\n${indent}${marker} `;
+                            this.state.editor.executeEdits('', [{
+                                range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+                                text: newLine
+                            }]);
+                            this.state.editor.setPosition({
+                                lineNumber: position.lineNumber + 1,
+                                column: indent.length + 3
+                            });
+                        }
+                        return;
+                    }
+
+                    if (numberedMatch) {
+                        const [, indent, num, content] = numberedMatch;
+                        if (content.trim() === '') {
+                            // Empty numbered item - remove it
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const range = new monaco.Range(position.lineNumber, 1, position.lineNumber, lineContent.length + 1);
+                            this.state.editor.executeEdits('', [{ range, text: '' }]);
+                        } else {
+                            // Add new numbered item with incremented number
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const nextNum = parseInt(num) + 1;
+                            const newLine = `\n${indent}${nextNum}. `;
+                            this.state.editor.executeEdits('', [{
+                                range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+                                text: newLine
+                            }]);
+                            this.state.editor.setPosition({
+                                lineNumber: position.lineNumber + 1,
+                                column: indent.length + String(nextNum).length + 3
+                            });
+                        }
+                        return;
+                    }
+                }
+
+                // ---- TAB / SHIFT+TAB: List indentation ----
+                if (e.keyCode === monaco.KeyCode.Tab) {
+                    const isBulletOrNumber = /^(\s*)([-*+]|\d+\.)\s/.test(lineContent);
+                    if (isBulletOrNumber) {
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        if (e.shiftKey) {
+                            // Unindent: remove up to 2 leading spaces
+                            const unindentMatch = lineContent.match(/^(\s{1,2})/);
+                            if (unindentMatch) {
+                                const spacesToRemove = unindentMatch[1].length;
+                                const range = new monaco.Range(position.lineNumber, 1, position.lineNumber, spacesToRemove + 1);
+                                this.state.editor.executeEdits('', [{ range, text: '' }]);
+                            }
+                        } else {
+                            // Indent: add 2 spaces at start
+                            const range = new monaco.Range(position.lineNumber, 1, position.lineNumber, 1);
+                            this.state.editor.executeEdits('', [{ range, text: '  ' }]);
+                            this.state.editor.setPosition({
+                                lineNumber: position.lineNumber,
+                                column: position.column + 2
+                            });
+                        }
+                        return;
+                    }
+                }
+            });
+
+            // $ autocomplete handler (using onDidType for character input)
+            this.state.editor.onDidType((text) => {
+                if (this.state.applyingRemote) return;
+
+                const model = this.state.editor.getModel();
+                const position = this.state.editor.getPosition();
+                if (!model || !position) return;
+
+                // When user types $, insert $$ and position cursor between
+                if (text === '$') {
+                    const lineContent = model.getLineContent(position.lineNumber);
+                    const charBefore = position.column > 2 ? lineContent[position.column - 3] : '';
+
+                    // Don't auto-complete if there's already a $ before (user is closing)
+                    if (charBefore === '$') return;
+
+                    // Insert another $ after cursor
+                    this.state.editor.executeEdits('', [{
+                        range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+                        text: '$'
+                    }]);
+                    // Keep cursor between the $$
+                    this.state.editor.setPosition(position);
+                    return;
+                }
+
+                // When user types space inside $$, transform to $ CURSOR $
+                if (text === ' ') {
+                    const lineContent = model.getLineContent(position.lineNumber);
+                    // Check if we're inside $$ (cursor just typed space, so position.column is after the space)
+                    // Pattern: $ followed by space (just typed) followed by $
+                    const col = position.column;
+                    if (col >= 3 && lineContent[col - 3] === '$' && lineContent[col - 1] === '$') {
+                        // We have "$ $" pattern - insert another space before the closing $
+                        // Current state: $ <space we just typed>$ with cursor after space
+                        // Goal: $<space><cursor><space>$
+                        this.state.editor.executeEdits('', [{
+                            range: new monaco.Range(position.lineNumber, col, position.lineNumber, col),
+                            text: ' '
+                        }]);
+                        // Position cursor between the two spaces (stay at current position)
+                        this.state.editor.setPosition({
+                            lineNumber: position.lineNumber,
+                            column: col  // Stay at current column (between the two spaces)
+                        });
+                        return;
+                    }
+                }
             });
 
             // Set theme selector to current value
@@ -783,13 +927,6 @@ const app = {
 
         // ESC key handler for saving config changes
         document.addEventListener('keydown', (e) => {
-            // Alt+O: Sync preview scroll to cursor
-            if (e.altKey && (e.key === 'o' || e.key === 'O')) {
-                e.preventDefault();
-                this.syncPreviewScroll();
-                return;
-            }
-
             if (e.key === 'Escape') {
                 // Save current config tab on ESC
                 const activePage = document.querySelector('.page.active');
@@ -1414,6 +1551,7 @@ const app = {
             case 'ignored': this.renderIgnoredTab(container); break;
             case 'modules': this.renderModulesTab(container); break;
             case 'session': this.renderSessionTab(container); break;
+            case 'info': this.renderInfoTab(container); break;
         }
     },
 
@@ -2388,19 +2526,20 @@ const app = {
                 break;
 
             case 'init':
-                console.time('[Doc] Init');
                 // Received file content from server
                 if (this.state.editor) {
                     this.state.applyingRemote = true;
                     const ext = this.state.activeFile?.split('.').pop() || 'typ';
                     const lang = ext === 'typ' ? 'markdown' : (ext === 'json' ? 'json' : 'plaintext');
                     monaco.editor.setModelLanguage(this.state.editor.getModel(), lang);
-                    console.time('[Doc] SetValue');
                     this.state.editor.setValue(msg.content);
-                    console.timeEnd('[Doc] SetValue');
+
+                    // Store version and hash for OT sync
+                    this.state.docVersion = msg.version || 0;
+                    this.state.docHash = msg.hash || '';
+
                     this.state.applyingRemote = false;
                     document.getElementById('save-status').textContent = '';
-                    console.timeEnd('[Doc] Init');
 
                     // Render cursors of other users on this file (after a frame to ensure editor is ready)
                     if (msg.cursors && Array.isArray(msg.cursors)) {
@@ -2416,18 +2555,128 @@ const app = {
                             });
                         });
                     }
+
+                    // Start periodic sync verification to detect drift
+                    this.startSyncVerification();
                 }
                 break;
 
             case 'content':
-                // Remote user edited the document
+                // Remote user edited the document (full content sync)
                 if (msg.userId !== this.state.userId && this.state.editor) {
                     this.state.applyingRemote = true;
-                    // Save cursor position
+
+                    // Smart cursor restoration
+                    const pos = this.state.editor.getPosition();
+                    const sel = this.state.editor.getSelection();
+                    const oldContent = this.state.editor.getValue();
+                    const oldLength = oldContent.length;
+
+                    this.state.editor.setValue(msg.content);
+
+                    // Update version and hash
+                    this.state.docVersion = msg.version;
+                    this.state.docHash = msg.hash;
+
+                    // Restore cursor with adjustment for content length change
+                    if (pos) {
+                        const newLength = msg.content.length;
+                        const lengthDiff = newLength - oldLength;
+
+                        // Try to keep cursor at same relative position
+                        const model = this.state.editor.getModel();
+                        const maxLine = model.getLineCount();
+                        const newLine = Math.min(pos.lineNumber, maxLine);
+                        const newCol = Math.min(pos.column, model.getLineMaxColumn(newLine));
+
+                        this.state.editor.setPosition({ lineNumber: newLine, column: newCol });
+                    }
+
+                    this.state.applyingRemote = false;
+                }
+                break;
+
+            case 'operation':
+                // Remote user sent incremental operation (OT mode)
+                if (msg.userId !== this.state.userId && this.state.editor) {
+                    this.state.applyingRemote = true;
+
+                    const model = this.state.editor.getModel();
+                    const op = msg.op;
+
+                    // Save current cursor position as offset
+                    const cursorPos = this.state.editor.getPosition();
+                    const cursorOffset = model.getOffsetAt(cursorPos);
+
+                    if (op.type === 'insert') {
+                        const pos = model.getPositionAt(op.position);
+                        this.state.editor.executeEdits('remote', [{
+                            range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column),
+                            text: op.text
+                        }]);
+
+                        // Adjust cursor if insert was before cursor position
+                        if (op.position <= cursorOffset) {
+                            const newOffset = cursorOffset + op.text.length;
+                            const newPos = model.getPositionAt(newOffset);
+                            this.state.editor.setPosition(newPos);
+                        }
+                    } else if (op.type === 'delete') {
+                        const startPos = model.getPositionAt(op.position);
+                        const endPos = model.getPositionAt(op.position + op.length);
+                        this.state.editor.executeEdits('remote', [{
+                            range: new monaco.Range(startPos.lineNumber, startPos.column, endPos.lineNumber, endPos.column),
+                            text: ''
+                        }]);
+
+                        // Adjust cursor if delete was before cursor position
+                        if (op.position + op.length <= cursorOffset) {
+                            // Delete entirely before cursor
+                            const newOffset = cursorOffset - op.length;
+                            const newPos = model.getPositionAt(newOffset);
+                            this.state.editor.setPosition(newPos);
+                        } else if (op.position < cursorOffset) {
+                            // Delete overlaps cursor, move to delete position
+                            const newPos = model.getPositionAt(op.position);
+                            this.state.editor.setPosition(newPos);
+                        }
+                    }
+
+                    // Update version and hash
+                    this.state.docVersion = msg.version;
+                    this.state.docHash = msg.hash;
+
+                    this.state.applyingRemote = false;
+                }
+                break;
+
+            case 'ack':
+                // Server acknowledged our edit
+                this.state.docVersion = msg.version;
+                this.state.docHash = msg.hash;
+                document.getElementById('save-status').textContent = 'Synced';
+                setTimeout(() => document.getElementById('save-status').textContent = '', 1500);
+                if (msg.resync) {
+                    console.log('[Sync] Server detected drift, expecting resync');
+                }
+                break;
+
+            case 'resync':
+                // Server requests full resync (drift detected)
+                console.log('[Sync] Resync received - applying authoritative content');
+                if (this.state.editor) {
+                    this.state.applyingRemote = true;
                     const pos = this.state.editor.getPosition();
                     this.state.editor.setValue(msg.content);
-                    // Restore cursor position
-                    if (pos) this.state.editor.setPosition(pos);
+                    this.state.docVersion = msg.version;
+                    this.state.docHash = msg.hash;
+                    if (pos) {
+                        const model = this.state.editor.getModel();
+                        const maxLine = model.getLineCount();
+                        const newLine = Math.min(pos.lineNumber, maxLine);
+                        const newCol = Math.min(pos.column, model.getLineMaxColumn(newLine));
+                        this.state.editor.setPosition({ lineNumber: newLine, column: newCol });
+                    }
                     this.state.applyingRemote = false;
                 }
                 break;
@@ -2462,11 +2711,6 @@ const app = {
                     this.addChatMessage(msg);
                 }
                 break;
-
-            case 'log':
-                // Log message from server
-                this.addLogEntry(msg.level || 'info', msg.message || '', msg.timestamp || Date.now());
-                break;
         }
     },
 
@@ -2487,12 +2731,58 @@ const app = {
         this.state.docSocket.send(JSON.stringify({
             type: 'edit',
             path: this.state.activeFile,
-            content: content
+            content: content,
+            hash: this.state.docHash || ''  // Include current hash for drift detection
         }));
 
         // Mark as saved since server will save to disk
         document.getElementById('save-status').textContent = 'Synced';
         setTimeout(() => document.getElementById('save-status').textContent = '', 1500);
+    },
+
+    // Send a single operation for OT-based sync
+    sendOperation: function (op) {
+        if (!this.state.activeFile) return;
+        if (!this.state.docSocket || this.state.docSocket.readyState !== WebSocket.OPEN) return;
+
+        // Send operation immediately
+        this.state.docSocket.send(JSON.stringify({
+            type: 'operation',
+            path: this.state.activeFile,
+            op: op,
+            version: this.state.docVersion || 0
+        }));
+
+        // Update status
+        document.getElementById('save-status').textContent = 'Syncing...';
+    },
+
+    // Periodic sync verification to detect and fix drift
+    startSyncVerification: function () {
+        // Clear any existing interval
+        if (this.state.syncVerifyInterval) {
+            clearInterval(this.state.syncVerifyInterval);
+        }
+
+        // Verify sync every 30 seconds
+        this.state.syncVerifyInterval = setInterval(() => {
+            this.verifySyncState();
+        }, 30000);
+    },
+
+    verifySyncState: function () {
+        if (!this.state.activeFile || !this.state.editor) return;
+        if (!this.state.docSocket || this.state.docSocket.readyState !== WebSocket.OPEN) return;
+
+        // Only verify if we have a hash to compare
+        if (!this.state.docHash) return;
+
+        this.state.docSocket.send(JSON.stringify({
+            type: 'verify',
+            path: this.state.activeFile,
+            hash: this.state.docHash,
+            version: this.state.docVersion
+        }));
     },
 
     sendCursor: function (position, selection = null) {
@@ -2860,6 +3150,66 @@ const app = {
         `;
     },
 
+    renderInfoTab: function (container) {
+        container.innerHTML = `
+            <div class="config-section">
+                <pre style="font-family: 'JetBrains Mono', monospace; font-size: 16px; line-height: 1.2; color: var(--accent-primary); margin-bottom: 24px;">${this.ASCII_LOGO}</pre>
+                
+                <h1 style="font-family: var(--font-display); font-size: 32px; font-weight: 700; margin-bottom: 8px;">Noteworthy</h1>
+                <p style="color: var(--text-muted); margin-bottom: 24px;">A modular Typst template system</p>
+                
+                <div style="background: var(--bg-secondary); border-radius: 8px; padding: 12px 24px; margin-bottom: 32px;">
+                    <span style="color: var(--text-muted);">Version</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-left: 8px;">0.1.0</span>
+                </div>
+            </div>
+            
+            <div class="config-section">
+                <h3>Made By</h3>
+                <ul style="margin-top: 12px; list-style: none; padding: 0;">
+                    <li style="margin-bottom: 8px;"><strong>Benjamin Lee</strong> — Creator & Developer</li>
+                    <li><strong>Hojun Lee</strong> — Developer</li>
+                </ul>
+            </div>
+            
+            <div class="config-section">
+                <h3>Special Thanks</h3>
+                <p style="color: var(--text-muted); margin-top: 8px;">
+                    <!-- Add special thanks here -->
+                </p>
+            </div>
+            
+            <div class="config-section">
+                <h3>Useful Links</h3>
+                <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+                    <a href="https://noteworthy.benjaminlee.kr/docs.html" target="_blank" style="display: flex; align-items: center; gap: 8px; color: var(--accent-primary); text-decoration: none;">
+                        <i data-lucide="book-open" style="width: 18px; height: 18px;"></i>
+                        Documentation
+                    </a>
+                    <a href="https://github.com/sihooleebd/noteworthy" target="_blank" style="display: flex; align-items: center; gap: 8px; color: var(--accent-primary); text-decoration: none;">
+                        <i data-lucide="github" style="width: 18px; height: 18px;"></i>
+                        GitHub Repository
+                    </a>
+                    <a href="https://typst.app" target="_blank" style="display: flex; align-items: center; gap: 8px; color: var(--accent-primary); text-decoration: none;">
+                        <i data-lucide="external-link" style="width: 18px; height: 18px;"></i>
+                        Typst Official
+                    </a>
+                </div>
+            </div>
+            
+            <div class="config-section" style="border-top: 1px solid var(--border-color); margin-top: 32px; padding-top: 24px;">
+                <p style="font-size: 12px; color: var(--text-muted);">
+                    © 2024-2026 Noteworthy. Built with ❤️ using Typst, FastAPI, and Monaco Editor.
+                </p>
+            </div>
+        `;
+
+        // Re-render Lucide icons for the links
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+    },
+
     updateSessionName: function (name) {
         this.state.sessionName = name || 'Anonymous';
         localStorage.setItem('sessionName', this.state.sessionName);
@@ -3108,89 +3458,6 @@ const app = {
     scrollChatToBottom: function () {
         const container = document.getElementById('chat-messages');
         container.scrollTop = container.scrollHeight;
-    },
-
-    // ============================================================
-    // PREVIEW MODE TOGGLE
-    // ============================================================
-
-    togglePreviewMode: async function () {
-        const toggle = document.getElementById('preview-mode-toggle');
-        const label = document.getElementById('preview-mode-label');
-        const container = document.getElementById('preview-container');
-
-        if (toggle.checked) {
-            // Switch to Full preview
-            label.textContent = 'Full';
-
-            // Use fixed port 23625 on current hostname
-            const hostname = window.location.hostname;
-            const url = `http://${hostname}:23625`;
-
-            // Replace container content with iframe
-            container.innerHTML = `<iframe id="full-preview-iframe" src="${url}"></iframe>`;
-            this.state.previewMode = 'full';
-        } else {
-            // Switch to Partial preview
-            label.textContent = 'Partial';
-            this.state.previewMode = 'partial';
-
-            // Restore placeholder or trigger reload of current file preview
-            container.innerHTML = `
-                <div class="preview-placeholder">
-                    <i data-lucide="eye"></i>
-                    <span>Select a .typ file</span>
-                </div>
-            `;
-            lucide.createIcons();
-
-            // If we have an active file, restart partial preview
-            if (this.state.activeFile && this.state.activeFile.endsWith('.typ')) {
-                this.startPreview(this.state.activeFile);
-            }
-        }
-    },
-
-    toggleLogPanel: function () {
-        const panel = document.getElementById('log-panel');
-        panel.classList.toggle('hidden');
-    },
-
-    clearLogs: function () {
-        const container = document.getElementById('log-messages');
-        container.innerHTML = '';
-    },
-
-    addLogEntry: function (level, message, timestamp) {
-        const container = document.getElementById('log-messages');
-        const entry = document.createElement('div');
-        entry.className = `log-entry ${level}`;
-
-        const time = new Date(timestamp).toLocaleTimeString();
-        entry.innerHTML = `<span class="log-timestamp">${time}</span>${message}`;
-
-        container.appendChild(entry);
-        container.scrollTop = container.scrollHeight;
-    },
-
-    syncPreviewScroll: function () {
-        // Get current cursor position
-        if (!this.state.editor) return;
-
-        const position = this.state.editor.getPosition();
-        const line = position.lineNumber;
-        const column = position.column;
-
-        console.log(`[Sync] Scrolling preview to line ${line}, col ${column}`);
-
-        // TODO: Implement actual scroll sync with tinymist/preview
-        // This would require either:
-        // 1. Tinymist JS API (if available)
-        // 2. postMessage to iframe
-        // 3. WebSocket message to backend
-
-        // For now, just log it
-        this.addLogEntry('info', `Sync requested: line ${line}, column ${column}`, Date.now());
     }
 };
 

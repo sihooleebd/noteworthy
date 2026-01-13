@@ -11,7 +11,7 @@ Noteworthy Studio is built with:
 | **Backend**   | FastAPI + Python        |
 | **Real-time** | WebSockets              |
 | **Frontend**  | HTML + CSS + JavaScript |
-| **Editor**    | Monaco Editor + Yjs     |
+| **Editor**    | Monaco Editor + OT Sync |
 | **Preview**   | PDF.js / SVG            |
 
 ---
@@ -27,7 +27,7 @@ graph TB
     end
 
     subgraph WebSocket["WebSocket"]
-        DocSync["Document Sync"]
+        DocSync["Document Sync (OT)"]
         Cursors["Cursor Sharing"]
         Chat["Chat Messages"]
     end
@@ -82,21 +82,20 @@ The main FastAPI application.
 
 **WebSocket Endpoints:**
 
-| Endpoint  | Purpose                       |
-| --------- | ----------------------------- |
-| `/ws/doc` | Unified document WebSocket    |
-| `/yjs`    | Yjs CRDT WebSocket (Optional) |
+| Endpoint  | Purpose                    |
+| --------- | -------------------------- |
+| `/ws/doc` | Unified document WebSocket |
 
 ### document_hub.py
 
-Real-time synchronization manager.
+Real-time synchronization manager using **Operational Transformation (OT)** logic.
 
 **Responsibilities:**
 - User session management
-- Document state tracking
+- Document state tracking (Server Authority)
+- Hash-based drift detection
+- Automatic resync
 - Cursor position sharing
-- Content broadcasting
-- Chat message routing
 
 **Key Classes:**
 
@@ -114,27 +113,18 @@ class User:
 class Document:
     path: str
     content: str
+    content_hash: str  # For drift verification
     version: int
     users: set
 
 class DocumentHub:
     async def connect(ws, name) -> User
-    async def disconnect(user_id, ws)
     async def join_file(user_id, path) -> Document
-    async def update_content(user_id, path, content)
+    async def update_content(user_id, path, content, client_hash)
+    async def update_operation(user_id, path, op)  # New OT handler
+    async def verify_sync(path, client_hash)       # Drift check
     async def update_cursor(user_id, line, column)
-    async def update_cursor(user_id, line, column, selection=None)
-    async def send_chat(user_id, text, timestamp)
 ```
-
-### yjs_provider.py
-
-**NEW** - Yjs CRDT provider for conflict-free editing.
-
-**Responsibilities:**
-- Manages Yjs rooms per file
-- Persists CRDT state to disk
-- Handles broadcasting updates via `pycrdt-websocket`
 
 ### preview.py
 
@@ -191,20 +181,24 @@ UI styling with:
 
 **Client → Server:**
 
-| Type       | Payload             | Purpose        |
-| ---------- | ------------------- | -------------- |
-| `join`     | `{path}`            | Open file      |
-| `edit`     | `{path, content}`   | Update content |
-| `cursor`   | `{line, column}`    | Cursor moved   |
-| `identity` | `{name}`            | Set username   |
-| `chat`     | `{text, timestamp}` | Send message   |
+| Type        | Payload                 | Purpose             |
+| ----------- | ----------------------- | ------------------- |
+| `join`      | `{path}`                | Open file           |
+| `edit`      | `{path, content, hash}` | Full content update |
+| `operation` | `{path, op}`            | OT Operation        |
+| `verify`    | `{path, hash, version}` | Period drift check  |
+| `cursor`    | `{line, column}`        | Cursor moved        |
+| `identity`  | `{name}`                | Set username        |
+| `chat`      | `{text, timestamp}`     | Send message        |
 
 **Server → Client:**
 
 | Type          | Payload                    | Purpose              |
 | ------------- | -------------------------- | -------------------- |
 | `joined`      | `{userId, color, users}`   | Connection confirmed |
-| `init`        | `{content, version}`       | File content         |
+| `init`        | `{content, version, hash}` | File content         |
+| `ack`         | `{version}`                | Edit acknowledged    |
+| `resync`      | `{content, version}`       | Force resync         |
 | `update`      | `{path, content, userId}`  | Content changed      |
 | `cursor`      | `{userId, line, col, sel}` | Cursor/Selection     |
 | `user_joined` | `{user}`                   | New user             |
@@ -216,7 +210,7 @@ UI styling with:
 
 ## Data Flow
 
-### File Edit
+### File Edit (OT Sync)
 
 ```mermaid
 sequenceDiagram
@@ -224,13 +218,17 @@ sequenceDiagram
     participant Server
     participant User B
 
-    User A->>Server: edit {path, content}
-    Server->>Server: Update document state
+    User A->>Server: edit {path, content, hash}
+    Server->>Server: Validate Hash & Version
     Server->>Server: Save to disk
+    Server->>User A: ack {version}
     Server->>User B: update {path, content, userId}
-    Server->>Server: Trigger preview compile
-    Server->>User A: preview {data}
-    Server->>User B: preview {data}
+    
+    par Preview
+        Server->>Server: Trigger preview compile
+        Server->>User A: preview {data}
+        Server->>User B: preview {data}
+    end
 ```
 
 ### Join File
@@ -243,9 +241,9 @@ sequenceDiagram
 
     Client->>Server: join {path}
     Server->>Hub: join_file(userId, path)
-    Hub->>Hub: Load from disk if needed
-    Hub-->>Server: Document
-    Server-->>Client: init {content, version}
+    Hub->>Hub: Load from disk
+    Hub-->>Server: Document (Content + Hash)
+    Server-->>Client: init {content, version, hash}
     Server->>Server: Broadcast user_joined
 ```
 

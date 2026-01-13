@@ -46,6 +46,7 @@ Documentation for built-in and extension modules:
 | [Graph](modules/graph.md)       | Function plotting and calculus             |
 | [DSA](modules/dsa.md)           | Data structures and algorithms             |
 | [Trees](modules/trees.md)       | Tree visualizations                        |
+| [Timeline](modules/timeline.md) | Vertical and horizontal timelines          |
 | [Layout](modules/layout.md)     | Page layouts, covers, outlines             |
 | [Others](modules/others.md)     | Blocks, tables, combinatorics              |
 
