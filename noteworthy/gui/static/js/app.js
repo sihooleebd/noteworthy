@@ -714,36 +714,8 @@ const app = {
                 scrollBeyondLastLine: false
             });
 
-            // On content change - capture and send operations for OT
-            this.state.editor.onDidChangeModelContent((e) => {
-                if (this.state.applyingRemote) return;  // Skip if applying remote changes
+            // Content sync is now handled by Yjs (see joinFile)\
 
-                document.getElementById('save-status').textContent = '● Unsaved';
-
-                // Convert Monaco changes to OT operations and send immediately
-                for (const change of e.changes) {
-                    // Each change has: rangeOffset, rangeLength, text
-                    // rangeLength > 0 means deletion, text.length > 0 means insertion
-
-                    if (change.rangeLength > 0) {
-                        // Delete operation
-                        this.sendOperation({
-                            type: 'delete',
-                            position: change.rangeOffset,
-                            length: change.rangeLength
-                        });
-                    }
-
-                    if (change.text.length > 0) {
-                        // Insert operation
-                        this.sendOperation({
-                            type: 'insert',
-                            position: change.rangeOffset,
-                            text: change.text
-                        });
-                    }
-                }
-            });
 
             // Cursor and selection broadcast (for collaborative editing)
             this.state.editor.onDidChangeCursorSelection((e) => {
@@ -2532,7 +2504,8 @@ const app = {
                     const ext = this.state.activeFile?.split('.').pop() || 'typ';
                     const lang = ext === 'typ' ? 'markdown' : (ext === 'json' ? 'json' : 'plaintext');
                     monaco.editor.setModelLanguage(this.state.editor.getModel(), lang);
-                    this.state.editor.setValue(msg.content);
+                    // Content is now loaded by Yjs
+                    // this.state.editor.setValue(msg.content);
 
                     // Store version and hash for OT sync
                     this.state.docVersion = msg.version || 0;
@@ -2715,47 +2688,65 @@ const app = {
     },
 
     joinFile: function (path) {
+        // 1. Maintain Presence/Cursor connection
         if (this.state.docSocket && this.state.docSocket.readyState === WebSocket.OPEN) {
             this.state.docSocket.send(JSON.stringify({
                 type: 'join',
                 path: path
             }));
         }
+
+        // 2. Setup Yjs CRDT for Content Sync
+
+        // Cleanup old provider
+        if (this.state.yjsProvider) {
+            this.state.yjsBinding.destroy();
+            this.state.yjsProvider.destroy();
+            this.state.yjsProvider = null;
+            this.state.yjsBinding = null;
+        }
+
+        // Initialize Yjs
+        // Assumes Y, WebsocketProvider, MonacoBinding are available globally via CDN
+        if (typeof Y === 'undefined') {
+            console.error("Yjs not loaded");
+            return;
+        }
+
+        const ydoc = new Y.Doc();
+        const ytext = ydoc.getText('content');
+
+        // Connect to WebSocket
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        // y-websocket connects to url/roomname
+        // Our server endpoint is /yjs
+        const wsUrl = `${protocol}//${window.location.host}/yjs`;
+
+        const provider = new WebsocketProvider(wsUrl, path, ydoc);
+
+        provider.on('status', event => {
+            if (event.status === 'connected') {
+                document.getElementById('save-status').textContent = 'Synced';
+                setTimeout(() => document.getElementById('save-status').textContent = '', 2000);
+            } else {
+                document.getElementById('save-status').textContent = 'Offline';
+            }
+        });
+
+        // Bind to Monaco
+        const monacoBinding = new MonacoBinding(
+            ytext,
+            this.state.editor.getModel(),
+            new Set([this.state.editor]),
+            provider.awareness
+        );
+
+        this.state.yjsProvider = provider;
+        this.state.yjsBinding = monacoBinding;
     },
 
-    syncContent: function () {
-        if (!this.state.activeFile || !this.state.editor) return;
-        if (!this.state.docSocket || this.state.docSocket.readyState !== WebSocket.OPEN) return;
+    // Legacy sync functions removed (replaced by Yjs)
 
-        const content = this.state.editor.getValue();
-        this.state.docSocket.send(JSON.stringify({
-            type: 'edit',
-            path: this.state.activeFile,
-            content: content,
-            hash: this.state.docHash || ''  // Include current hash for drift detection
-        }));
-
-        // Mark as saved since server will save to disk
-        document.getElementById('save-status').textContent = 'Synced';
-        setTimeout(() => document.getElementById('save-status').textContent = '', 1500);
-    },
-
-    // Send a single operation for OT-based sync
-    sendOperation: function (op) {
-        if (!this.state.activeFile) return;
-        if (!this.state.docSocket || this.state.docSocket.readyState !== WebSocket.OPEN) return;
-
-        // Send operation immediately
-        this.state.docSocket.send(JSON.stringify({
-            type: 'operation',
-            path: this.state.activeFile,
-            op: op,
-            version: this.state.docVersion || 0
-        }));
-
-        // Update status
-        document.getElementById('save-status').textContent = 'Syncing...';
-    },
 
     // Periodic sync verification to detect and fix drift
     startSyncVerification: function () {

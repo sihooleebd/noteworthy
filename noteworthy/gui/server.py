@@ -166,56 +166,8 @@ async def doc_endpoint(websocket: WebSocket):
                     }))
 
             
-            elif msg["type"] == "edit":
-                # User edited content (full content mode)
-                path = msg.get("path", "")
-                content = msg.get("content", "")
-                client_hash = msg.get("hash")
-                result = await document_hub.update_content(user.id, path, content, client_hash)
-                
-                # Send acknowledgment with version
-                await websocket.send_text(json.dumps({
-                    "type": "ack",
-                    "version": result.get("version"),
-                    "hash": result.get("hash"),
-                    "resync": result.get("resync", False)
-                }))
+            # "edit", "operation", "verify" handlers removed - replaced by Yjs
             
-            elif msg["type"] == "operation":
-                # User sent incremental operation (OT mode)
-                path = msg.get("path", "")
-                op_data = msg.get("op", {})
-                result = await document_hub.update_operation(user.id, path, op_data)
-                
-                # Send acknowledgment or resync request
-                if result.get("resync"):
-                    await websocket.send_text(json.dumps({
-                        "type": "resync",
-                        "content": result.get("content", ""),
-                        "version": result.get("serverVersion", result.get("version", 0)),
-                        "hash": result.get("hash", "")
-                    }))
-                else:
-                    await websocket.send_text(json.dumps({
-                        "type": "ack",
-                        "version": result.get("version"),
-                        "hash": result.get("hash")
-                    }))
-            
-            elif msg["type"] == "verify":
-                # Periodic sync verification (drift detection)
-                path = msg.get("path", "")
-                client_hash = msg.get("hash", "")
-                client_version = msg.get("version", 0)
-                result = await document_hub.verify_sync(user.id, path, client_hash, client_version)
-                
-                if result.get("resync"):
-                    await websocket.send_text(json.dumps({
-                        "type": "resync",
-                        "content": result.get("content", ""),
-                        "version": result.get("version", 0),
-                        "hash": result.get("hash", "")
-                    }))
             
             elif msg["type"] == "cursor":
                 await document_hub.update_cursor(

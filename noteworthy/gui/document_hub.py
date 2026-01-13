@@ -160,139 +160,27 @@ class DocumentHub:
     async def update_content(self, user_id: str, path: str, content: str, client_hash: str = None):
         """
         User updated document content (full content fallback mode).
-        
-        This is the central point that triggers:
-        1. Check for drift using hash
-        2. Save to disk
-        3. Broadcast to other users
-        4. Trigger LSP diagnostics
-        5. Preview updates (handled by typst watch)
+        DEPRECATED: Content sync is now handled by YjsProvider.
         """
-        if path not in self.documents:
-            self.documents[path] = Document(path=path, content=content, version=0)
-        
-        doc = self.documents[path]
-        
-        # Check for drift if client sends hash
-        needs_resync = False
-        if client_hash and doc.content_hash != client_hash:
-            # Client is out of sync - we'll accept new content but flag for others
-            print(f"[OT] Drift detected for {path}: client={client_hash} server={doc.content_hash}")
-            needs_resync = True
-        
-        doc.content = content
-        doc.version += 1
-        doc.content_hash = compute_content_hash(content)
-        
-        # 1. Save to disk
-        full_path = BASE_DIR / path
-        try:
-            full_path.write_text(content, encoding='utf-8')
-        except Exception as e:
-            print(f"[Hub] Error saving {path}: {e}")
-        
-        # 2. Broadcast to other users on this file with hash for verification
-        await self._broadcast_to_file(path, {
-            "type": "content",
-            "content": content,
-            "version": doc.version,
-            "hash": doc.content_hash,
-            "userId": user_id
-        }, exclude=user_id)
-        
-        # 3. Schedule LSP diagnostics (debounced)
-        if path.endswith('.typ'):
-            self._pending_diagnostics.add(path)
-            if self._diagnostics_task is None or self._diagnostics_task.done():
-                self._diagnostics_task = asyncio.create_task(self._run_diagnostics_debounced())
-        
-        # 4. Preview - handled automatically by typst watch monitoring file changes
-        
-        return {"version": doc.version, "hash": doc.content_hash, "resync": needs_resync}
+        return {}
     
     async def update_operation(self, user_id: str, path: str, op_data: dict):
         """
         Handle an incremental edit operation (OT mode).
-        
-        op_data: {type, position, text?, length?}
-        
-        Note: We apply operations immediately without strict version checking.
-        Drift is detected via periodic hash verification (verify_sync).
+        DEPRECATED: Content sync is now handled by YjsProvider.
         """
-        if path not in self.documents:
-            return {"error": "document_not_found", "resync": True}
-        
-        doc = self.documents[path]
-        
-        # Create operation
-        op = Operation(
-            type=op_data.get('type', 'insert'),
-            position=op_data.get('position', 0),
-            text=op_data.get('text', ''),
-            length=op_data.get('length', 0),
-            version=doc.version,  # Use server version, not client's
-            userId=user_id
-        )
-        
-        # Apply operation directly - no strict version check
-        # Drift is detected via periodic hash verification
-        # Apply operation
-        if doc.apply_operation(op):
-            # Save to disk
-            full_path = BASE_DIR / path
-            try:
-                full_path.write_text(doc.content, encoding='utf-8')
-            except Exception as e:
-                print(f"[Hub] Error saving {path}: {e}")
-            
-            # Broadcast operation to other users
-            await self._broadcast_to_file(path, {
-                "type": "operation",
-                "op": {
-                    "type": op.type,
-                    "position": op.position,
-                    "text": op.text,
-                    "length": op.length
-                },
-                "version": doc.version,
-                "hash": doc.content_hash,
-                "userId": user_id
-            }, exclude=user_id)
-            
-            # Schedule diagnostics
-            if path.endswith('.typ'):
-                self._pending_diagnostics.add(path)
-                if self._diagnostics_task is None or self._diagnostics_task.done():
-                    self._diagnostics_task = asyncio.create_task(self._run_diagnostics_debounced())
-            
-            return {
-                "success": True,
-                "version": doc.version,
-                "hash": doc.content_hash
-            }
-        else:
-            return {"error": "apply_failed", "resync": True}
+        return {}
     
     async def verify_sync(self, user_id: str, path: str, client_hash: str, client_version: int):
         """
         Verify client is in sync with server. Used for periodic drift detection.
         Returns resync data if drift is detected.
         """
-        if path not in self.documents:
-            return {"error": "document_not_found"}
-        
-        doc = self.documents[path]
-        
-        if doc.content_hash != client_hash or doc.version != client_version:
-            print(f"[OT] Sync verification failed: client(v{client_version}, {client_hash}) != server(v{doc.version}, {doc.content_hash})")
-            return {
-                "resync": True,
-                "content": doc.content,
-                "version": doc.version,
-                "hash": doc.content_hash
-            }
-        
-        return {"sync": True, "version": doc.version}
+        """
+        Verify client is in sync with server. Used for periodic drift detection.
+        DEPRECATED: Content sync is now handled by YjsProvider.
+        """
+        return {"sync": True}
 
     async def on_preview_update(self, updates: list, source_path: str):
         """
