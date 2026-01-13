@@ -82,8 +82,7 @@ The `noteworthy/` package handles:
 | `core/build_manager.py` | Parallel build orchestration |
 | `core/deps.py`          | Dependency checking          |
 | `gui/server.py`         | FastAPI backend              |
-| `gui/document_hub.py`   | Real-time sync               |
-| `gui/yjs_provider.py`   | Yjs CRDT connector           |
+| `gui/document_hub.py`   | Real-time OT Sync            |
 
 ---
 

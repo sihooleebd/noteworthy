@@ -27,7 +27,7 @@ uv.lock
 build/
 templates/build/
 templates/systemconfig/
-templates/module/
+#templates/module/
 exports/
 .build_settings.json
 build_settings.json

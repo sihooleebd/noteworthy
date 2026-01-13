@@ -156,19 +156,66 @@ async def doc_endpoint(websocket: WebSocket):
                     # Get other users on this file for cursor sync
                     other_cursors = document_hub.get_users_on_file(path, exclude_user_id=user.id)
                     
-                    # Send file content + cursors together
+                    # Send file content + cursors + hash together
                     await websocket.send_text(json.dumps({
                         "type": "init",
                         "content": doc.content,
                         "version": doc.version,
+                        "hash": doc.content_hash,
                         "cursors": other_cursors
                     }))
+
             
             elif msg["type"] == "edit":
-                # User edited content
+                # User edited content (full content mode)
                 path = msg.get("path", "")
                 content = msg.get("content", "")
-                await document_hub.update_content(user.id, path, content)
+                client_hash = msg.get("hash")
+                result = await document_hub.update_content(user.id, path, content, client_hash)
+                
+                # Send acknowledgment with version
+                await websocket.send_text(json.dumps({
+                    "type": "ack",
+                    "version": result.get("version"),
+                    "hash": result.get("hash"),
+                    "resync": result.get("resync", False)
+                }))
+            
+            elif msg["type"] == "operation":
+                # User sent incremental operation (OT mode)
+                path = msg.get("path", "")
+                op_data = msg.get("op", {})
+                result = await document_hub.update_operation(user.id, path, op_data)
+                
+                # Send acknowledgment or resync request
+                if result.get("resync"):
+                    await websocket.send_text(json.dumps({
+                        "type": "resync",
+                        "content": result.get("content", ""),
+                        "version": result.get("serverVersion", result.get("version", 0)),
+                        "hash": result.get("hash", "")
+                    }))
+                else:
+                    await websocket.send_text(json.dumps({
+                        "type": "ack",
+                        "version": result.get("version"),
+                        "hash": result.get("hash")
+                    }))
+            
+            elif msg["type"] == "verify":
+                # Periodic sync verification (drift detection)
+                path = msg.get("path", "")
+                client_hash = msg.get("hash", "")
+                client_version = msg.get("version", 0)
+                result = await document_hub.verify_sync(user.id, path, client_hash, client_version)
+                
+                if result.get("resync"):
+                    await websocket.send_text(json.dumps({
+                        "type": "resync",
+                        "content": result.get("content", ""),
+                        "version": result.get("version", 0),
+                        "hash": result.get("hash", "")
+                    }))
             
             elif msg["type"] == "cursor":
                 await document_hub.update_cursor(

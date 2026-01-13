@@ -38,17 +38,12 @@
 ## Quick Start
 
 ```bash
-# Create project and download launcher
+# Create project and get launcher
 mkdir myproject && cd myproject
-mkdir content
 curl -O https://raw.githubusercontent.com/sihooleebd/noteworthy/master/noteworthy.py
 
-# Run TUI (downloads everything on first run)
+# Launch
 python3 noteworthy.py
-
-# For GUI mode, install web dependencies first
-pip install fastapi uvicorn
-python3 noteworthy.py -g
 ```
 
 **[Full Installation Guide](https://noteworthy.benjaminlee.kr/docs.html#getting-started/installation)**
@@ -58,7 +53,7 @@ python3 noteworthy.py -g
 ## Features
 
 | Feature         | Description                                                       |
-| --------------- | ----------------------------------------------------------------- |
+| :-------------- | :---------------------------------------------------------------- |
 | **15+ Themes**  | Pre-built color schemes, easy customization                       |
 | **Modules**     | Math, plotting, geometry, data structures                         |
 | **Web Studio**  | **Google Docs-style** editing, source preview jump, Monaco editor |
@@ -69,29 +64,27 @@ python3 noteworthy.py -g
 
 ## Commands
 
-| Command                            | Description                    |
-| ---------------------------------- | ------------------------------ |
-| `python3 noteworthy.py`            | Launch Terminal UI             |
-| `python3 noteworthy.py -g`         | Launch Web GUI                 |
-| `python3 noteworthy.py -g -p 3000` | GUI on custom port             |
-| `python3 noteworthy.py -u`         | Update from GitHub             |
-| `python3 noteworthy.py -u -n`      | Update to nightly branch       |
-| `python3 noteworthy.py -u -f`      | Force update (clean reinstall) |
-| `python3 noteworthy_cli.py`        | Non-interactive CLI build      |
+| Command                     | Description               |
+| :-------------------------- | :------------------------ |
+| `python3 noteworthy.py`     | Launch Terminal UI        |
+| `python3 noteworthy.py -g`  | Launch Web GUI            |
+| `python3 noteworthy.py -u`  | Update from GitHub        |
+| `python3 noteworthy_cli.py` | Non-interactive CLI build |
+
+**[Full CLI Reference](https://noteworthy.benjaminlee.kr/docs.html#reference/cli)**
 
 ---
 
 ## Documentation
 
-**[Documentation](https://noteworthy.benjaminlee.kr/docs.html)**
+**[Read the Docs](https://noteworthy.benjaminlee.kr/docs.html)**
 
 | Section                                                                                     | Description                    |
-| ------------------------------------------------------------------------------------------- | ------------------------------ |
+| :------------------------------------------------------------------------------------------ | :----------------------------- |
 | [Getting Started](https://noteworthy.benjaminlee.kr/docs.html#getting-started/installation) | Installation and first project |
 | [Guides](https://noteworthy.benjaminlee.kr/docs.html#guides/theming)                        | Theming, modules, building     |
 | [Reference](https://noteworthy.benjaminlee.kr/docs.html#reference/cli)                      | CLI, config files, API         |
 | [Architecture](https://noteworthy.benjaminlee.kr/docs.html#architecture/overview)           | System internals               |
-| [Contributing](https://noteworthy.benjaminlee.kr/docs.html#contributing/development-setup)  | Development setup              |
 
 ---
 
