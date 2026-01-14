@@ -32,9 +32,8 @@ class CRDTManager:
         Get the Yjs room for a file.
         Ensures the room is initialized and loaded from disk.
         """
-        room = yjs_provider.get_room(file_path)
-        # Ensure content is loaded from disk
-        await room.initialize()
+        room = await yjs_provider.get_room(file_path)
+        # Content initialization is now handled inside get_room
         return room
 
     async def get_content(self, file_path: str) -> str:
@@ -123,19 +122,20 @@ class CRDTManager:
             # We'll rely on the fact that the room should exist if we are adding an observer.
             
             # We'll attach a listener to the YjsProvider room if it exists.
-            room = yjs_provider.get_room(file_path)
+            # get_room is now async. If we are in sync context, we can check if room exists in provider.rooms
+            if file_path in yjs_provider.rooms:
+                 room = yjs_provider.rooms[file_path]
+                 
+                 # Define the Yjs observer wrapper
+                 def yjs_observer(event):
+                      self._handle_yjs_change(file_path, event)
+                 
+                 text = room.ydoc.get("content", type=Text)
+                 text.observe(yjs_observer)
+            else:
+                 print(f"[CRDT] Warning: add_observer called for {file_path} but room not ready. Observer will attach later.")
+                 # TODO: Queue observer? For now we assume room exists if we are observing it.
             
-            # Define the Yjs observer wrapper
-            def yjs_observer(event):
-                 self._handle_yjs_change(file_path, event)
-            
-            # We need to store this wrapper to remove it later? 
-            # For now, let's just add it.
-            # Note: access to ydoc content needs to be safe.
-            text = room.ydoc.get("content", type=Text)
-            text.observe(yjs_observer)
-            
-            # Store the wrapper so we don't add it multiple times?
             # Simplified: we assume one observer setup per file for the transform layer
         
         self.observers[file_path].append(callback)

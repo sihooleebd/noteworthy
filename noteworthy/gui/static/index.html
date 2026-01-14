@@ -13,25 +13,14 @@
         rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
     <!-- Yjs CRDT for collaborative editing -->
-    <script type="importmap">
-    {
-        "imports": {
-            "yjs": "https://esm.sh/yjs@13.6.14",
-            "y-websocket": "https://esm.sh/y-websocket@1.5.4?deps=yjs@13.6.14",
-            "y-monaco": "https://esm.sh/y-monaco@0.1.6?deps=yjs@13.6.14"
-        }
-    }
-    </script>
     <script type="module">
-        import * as Y from 'yjs';
-        import { WebsocketProvider } from 'y-websocket';
-        import { MonacoBinding } from 'y-monaco';
+        import * as Y from 'https://esm.sh/yjs@13.6.14';
+        import { WebsocketProvider } from 'https://esm.sh/y-websocket@1.5.4';
+        import { MonacoBinding } from 'https://esm.sh/y-monaco@0.1.6';
 
-        // Expose to global scope for app.js
         window.Y = Y;
         window.WebsocketProvider = WebsocketProvider;
         window.MonacoBinding = MonacoBinding;
-        console.log("Yjs libraries loaded (deduplicated)");
     </script>
 </head>
 
