@@ -74,6 +74,18 @@ class NoteworthyRoom(YRoom):
         loop.create_task(self.save())
 
 
+class NoteworthyWebsocketServer(WebsocketServer):
+    """Custom WebsocketServer that delegates room creation to YjsProvider."""
+    
+    def __init__(self, provider: 'YjsProvider', *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.provider = provider
+    
+    async def get_room(self, name: str) -> NoteworthyRoom:
+        """Override to use our custom room logic."""
+        return await self.provider.get_room(name)
+
+
 class YjsProvider:
     """
     Manages Yjs/CRDT document synchronization.
@@ -83,14 +95,46 @@ class YjsProvider:
     
     def __init__(self):
         self.rooms: Dict[str, NoteworthyRoom] = {}
-        self.server: Optional[WebsocketServer] = None
+        self.server: Optional[NoteworthyWebsocketServer] = None
         self._callbacks = []
     
-    def get_room(self, file_path: str) -> NoteworthyRoom:
-        """Get or create a room for a file."""
+    async def get_room(self, file_path: str) -> NoteworthyRoom:
+        """Get or create a room for a file (async for pycrdt-websocket compatibility)."""
+        print(f"[YjsProvider] get_room called for: {file_path}")
+        # Normalize path (remove /yjs/ prefix if present)
+        original_path = file_path
+        if file_path.startswith("/yjs/"):
+            file_path = file_path[5:]
+        elif file_path.startswith("/"):
+            file_path = file_path[1:]
+            
+        print(f"[YjsProvider] Normalized path: {original_path} -> {file_path}")
+
         if file_path not in self.rooms:
-            self.rooms[file_path] = NoteworthyRoom(room_name=file_path)
-        return self.rooms[file_path]
+            print(f"[YjsProvider] Creating new NoteworthyRoom for {file_path}")
+            room = NoteworthyRoom(room_name=file_path)
+            self.rooms[file_path] = room
+        else:
+            print(f"[YjsProvider] Found existing NoteworthyRoom for {file_path}")
+            
+        room = self.rooms[file_path]
+        
+        # Ensure it's in the server's room list too (critical for pycrdt-websocket)
+        if self.server:
+            # We map the room in the server so it knows about it
+            if file_path not in self.server.rooms:
+                print(f"[YjsProvider] Registering room with WebsocketServer: {file_path}")
+                self.server.rooms[file_path] = room
+        
+        # Initialize content from disk if needed
+        await room.initialize()
+        
+        # Start the room (required by pycrdt-websocket)
+        if self.server:
+            # Check if already started or start it
+            await self.server.start_room(room)
+        
+        return room
     
     def add_change_callback(self, callback):
         """Register callback for content changes (for diagnostics/preview triggers)."""
@@ -108,46 +152,86 @@ class YjsProvider:
 # Global instance
 yjs_provider = YjsProvider()
 
+# Cached ASGI app (singleton)
+_yjs_asgi_app = None
+
 
 def get_yjs_asgi_app():
     """
     Create the ASGI application for Yjs WebSocket handling.
     
     This is mounted at /yjs in the main FastAPI app.
-    
-    pycrdt-websocket 0.16+ uses a different pattern:
-    - WebsocketServer is created first
-    - ASGIServer wraps it
-    - Room management is handled via on_connect callback
+    Returns a cached singleton to prevent multiple WebsocketServer instances.
     """
+    global _yjs_asgi_app
     
-    # Create the websocket server
-    server = WebsocketServer(rooms_ready=True, auto_clean_rooms=False)
+    # Return cached app if already created
+    if _yjs_asgi_app is not None:
+        print("[YjsProvider] Returning cached Yjs ASGI app")
+        return _yjs_asgi_app
+    
+    # Create the custom websocket server
+    server = NoteworthyWebsocketServer(
+        provider=yjs_provider,
+        rooms_ready=True, 
+        auto_clean_rooms=False
+    )
     yjs_provider.server = server
     
-    async def on_connect(scope: dict, state: dict) -> bool:
-        """
-        Called when a client connects.
-        The room name comes from the websocket path.
-        """
-        # Extract room name from path (e.g., /yjs/content/1/1.typ -> content/1/1.typ)
-        path = scope.get("path", "")
-        if path.startswith("/yjs/"):
-            room_name = path[5:]  # Remove /yjs/ prefix
-        elif path.startswith("/"):
-            room_name = path[1:]
-        else:
-            room_name = path
-        
-        # Get or create the room
-        room = yjs_provider.get_room(room_name)
-        
-        # Initialize from disk if needed
-        await room.initialize()
-        
-        # Store room in state for the connection
-        state["room"] = room
-        
-        return True  # Accept connection
+    # NOTE: We no longer monkey-patch server.get_room because we subclassed it.
     
-    return ASGIServer(server, on_connect=on_connect)
+    print("[YjsProvider] Initializing Yjs ASGI app structure...")
+    yjs_asgi = ASGIServer(server)
+
+    async def app_wrapper(scope, receive, send):
+        if scope.get("type", "") == "websocket":
+            print(f"[YjsWrapper] Wrapper called with path: {scope.get('path')}")
+            # Inject path into a custom key in case ASGIServer/FastAPI strips 'path' or creates a new scope
+            scope["yjs_path_hack"] = scope.get("path")
+            
+        # Debug wrappers for packet logging
+        async def logging_receive():
+            msg = await receive()
+            if msg["type"] == "websocket.receive":
+                data = msg.get("bytes") or msg.get("text")
+                if data:
+                    size = len(data)
+                    prefix = ""
+                    if isinstance(data, bytes) and size > 0:
+                        # Log message type (0=Sync, 1=Awareness)
+                        msg_type = data[0]
+                        prefix = f" [Type={msg_type}]"
+                    print(f"[Yjs] <<< RECV {scope.get('path')} ({size}b){prefix}")
+                    print(data)
+            return msg
+
+        async def logging_send(msg):
+            if msg["type"] == "websocket.send":
+                data = msg.get("bytes") or msg.get("text")
+                if data:
+                    size = len(data)
+                    prefix = ""
+                    if isinstance(data, bytes) and size > 0:
+                        msg_type = data[0]
+                        prefix = f" [Type={msg_type}]"
+                    print(f"[Yjs] >>> SEND {scope.get('path')} ({size}b){prefix}")
+                    print(data)
+            await send(msg)
+        # Lifespan events handled in main server.py
+        if scope["type"] == "lifespan":
+            while True:
+                message = await receive()
+                if message["type"] == "lifespan.startup":
+                    await send({"type": "lifespan.startup.complete"})
+                elif message["type"] == "lifespan.shutdown":
+                    await send({"type": "lifespan.shutdown.complete"})
+                    return
+            
+        try:
+            return await yjs_asgi(scope, logging_receive, logging_send)
+        except Exception as e:
+            print(f"[YjsWrapper] Error in yjs_asgi: {e}")
+            raise e
+
+    _yjs_asgi_app = app_wrapper
+    return _yjs_asgi_app

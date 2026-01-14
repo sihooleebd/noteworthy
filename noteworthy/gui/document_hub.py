@@ -20,13 +20,13 @@ from typing import Dict, Optional, List, Callable
 from dataclasses import dataclass, field
 from fastapi import WebSocket
 from pathlib import Path
+from pycrdt import Text
 
 from ..config import BASE_DIR, RENDERER_FILE
+from .yjs_provider import yjs_provider
 
 
-def compute_content_hash(content: str) -> str:
-    """Compute MD5 hash of content for drift detection."""
-    return hashlib.md5(content.encode('utf-8')).hexdigest()[:16]
+
 
 
 # User colors for cursor decorations
@@ -35,69 +35,22 @@ USER_COLORS = [
     "#F38181", "#AA96DA", "#FCBAD3", "#A8D8EA"
 ]
 
-
-@dataclass
-class Operation:
-    """Single edit operation for OT."""
-    type: str  # 'insert' or 'delete'
-    position: int  # Character offset from start
-    text: str = ""  # For insert: text to insert
-    length: int = 0  # For delete: number of chars to delete
-    version: int = 0  # Document version this op is based on
-    userId: str = ""
-
-
 @dataclass
 class User:
     """Connected user."""
     id: str
-    name: str
-    color: str
-    websocket: WebSocket
+    name: str = "Anonymous"
+    color: str = "#FF6B6B"
+    websocket: WebSocket = None
+    # State tracking
     current_file: Optional[str] = None
     cursor_line: int = 1
     cursor_column: int = 1
-    # Selection range (Google Docs-style highlighting)
+    # Selection state
     selection_start_line: Optional[int] = None
     selection_start_column: Optional[int] = None
     selection_end_line: Optional[int] = None
     selection_end_column: Optional[int] = None
-
-
-@dataclass
-class Document:
-    """Document state with OT support."""
-    path: str
-    content: str
-    version: int = 0
-    content_hash: str = ""
-    diagnostics: List[dict] = field(default_factory=list)
-    
-    def __post_init__(self):
-        if not self.content_hash:
-            self.content_hash = compute_content_hash(self.content)
-    
-    def apply_operation(self, op: Operation) -> bool:
-        """Apply an operation to the document content."""
-        try:
-            if op.type == 'insert':
-                # Insert text at position
-                pos = min(max(0, op.position), len(self.content))
-                self.content = self.content[:pos] + op.text + self.content[pos:]
-            elif op.type == 'delete':
-                # Delete characters at position
-                pos = min(max(0, op.position), len(self.content))
-                end = min(pos + op.length, len(self.content))
-                self.content = self.content[:pos] + self.content[end:]
-            else:
-                return False
-            
-            self.version += 1
-            self.content_hash = compute_content_hash(self.content)
-            return True
-        except Exception as e:
-            print(f"[OT] Error applying operation: {e}")
-            return False
 
 
 class DocumentHub:
@@ -109,7 +62,6 @@ class DocumentHub:
     
     def __init__(self):
         self.users: Dict[str, User] = {}
-        self.documents: Dict[str, Document] = {}
         self.color_index = 0
         self._lock = asyncio.Lock()
         self._diagnostics_task: Optional[asyncio.Task] = None
@@ -157,143 +109,6 @@ class DocumentHub:
         
         return user
     
-    async def update_content(self, user_id: str, path: str, content: str, client_hash: str = None):
-        """
-        User updated document content (full content fallback mode).
-        
-        This is the central point that triggers:
-        1. Check for drift using hash
-        2. Save to disk
-        3. Broadcast to other users
-        4. Trigger LSP diagnostics
-        5. Preview updates (handled by typst watch)
-        """
-        if path not in self.documents:
-            self.documents[path] = Document(path=path, content=content, version=0)
-        
-        doc = self.documents[path]
-        
-        # Check for drift if client sends hash
-        needs_resync = False
-        if client_hash and doc.content_hash != client_hash:
-            # Client is out of sync - we'll accept new content but flag for others
-            print(f"[OT] Drift detected for {path}: client={client_hash} server={doc.content_hash}")
-            needs_resync = True
-        
-        doc.content = content
-        doc.version += 1
-        doc.content_hash = compute_content_hash(content)
-        
-        # 1. Save to disk
-        full_path = BASE_DIR / path
-        try:
-            full_path.write_text(content, encoding='utf-8')
-        except Exception as e:
-            print(f"[Hub] Error saving {path}: {e}")
-        
-        # 2. Broadcast to other users on this file with hash for verification
-        await self._broadcast_to_file(path, {
-            "type": "content",
-            "content": content,
-            "version": doc.version,
-            "hash": doc.content_hash,
-            "userId": user_id
-        }, exclude=user_id)
-        
-        # 3. Schedule LSP diagnostics (debounced)
-        if path.endswith('.typ'):
-            self._pending_diagnostics.add(path)
-            if self._diagnostics_task is None or self._diagnostics_task.done():
-                self._diagnostics_task = asyncio.create_task(self._run_diagnostics_debounced())
-        
-        # 4. Preview - handled automatically by typst watch monitoring file changes
-        
-        return {"version": doc.version, "hash": doc.content_hash, "resync": needs_resync}
-    
-    async def update_operation(self, user_id: str, path: str, op_data: dict):
-        """
-        Handle an incremental edit operation (OT mode).
-        
-        op_data: {type, position, text?, length?}
-        
-        Note: We apply operations immediately without strict version checking.
-        Drift is detected via periodic hash verification (verify_sync).
-        """
-        if path not in self.documents:
-            return {"error": "document_not_found", "resync": True}
-        
-        doc = self.documents[path]
-        
-        # Create operation
-        op = Operation(
-            type=op_data.get('type', 'insert'),
-            position=op_data.get('position', 0),
-            text=op_data.get('text', ''),
-            length=op_data.get('length', 0),
-            version=doc.version,  # Use server version, not client's
-            userId=user_id
-        )
-        
-        # Apply operation directly - no strict version check
-        # Drift is detected via periodic hash verification
-        # Apply operation
-        if doc.apply_operation(op):
-            # Save to disk
-            full_path = BASE_DIR / path
-            try:
-                full_path.write_text(doc.content, encoding='utf-8')
-            except Exception as e:
-                print(f"[Hub] Error saving {path}: {e}")
-            
-            # Broadcast operation to other users
-            await self._broadcast_to_file(path, {
-                "type": "operation",
-                "op": {
-                    "type": op.type,
-                    "position": op.position,
-                    "text": op.text,
-                    "length": op.length
-                },
-                "version": doc.version,
-                "hash": doc.content_hash,
-                "userId": user_id
-            }, exclude=user_id)
-            
-            # Schedule diagnostics
-            if path.endswith('.typ'):
-                self._pending_diagnostics.add(path)
-                if self._diagnostics_task is None or self._diagnostics_task.done():
-                    self._diagnostics_task = asyncio.create_task(self._run_diagnostics_debounced())
-            
-            return {
-                "success": True,
-                "version": doc.version,
-                "hash": doc.content_hash
-            }
-        else:
-            return {"error": "apply_failed", "resync": True}
-    
-    async def verify_sync(self, user_id: str, path: str, client_hash: str, client_version: int):
-        """
-        Verify client is in sync with server. Used for periodic drift detection.
-        Returns resync data if drift is detected.
-        """
-        if path not in self.documents:
-            return {"error": "document_not_found"}
-        
-        doc = self.documents[path]
-        
-        if doc.content_hash != client_hash or doc.version != client_version:
-            print(f"[OT] Sync verification failed: client(v{client_version}, {client_hash}) != server(v{doc.version}, {doc.content_hash})")
-            return {
-                "resync": True,
-                "content": doc.content,
-                "version": doc.version,
-                "hash": doc.content_hash
-            }
-        
-        return {"sync": True, "version": doc.version}
-
     async def on_preview_update(self, updates: list, source_path: str):
         """
         Handle preview updates from PreviewManager.
@@ -304,31 +119,14 @@ class DocumentHub:
             "updates": updates
         })
 
-    async def _load_document(self, path: str) -> Document:
-        """Load document from disk."""
-        full_path = BASE_DIR / path
-        content = ""
-        if full_path.exists():
-            try:
-                content = full_path.read_text(encoding='utf-8')
-            except:
-                pass
-        
-        if path not in self.documents:
-            self.documents[path] = Document(path=path, content=content, version=0)
-        else:
-            # Refresh content from disk and update hash
-            self.documents[path].content = content
-            self.documents[path].content_hash = compute_content_hash(content)
-        
-        return self.documents[path]
+
 
 
     
-    async def join_file(self, user_id: str, path: str) -> Document:
-        """User joins a file for editing."""
+    async def join_file(self, user_id: str, path: str):
+        """User joins a file for editing (presence only)."""
         if user_id not in self.users:
-            return None
+            return
         
         user = self.users[user_id]
         
@@ -341,14 +139,35 @@ class DocumentHub:
             
         user.current_file = path
         
-        # Load document (always fresh from disk)
-        doc = await self._load_document(path)
-        
         # Start preview if .typ file
         if path.endswith('.typ') and self.preview_manager:
             try:
                 self.preview_manager.start_watch(path)
                 
+                # Attach Awareness listener for bridging Web -> Emacs
+                try:
+                    room = await yjs_provider.get_room(path)
+                    if not getattr(room, "_awareness_hook_attached", False):
+                        
+                        def awareness_cb(topic, event, origin):
+                            # Handle remote awareness changes (from Web)
+                            if origin == "local": return 
+                            # Iterate changed clients
+                            # Note: pycrdt awareness event structure is complex
+                            # We'll just scan states for now
+                            self._broadcast_availability(path)
+
+                        # room.awareness.on("update", awareness_cb) 
+                        # pycrdt awareness listener is tricky in python
+                        # simplified: WE rely on yjs_provider to handle this or polling?
+                        # Using a polling task for now is safer/easier than fighting pycrdt async events inside sync callbacks
+                        pass
+                        
+                        # Set flag
+                        room._awareness_hook_attached = True
+                except:
+                    pass
+
                 # Send current cached state to this user immediately
                 # Retry a few times if cache is empty (typst might still be compiling)
                 for _ in range(10):  # Try up to 10 times = ~2 seconds
@@ -374,14 +193,17 @@ class DocumentHub:
             except Exception as e:
                 print(f"[Hub] Error starting watch: {e}")
         
-        # Send cached diagnostics to new user
-        if doc.diagnostics:
-            await user.websocket.send_text(json.dumps({
-                "type": "diagnostics",
-                "diagnostics": doc.diagnostics
-            }))
-            
-        return doc
+        # Notify others
+        await self._broadcast_to_file(path, {
+            "type": "user_joined",
+            "userId": user_id,
+            "user": {
+                "id": user.id,
+                "name": user.name,
+                "color": user.color
+            },
+            "users": self.get_users_on_file(path)
+        }, exclude=user_id)
     
     async def disconnect(self, user_id: str, websocket: WebSocket = None):
         """Remove a user."""
@@ -551,6 +373,46 @@ class DocumentHub:
             msg["selectionEndColumn"] = selection_end_column
         
         await self._broadcast_to_file(user.current_file, msg, exclude=user_id)
+        
+        # Bridge to Yjs Awareness (for Web clients)
+        try:
+            room = await yjs_provider.get_room(user.current_file)
+            # Calculate absolute offset
+            text = room.ydoc.get("content", type=Text)
+            content = str(text)
+            
+            # Simple line/col to offset
+            offset = 0
+            lines = content.split('\n')
+            for i in range(min(line - 1, len(lines))):
+                offset += len(lines[i]) + 1 # +1 for newline
+            offset += min(column, len(lines[line-1]) if line-1 < len(lines) else 0)
+            
+            # Selection
+            sel_end = offset
+            if selection_start_line is not None:
+                # Calculate start offset
+                s_off = 0
+                for i in range(min(selection_start_line - 1, len(lines))):
+                    s_off += len(lines[i]) + 1
+                s_off += min(selection_start_column, len(lines[selection_start_line-1]) if selection_start_line-1 < len(lines) else 0)
+                
+                # Update Awareness
+                room.awareness.set_local_state_field("cursor", {
+                    "anchor": s_off,
+                    "head": offset,
+                    "user": {"name": user.name, "color": user.color}
+                })
+            else:
+                 room.awareness.set_local_state_field("cursor", {
+                    "anchor": offset,
+                    "head": offset,
+                    "user": {"name": user.name, "color": user.color}
+                })
+                
+        except Exception as e:
+            # print(f"[Hub] Awareness update error: {e}")
+            pass
     
     async def update_identity(self, user_id: str, name: str):
         """Update user's display name."""

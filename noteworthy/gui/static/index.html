@@ -13,9 +13,15 @@
         rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
     <!-- Yjs CRDT for collaborative editing -->
-    <script src="https://cdn.jsdelivr.net/npm/yjs@13.6.14/dist/yjs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/y-websocket@1.5.4/dist/y-websocket.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/y-monaco@0.1.6/dist/y-monaco.min.js"></script>
+    <script type="module">
+        import * as Y from 'https://esm.sh/yjs@13.6.14';
+        import { WebsocketProvider } from 'https://esm.sh/y-websocket@1.5.4';
+        import { MonacoBinding } from 'https://esm.sh/y-monaco@0.1.6';
+
+        window.Y = Y;
+        window.WebsocketProvider = WebsocketProvider;
+        window.MonacoBinding = MonacoBinding;
+    </script>
 </head>
 
 <body>
@@ -80,14 +86,16 @@
                                 <span class="toggle-slider"></span>
                                 <span class="toggle-label" id="preview-mode-label">Partial</span>
                             </label>
-                            
+
                             <!-- Sync Button -->
-                            <button class="icon-btn" id="preview-sync-btn" onclick="app.syncPreviewScroll()" title="Sync scroll to cursor (Alt+O)">
+                            <button class="icon-btn" id="preview-sync-btn" onclick="app.syncPreviewScroll()"
+                                title="Sync scroll to cursor (Alt+O)">
                                 <i data-lucide="locate"></i>
                             </button>
-                            
+
                             <!-- Log Panel Toggle -->
-                            <button class="icon-btn" id="preview-log-toggle" onclick="app.toggleLogPanel()" title="Toggle log panel">
+                            <button class="icon-btn" id="preview-log-toggle" onclick="app.toggleLogPanel()"
+                                title="Toggle log panel">
                                 <i data-lucide="terminal"></i>
                             </button>
                         </div>
@@ -99,7 +107,7 @@
                             <span>Select a .typ file</span>
                         </div>
                     </div>
-                    
+
                     <!-- Log Panel (collapsible) -->
                     <div id="log-panel" class="log-panel hidden">
                         <div class="log-header">

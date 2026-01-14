@@ -9,7 +9,12 @@ const app = {
         configData: {},
         editorTheme: localStorage.getItem('editorTheme') || 'vs-dark',
         sessionName: localStorage.getItem('sessionName') || 'Anonymous',
-        previewMode: 'file' // Always file mode
+        previewMode: 'file', // Always file mode
+
+        // Yjs State
+        ydoc: null,
+        yjsProvider: null,
+        yjsBinding: null
     },
     // ============================================================
     // INITIALIZATION
@@ -96,9 +101,6 @@ const app = {
         this.debouncedSaveSnippets = this.debounce(() => this.saveSnippets(), 1000);
         this.debouncedSavePreface = this.debounce(() => this.savePreface(), 1000);
         this.debouncedSaveIgnored = this.debounce(() => this.saveIgnored(), 1000);
-
-        // Debounced content sync (sends full content after pause)
-        this.debouncedSyncContent = this.debounce(() => this.syncContent(), 150);
 
         // Apply saved CSS theme to body on page load
         const savedTheme = this.state.editorTheme;
@@ -714,40 +716,23 @@ const app = {
                 scrollBeyondLastLine: false
             });
 
-            // On content change - capture and send operations for OT
-            this.state.editor.onDidChangeModelContent((e) => {
-                if (this.state.applyingRemote) return;  // Skip if applying remote changes
-
-                document.getElementById('save-status').textContent = '● Unsaved';
-
-                // Convert Monaco changes to OT operations and send immediately
-                for (const change of e.changes) {
-                    // Each change has: rangeOffset, rangeLength, text
-                    // rangeLength > 0 means deletion, text.length > 0 means insertion
-
-                    if (change.rangeLength > 0) {
-                        // Delete operation
-                        this.sendOperation({
-                            type: 'delete',
-                            position: change.rangeOffset,
-                            length: change.rangeLength
-                        });
-                    }
-
-                    if (change.text.length > 0) {
-                        // Insert operation
-                        this.sendOperation({
-                            type: 'insert',
-                            position: change.rangeOffset,
-                            text: change.text
-                        });
-                    }
-                }
-            });
-
-            // Cursor and selection broadcast (for collaborative editing)
+            // Yjs-based Cursor Awareness
             this.state.editor.onDidChangeCursorSelection((e) => {
-                this.sendCursor(e.selection.getPosition(), e.selection);
+                if (this.state.yjsProvider && this.state.yjsProvider.awareness) {
+                    const pos = e.selection.getPosition();
+                    const sel = e.selection;
+
+                    this.state.yjsProvider.awareness.setLocalStateField('cursor', {
+                        line: pos.lineNumber,
+                        column: pos.column,
+                        selection: !sel.isEmpty() ? {
+                            startLine: sel.startLineNumber,
+                            startColumn: sel.startColumn,
+                            endLine: sel.endLineNumber,
+                            endColumn: sel.endColumn
+                        } : null
+                    });
+                }
             });
 
             // ============================================================
@@ -1429,8 +1414,169 @@ const app = {
             }
         }
 
-        // Join file via unified WebSocket (gets content from server)
-        this.joinFile(path);
+        // Initialize Yjs for Real-time Collaboration
+        // ==========================================
+
+        // 1. Cleanup previous Yjs
+        if (this.state.yjsBinding) {
+            this.state.yjsBinding.destroy();
+            this.state.yjsBinding = null;
+        }
+        if (this.state.yjsProvider) {
+            this.state.yjsProvider.destroy();
+            this.state.yjsProvider = null;
+        }
+        if (this.state.ydoc) {
+            this.state.ydoc.destroy();
+        }
+
+        // 2. Clear editor content before connecting to avoid flashes/conflicts
+        if (this.state.editor) {
+            this.state.editor.setValue('');
+            this.state.editor.updateOptions({ readOnly: true }); // Lock until synced
+        }
+
+        // 3. Create new Yjs Doc
+        this.state.ydoc = new Y.Doc();
+
+        // 4. Connect Provider
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        // Connect to Yjs WebSocket
+        // Note: WebsocketProvider joins the room name to the URL if not empty? 
+        // Actually standard y-websocket connects to url/roomname?
+        // Let's use the base Yjs endpoint.
+        const wsUrl = `${wsProtocol}//${window.location.host}/yjs`;
+
+        console.log(`[Yjs] Connecting to ${wsUrl}, room: ${path}`);
+
+        // Disconnect old provider if exists
+        if (this.state.yjsProvider) {
+            this.state.yjsProvider.destroy();
+        }
+
+        this.state.yjsProvider = new WebsocketProvider(
+            wsUrl,
+            path, // room name
+            this.state.ydoc,
+            { maxBackoffTime: 2500, disableBc: true } // Reduce backoff for faster local retry
+        );
+
+        // Debug logging for Yjs Provider
+        this.state.yjsProvider.on('status', event => {
+            console.log(`[Yjs] Status: ${event.status}`);
+            if (event.status === 'connected') {
+                if (this.state.editor) this.state.editor.updateOptions({ readOnly: false });
+            }
+        });
+
+        this.state.yjsProvider.on('sync', isSynced => {
+            console.log(`[Yjs] Sync status: ${isSynced}`);
+        });
+
+        // Log outgoing/incoming messages
+        // Note: this requires accessing the internal `ws` property, which might not always be available immediately
+        // or stable across y-websocket versions.
+        // It's generally better to rely on the provider's 'status' and 'sync' events for debugging.
+        // However, if direct websocket message logging is needed, ensure `ws` is initialized.
+        if (this.state.yjsProvider.ws) {
+            this.state.yjsProvider.ws.binaryType = 'arraybuffer'; // Enforce binaryType
+
+            const originalSend = this.state.yjsProvider.ws.send;
+            this.state.yjsProvider.ws.send = function (data) {
+                console.log(`[YjsClient] >>> SEND ${data.byteLength || data.length} bytes`);
+                originalSend.apply(this, arguments);
+            };
+
+            this.state.yjsProvider.ws.addEventListener('message', (event) => {
+                let size = 0;
+                let type = 'unknown';
+                if (event.data instanceof ArrayBuffer) {
+                    size = event.data.byteLength;
+                    type = 'ArrayBuffer';
+                } else if (event.data instanceof Blob) {
+                    size = event.data.size;
+                    type = 'Blob';
+                } else if (typeof event.data === 'string') {
+                    size = event.data.length;
+                    type = 'String';
+                }
+                console.log(`[YjsClient] <<< RECV ${size} bytes (Type: ${type})`);
+            });
+        }
+
+        // 5. Setup Awareness (Cursors)
+        this.state.yjsProvider.awareness.setLocalStateField('user', {
+            name: this.state.sessionName,
+            color: this.getUserColor(this.state.yjsProvider.awareness.clientID || 0)
+        });
+
+        this.state.yjsProvider.awareness.on('change', () => {
+            this.updateRemoteCursors();
+        });
+
+        // 6. Bind to Monaco IMMEDIATELY
+        const ytext = this.state.ydoc.getText('content');
+
+        if (this.state.editor) {
+            console.log('[Yjs] Creating MonacoBinding...');
+
+            // Debug: Monitor Yjs updates
+            ytext.observe(event => {
+                const content = ytext.toString();
+                console.log(`[Yjs] Text updated (len=${content.length}):`, content.substring(0, 50) + '...');
+                console.log('[Yjs] Delta:', JSON.stringify(event.delta));
+            });
+
+            console.log('DEBUG: ytext length:', ytext.length);
+            // console.log('DEBUG: ytext content:', ytext.toString());
+            try {
+                // TEMPORARILY DISABLED TO DEBUG SYNC
+                // this.state.yjsBinding = new MonacoBinding(
+                //     ytext,
+                //     this.state.editor.getModel(),
+                //     new Set([this.state.editor]),
+                //     this.state.yjsProvider.awareness
+                // );
+                console.log('[Yjs] MonacoBinding PAUSED for debugging');
+
+                this.state.yjsProvider.on('sync', isSynced => {
+                    console.log('[Yjs] Sync event:', isSynced);
+                    if (isSynced) {
+                        this.state.editor.updateOptions({ readOnly: false });
+                    }
+                });
+            } catch (e) {
+                console.error('[Yjs] Error creating MonacoBinding:', e);
+            }
+        }
+
+        this.state.yjsProvider.on('sync', (isSynced) => {
+            console.log(`[Yjs] Sync event: ${isSynced}`);
+            if (isSynced) {
+                if (this.state.editor) {
+                    // this.state.editor.updateOptions({ readOnly: false }); // This is now handled in the try block
+                    document.getElementById('save-status').textContent = 'Synced';
+                }
+            }
+        });
+
+        this.state.yjsProvider.on('status', (event) => {
+            console.log(`[Yjs] Status: ${event.status}`);
+            if (event.status === 'connected') {
+                document.getElementById('save-status').textContent = 'Live';
+            } else {
+                document.getElementById('save-status').textContent = 'Offline';
+            }
+        });
+
+        // 7. Join DocumentHub for Presence (Chat/Diagnostics/Preview)
+        // We still use the main socket for non-content features
+        if (this.state.docSocket && this.state.docSocket.readyState === WebSocket.OPEN) {
+            this.state.docSocket.send(JSON.stringify({
+                type: 'join',
+                path: path
+            }));
+        }
     },
 
     saveCurrentFile: async function () {
@@ -1680,6 +1826,16 @@ const app = {
             clearTimeout(timeout);
             timeout = setTimeout(() => func.apply(context, args), wait);
         };
+    },
+
+    // User colors for cursor decorations (matches server-side)
+    USER_COLORS: [
+        "#FF6B6B", "#4ECDC4", "#FFE66D", "#95E1D3",
+        "#F38181", "#AA96DA", "#FCBAD3", "#A8D8EA"
+    ],
+
+    getUserColor: function (clientId) {
+        return this.USER_COLORS[clientId % this.USER_COLORS.length];
     },
 
     showSaveStatus: function (msg = 'Saved') {
@@ -2480,6 +2636,7 @@ const app = {
             };
 
             this.state.docSocket.onmessage = (e) => {
+                console.log(`[DocSocket] <<< RECV ${e.data.length} chars: ${e.data.substring(0, 50)}...`);
                 const msg = JSON.parse(e.data);
                 this.handleDocMessage(msg);
             };
@@ -2714,95 +2871,90 @@ const app = {
         }
     },
 
-    joinFile: function (path) {
-        if (this.state.docSocket && this.state.docSocket.readyState === WebSocket.OPEN) {
-            this.state.docSocket.send(JSON.stringify({
-                type: 'join',
-                path: path
-            }));
-        }
+    updateRemoteCursors: function () {
+        if (!this.state.yjsProvider || !this.state.editor) return;
+
+        const awareness = this.state.yjsProvider.awareness;
+        const states = awareness.getStates(); // Map<clientID, state>
+        const decorations = [];
+
+        states.forEach((state, clientId) => {
+            // Skip local client
+            if (clientId === awareness.clientID) return;
+
+            // Look for 'cursor' field
+            const cursor = state.cursor;
+            if (!cursor) return;
+
+            // Look for 'user' field for name/color
+            const user = state.user || {};
+            const color = user.color || this.getUserColor(clientId);
+            const name = user.name || `User ${clientId}`;
+
+            // 1. Caret Decoration
+            decorations.push({
+                range: new monaco.Range(
+                    cursor.line,
+                    cursor.column,
+                    cursor.line,
+                    cursor.column
+                ),
+                options: {
+                    className: `remote-cursor-${clientId}`,
+                    hoverMessage: { value: name },
+                    // We'll use CSS to style this class with the user's color
+                    // For now, we rely on a generic class and injected styles or similar
+                    // But Monaco API works best with class names.
+                    // We can inject a style tag for this client if needed or use inline styles (not supported by class name).
+                    // Simplified: adhere to a few preset colors in CSS or inject dynamic CSS.
+                }
+            });
+
+            // 2. Selection Decoration
+            if (cursor.selection) {
+                decorations.push({
+                    range: new monaco.Range(
+                        cursor.selection.startLine,
+                        cursor.selection.startColumn,
+                        cursor.selection.endLine,
+                        cursor.selection.endColumn
+                    ),
+                    options: {
+                        className: `remote-selection-${clientId}`, // Needs CSS
+                        inlineClassName: `remote-selection-inline-${clientId}`
+                    }
+                });
+            }
+
+            // Dynamic CSS for this user (hacky but works for arbitrary colors)
+            this.injectUserCss(clientId, color);
+        });
+
+        // Apply decorations
+        this.remoteCursorDecorations = this.state.editor.deltaDecorations(
+            this.remoteCursorDecorations || [],
+            decorations
+        );
     },
 
-    syncContent: function () {
-        if (!this.state.activeFile || !this.state.editor) return;
-        if (!this.state.docSocket || this.state.docSocket.readyState !== WebSocket.OPEN) return;
+    // Helper to inject dynamic CSS for remote users (cursors/selections)
+    injectUserCss: function (clientId, color) {
+        let styleId = `user-style-${clientId}`;
+        if (document.getElementById(styleId)) return;
 
-        const content = this.state.editor.getValue();
-        this.state.docSocket.send(JSON.stringify({
-            type: 'edit',
-            path: this.state.activeFile,
-            content: content,
-            hash: this.state.docHash || ''  // Include current hash for drift detection
-        }));
-
-        // Mark as saved since server will save to disk
-        document.getElementById('save-status').textContent = 'Synced';
-        setTimeout(() => document.getElementById('save-status').textContent = '', 1500);
-    },
-
-    // Send a single operation for OT-based sync
-    sendOperation: function (op) {
-        if (!this.state.activeFile) return;
-        if (!this.state.docSocket || this.state.docSocket.readyState !== WebSocket.OPEN) return;
-
-        // Send operation immediately
-        this.state.docSocket.send(JSON.stringify({
-            type: 'operation',
-            path: this.state.activeFile,
-            op: op,
-            version: this.state.docVersion || 0
-        }));
-
-        // Update status
-        document.getElementById('save-status').textContent = 'Syncing...';
-    },
-
-    // Periodic sync verification to detect and fix drift
-    startSyncVerification: function () {
-        // Clear any existing interval
-        if (this.state.syncVerifyInterval) {
-            clearInterval(this.state.syncVerifyInterval);
-        }
-
-        // Verify sync every 30 seconds
-        this.state.syncVerifyInterval = setInterval(() => {
-            this.verifySyncState();
-        }, 30000);
-    },
-
-    verifySyncState: function () {
-        if (!this.state.activeFile || !this.state.editor) return;
-        if (!this.state.docSocket || this.state.docSocket.readyState !== WebSocket.OPEN) return;
-
-        // Only verify if we have a hash to compare
-        if (!this.state.docHash) return;
-
-        this.state.docSocket.send(JSON.stringify({
-            type: 'verify',
-            path: this.state.activeFile,
-            hash: this.state.docHash,
-            version: this.state.docVersion
-        }));
-    },
-
-    sendCursor: function (position, selection = null) {
-        if (!this.state.docSocket || this.state.docSocket.readyState !== WebSocket.OPEN) return;
-
-        const msg = {
-            type: 'cursor',
-            line: position.lineNumber,
-            column: position.column
-        };
-
-        // Include selection range if provided
-        if (selection && !selection.isEmpty()) {
-            msg.selectionStartLine = selection.startLineNumber;
-            msg.selectionStartColumn = selection.startColumn;
-            msg.selectionEndLine = selection.endLineNumber;
-            msg.selectionEndColumn = selection.endColumn;
-        }
-
-        this.state.docSocket.send(JSON.stringify(msg));
+        const style = document.createElement('style');
+        style.id = styleId;
+        // Selection with opacity, Cursor with solid color
+        style.innerHTML = `
+            .remote-cursor-${clientId} {
+                border-left: 2px solid ${color};
+            }
+            .remote-selection-${clientId} {
+                background-color: ${color};
+                opacity: 0.2;
+            }
+        `;
+        document.head.appendChild(style);
     },
 
     updateRemoteCursor: function (msg) {

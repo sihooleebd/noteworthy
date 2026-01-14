@@ -27,14 +27,24 @@ preview_manager = PreviewManager()
 
 # DocumentHub - Unified sync manager
 from .document_hub import document_hub
+from .crdt_manager import crdt_manager
 import uuid
 
 # Connect preview manager to document hub
 document_hub.preview_manager = preview_manager
 
+# Mount Yjs WebSocket endpoint
+from .yjs_provider import get_yjs_asgi_app, yjs_provider
+app.mount("/yjs", get_yjs_asgi_app())
+
+# Track the WebSocket server background task
+_yjs_server_task: asyncio.Task = None
+
 @app.on_event("startup")
 async def startup_event():
     """Register global preview callback on startup."""
+    global _yjs_server_task
+    
     loop = asyncio.get_running_loop()
     
     def on_preview_bridge(updates, source_path):
@@ -48,6 +58,36 @@ async def startup_event():
     
     # Sanity check modules.json
     validate_modules_json()
+    
+    # Start Yjs WebSocket Server as a background task
+    # In pycrdt-websocket 0.16+, the server must be explicitly started
+    # and we must wait for it to be ready before accepting connections
+    if yjs_provider.server:
+        print("[Server] Starting Yjs WebSocket Server...")
+        _yjs_server_task = asyncio.create_task(yjs_provider.server.start())
+        # Wait for the server to be fully started before accepting connections
+        await yjs_provider.server.started.wait()
+        print("[Server] Yjs WebSocket Server started and ready")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown."""
+    global _yjs_server_task
+    
+    # Stop Yjs WebSocket Server
+    if yjs_provider.server:
+        print("[Server] Stopping Yjs WebSocket Server...")
+        await yjs_provider.server.stop()
+        
+    # Cancel the background task if still running
+    if _yjs_server_task and not _yjs_server_task.done():
+        _yjs_server_task.cancel()
+        try:
+            await _yjs_server_task
+        except asyncio.CancelledError:
+            pass
+    
+    print("[Server] Shutdown complete.")
 
 
 def validate_modules_json():
@@ -138,7 +178,7 @@ async def doc_endpoint(websocket: WebSocket):
     try:
         # Send initial state
         await websocket.send_text(json.dumps({
-            "type": "joined",
+            "type": "welcome",
             "userId": user.id,
             "color": user.color,
             "users": document_hub.get_users()
@@ -149,84 +189,48 @@ async def doc_endpoint(websocket: WebSocket):
             msg = json.loads(data)
             
             if msg["type"] == "join":
-                # User opens a file
-                path = msg.get("path", "")
-                doc = await document_hub.join_file(user.id, path)
-                if doc:
-                    # Get other users on this file for cursor sync
-                    other_cursors = document_hub.get_users_on_file(path, exclude_user_id=user.id)
-                    
-                    # Send file content + cursors + hash together
-                    await websocket.send_text(json.dumps({
-                        "type": "init",
-                        "content": doc.content,
-                        "version": doc.version,
-                        "hash": doc.content_hash,
-                        "cursors": other_cursors
-                    }))
+                # User joins a file (for presence tracking)
+                path = msg.get("path") or msg.get("file", "")
+                await document_hub.join_file(user.id, path)
+                
+                # Send other users' info (for Emacs cursor display)
+                other_cursors = document_hub.get_users_on_file(path, exclude_user_id=user.id)
+                await websocket.send_text(json.dumps({
+                    "type": "users",
+                    "file": path,
+                    "users": other_cursors
+                }))
 
             
-            elif msg["type"] == "edit":
-                # User edited content (full content mode)
-                path = msg.get("path", "")
-                content = msg.get("content", "")
-                client_hash = msg.get("hash")
-                result = await document_hub.update_content(user.id, path, content, client_hash)
-                
-                # Send acknowledgment with version
-                await websocket.send_text(json.dumps({
-                    "type": "ack",
-                    "version": result.get("version"),
-                    "hash": result.get("hash"),
-                    "resync": result.get("resync", False)
-                }))
-            
-            elif msg["type"] == "operation":
-                # User sent incremental operation (OT mode)
-                path = msg.get("path", "")
-                op_data = msg.get("op", {})
-                result = await document_hub.update_operation(user.id, path, op_data)
-                
-                # Send acknowledgment or resync request
-                if result.get("resync"):
-                    await websocket.send_text(json.dumps({
-                        "type": "resync",
-                        "content": result.get("content", ""),
-                        "version": result.get("serverVersion", result.get("version", 0)),
-                        "hash": result.get("hash", "")
-                    }))
-                else:
-                    await websocket.send_text(json.dumps({
-                        "type": "ack",
-                        "version": result.get("version"),
-                        "hash": result.get("hash")
-                    }))
-            
-            elif msg["type"] == "verify":
-                # Periodic sync verification (drift detection)
-                path = msg.get("path", "")
-                client_hash = msg.get("hash", "")
-                client_version = msg.get("version", 0)
-                result = await document_hub.verify_sync(user.id, path, client_hash, client_version)
-                
-                if result.get("resync"):
-                    await websocket.send_text(json.dumps({
-                        "type": "resync",
-                        "content": result.get("content", ""),
-                        "version": result.get("version", 0),
-                        "hash": result.get("hash", "")
-                    }))
+
             
             elif msg["type"] == "cursor":
+                # Emacs sends "file", web might send "path"
+                # But document_hub.update_cursor doesn't take path, it uses user's active file?
+                # No, update_cursor takes many args but NOT path. 
+                # server.py line 172 call: update_cursor(user_id, line, col, ...)
+                # It relies on document_hub tracking what file the user is on.
+                
                 await document_hub.update_cursor(
                     user.id,
                     msg.get("line", 1),
-                    msg.get("column", 1),
-                    msg.get("selectionStartLine"),
-                    msg.get("selectionStartColumn"),
-                    msg.get("selectionEndLine"),
-                    msg.get("selectionEndColumn")
+                    msg.get("column", 1) or msg.get("col", 1),
+                    msg.get("selectionStartLine") or msg.get("selStart", 0), # Emacs sends selStart (char pos) not line
+                    msg.get("selectionStartColumn") or 0, # Emacs doesn't send this
+                    msg.get("selectionEndLine") or msg.get("selEnd", 0), # Emacs sends selEnd (char pos)
+                    msg.get("selectionEndColumn") or 0
                 )
+                # Note: Emacs sends selStart/selEnd as character indices, not line/col.
+                # DocumentHub might expect line/col. Only Yjs Awareness handles char indices well.
+                # Use what we have for now.
+
+            elif msg["type"] == "delta":
+                # Handle Emacs edits (CRDT Delta)
+                path = msg.get("file") or msg.get("path", "")
+                ops = msg.get("ops", [])
+                
+                # Apply via CRDT manager (pushes to Yjs)
+                await crdt_manager.apply_delta(path, ops, source_user=user.id)
             
             elif msg["type"] == "identity":
                 await document_hub.update_identity(
@@ -237,7 +241,7 @@ async def doc_endpoint(websocket: WebSocket):
             elif msg["type"] == "chat":
                 await document_hub.send_chat(
                     user.id,
-                    msg.get("text", ""),
+                    msg.get("text") or msg.get("message", ""),
                     msg.get("timestamp", 0)
                 )
                 
@@ -907,6 +911,35 @@ async def check_diagnostics(data: dict = Body(...)):
 # ============================================================
 # STATUS API
 # ============================================================
+
+@app.get("/api/debug/yjs")
+async def debug_yjs_state():
+    """Debug endpoint to inspect Yjs rooms state."""
+    from .yjs_provider import yjs_provider
+    from pycrdt import Text
+    
+    status = {
+        "yjs_rooms": []
+    }
+    
+    for name, room in yjs_provider.rooms.items():
+        try:
+            text = room.ydoc.get("content", type=Text)
+            content_len = len(text)
+            content_preview = str(text)[:50] + "..." if content_len > 0 else ""
+            
+            room_info = {
+                "name": name,
+                "initialized": getattr(room, "_initialized", False),
+                "content_length": content_len,
+                "content_preview": content_preview,
+                "file_exists": room._file_path.exists() if hasattr(room, "_file_path") else "Unknown"
+            }
+            status["yjs_rooms"].append(room_info)
+        except Exception as e:
+            status["yjs_rooms"].append({"name": name, "error": str(e)})
+            
+    return status
 
 @app.get("/api/status")
 def get_status():
