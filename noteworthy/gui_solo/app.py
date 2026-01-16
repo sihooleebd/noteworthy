@@ -24,5 +24,5 @@ def run_gui(host: str = "127.0.0.1", port: int = 8000, open_browser: bool = True
             webbrowser.open(f"http://{host}:{port}")
         threading.Thread(target=open_delayed, daemon=True).start()
     
-    from .server import app
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    # Use connection string for reload support
+    uvicorn.run("noteworthy.gui_solo.server:app", host=host, port=port, log_level="warning", reload=True)

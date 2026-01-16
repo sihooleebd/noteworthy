@@ -2615,7 +2615,7 @@ const app = {
             this.state.docSocket = new WebSocket(`${protocol}//${window.location.host}/ws/doc?name=${name}&id=${clientId}`);
 
             this.state.docSocket.onopen = () => {
-                console.log('[Doc] Connected');
+                console.log(`[${new Date().toLocaleTimeString()}] [Doc] Connected`);
                 this.state.wsRetryCount = 0;
 
                 // Rejoin current file if we have one
@@ -2625,7 +2625,8 @@ const app = {
             };
 
             this.state.docSocket.onmessage = (e) => {
-                console.log(`[DocSocket] <<< RECV ${e.data.length} chars: ${e.data.substring(0, 50)}...`);
+                const ts = new Date().toLocaleTimeString();
+                console.log(`[${ts}] [DocSocket] <<< RECV ${e.data.length} chars: ${e.data.substring(0, 50)}...`);
                 const msg = JSON.parse(e.data);
                 this.handleDocMessage(msg);
             };
@@ -2633,7 +2634,7 @@ const app = {
             this.state.docSocket.onclose = () => {
                 const delay = Math.min(2000 * Math.pow(2, this.state.wsRetryCount), 30000);
                 this.state.wsRetryCount++;
-                console.log(`[Doc] Disconnected, reconnecting in ${delay / 1000}s...`);
+                console.log(`[${new Date().toLocaleTimeString()}] [Doc] Disconnected, reconnecting in ${delay / 1000}s...`);
                 setTimeout(() => this.connectDocSocket(), delay);
             };
 
