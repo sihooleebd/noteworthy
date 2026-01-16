@@ -29,6 +29,7 @@ preview_manager = PreviewManager()
 
 # Store for WebSocket connections (simple single-user presence)
 _active_websocket: WebSocket = None
+_current_watched_file: str = None  # Track current file for cleanup on switch
 
 
 @app.on_event("startup")
@@ -65,9 +66,9 @@ async def broadcast_preview(updates: list, source_path: str):
                 "updates": updates,
                 "file": source_path
             }))
-            print(f"[Debug] Sent preview update for {{source_path}} ({{len(updates)}} pages)")
+            print(f"[Debug] Sent preview update for {source_path} ({len(updates)} pages)")
         except Exception as e:
-            print(f"[Debug] Broadcast error: {{e}}")
+            print(f"[Debug] Broadcast error: {e}")
 
 
 def validate_modules_json():
@@ -169,6 +170,12 @@ async def doc_endpoint(websocket: WebSocket):
                 # User joins a file - start watching for preview
                 path = msg.get("path") or msg.get("file", "")
                 if path:
+                    global _current_watched_file
+                    # Stop previous watcher if switching to a different file
+                    if _current_watched_file and _current_watched_file != path:
+                        preview_manager.stop_watch(_current_watched_file)
+                    
+                    _current_watched_file = path
                     preview_manager.start_watch(path)
                     
                     # Run initial diagnostics

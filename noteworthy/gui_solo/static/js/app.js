@@ -2596,6 +2596,15 @@ const app = {
     // UNIFIED WEBSOCKET - Sync, Cursors, Preview, Diagnostics
     // ============================================================
 
+    joinFile: function (path) {
+        if (this.state.docSocket && this.state.docSocket.readyState === WebSocket.OPEN) {
+            this.state.docSocket.send(JSON.stringify({
+                type: 'join',
+                path: path
+            }));
+        }
+    },
+
     connectDocSocket: function () {
         if (this.state.wsRetryCount === undefined) {
             this.state.wsRetryCount = 0;

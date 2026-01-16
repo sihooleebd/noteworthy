@@ -268,15 +268,15 @@ class PreviewManager:
                 watcher['page_mapping'] = sorted(current_pages)
                 
                 if updates:
-                    print(f"[Debug] Found {{len(updates)}} updates for {{file_path}}")
+                    print(f"[Debug] Found {len(updates)} updates for {file_path}")
                     for cb in self.callbacks:
                         try:
                             # Pass file_path so hub knows who to send it to
                             cb(updates, file_path)
                         except Exception as e:
-                            print(f"[Preview] Callback error: {{e}}")
+                            print(f"[Preview] Callback error: {e}")
             except Exception as e:
-                print(f"[Debug] Monitor loop error: {{e}}")
+                print(f"[Debug] Monitor loop error: {e}")
             
             time.sleep(0.02)
     

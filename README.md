@@ -69,6 +69,8 @@ python3 noteworthy.py
 | `python3 noteworthy.py`        | Launch Terminal UI            |
 | `python3 noteworthy.py -g`     | Launch Web GUI                |
 | `python3 noteworthy.py -u`     | Update from GitHub            |
+| `python3 noteworthy.py -n`     | Update from GitHub nightly    |
+| `python3 noteworthy.py -f`     | Force update from GitHub      |
 | `python3 noteworthy.py -g -nc` | Launch Solo Web GUI (No-Coop) |
 | `python3 noteworthy_cli.py`    | Non-interactive CLI build     |
 
