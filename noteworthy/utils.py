@@ -234,13 +234,86 @@ def bootstrap(branch='master'):
             
     return success_count > 0
 
+def bootstrap_modules(branch='master'):
+    print(f"Bootstrapping external modules from noteworthy-modules ({{branch}})...")
+    
+    needed_prefixes = set()
+    try:
+        if os.path.exists('config/modules.json'):
+            with open('config/modules.json', 'r') as f:
+                mod_config = json.load(f)
+            
+            # Standard remote modules
+            for name, info in mod_config.get('modules', {{}}).items():
+                if info.get('source') == 'remote':
+                    needed_prefixes.add(f"{{name}}/")
+            
+            # Core modules
+            for name, info in mod_config.get('core_modules', {{}}).items():
+                needed_prefixes.add(f"core/{{name}}/")
+                
+            print(f"Identified {{len(needed_prefixes)}} specific module targets from config")
+        else:
+            print("Warning: config/modules.json not found. Skipping module bootstrap.")
+            # If force update wiped it, we might be in trouble unless bootstrap() restored it first.
+            # But bootstrap() runs before this, so if it's in the main repo, it should be there.
+            # If modules.json generates dynamically, that's another issue.
+            return True
+            
+    except Exception as e:
+        print(f"Error reading modules.json: {{e}}")
+        # Proceeding without modules might be better than failing
+        return True
+
+    if not needed_prefixes:
+        return True
+
+    repo_api = f'https://api.github.com/repos/sihooleebd/noteworthy-modules/git/trees/{{branch}}?recursive=1'
+    raw_base = f'https://raw.githubusercontent.com/sihooleebd/noteworthy-modules/{{branch}}/'
+    
+    try:
+        req = urllib.request.Request(repo_api, headers={{'User-Agent': 'Noteworthy-Loader'}})
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+    except Exception as e:
+        print(f"Error fetching module file list: {{e}}")
+        return False
+
+    files_to_download = []
+    for item in data.get('tree', []):
+        if item.get('type') != 'blob':
+            continue
+        path = item['path']
+        
+        for prefix in needed_prefixes:
+            if path.startswith(prefix):
+                 files_to_download.append(path)
+                 break
+    
+    print(f"Downloading {{len(files_to_download)}} module files...")
+    
+    success_count = 0
+    for p in files_to_download:
+        target = Path('templates/module') / p
+        url = raw_base + urllib.parse.quote(p)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with urllib.request.urlopen(url) as r, open(target, 'wb') as f:
+                f.write(r.read())
+            print(f"Downloaded module: {{p}}")
+            success_count += 1
+        except Exception as e:
+            print(f"Failed to download {{p}}: {{e}}")
+
+    return success_count > 0
+
 def main():
     print(f"External Updater Running (Branch: {{BRANCH}}, Force: {{FORCE}})")
     
     backups = []
     if FORCE:
         print("Force updating: Removing existing directories...")
-        files_to_save = ['config/metadata.json', 'config/constants.json', 'config/hierarchy.json', 'config/preface.typ']
+        files_to_save = ['config/metadata.json', 'config/constants.json', 'config/hierarchy.json', 'config/preface.typ', 'config/modules.json']
         for fpath in files_to_save:
             src = Path(fpath)
             if src.exists():
@@ -259,6 +332,7 @@ def main():
             
     success = bootstrap(BRANCH)
     
+    # Restore configuration files EARLY so bootstrap_modules can see modules.json
     if FORCE and backups:
         print("Restoring configuration files...")
         for dst, src in backups:
@@ -269,6 +343,11 @@ def main():
                     print(f"Restored {{src.name}}")
             except Exception as e:
                 print(f"Error restoring {{src.name}}: {{e}}")
+                
+    if success and FORCE:
+        # Pull extra modules if forcing
+        if not bootstrap_modules(BRANCH):
+             print("Warning: Failed to bootstrap modules from external repo.")
     
     if success:
         print(f"Update complete. Launching {{RELAUNCH_SCRIPT}}...")
