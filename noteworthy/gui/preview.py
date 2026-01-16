@@ -218,6 +218,47 @@ class PreviewManager:
         """Register callback for updates."""
         self.callbacks.append(cb)
     
+    def cleanup_old_watchers(self, keep_paths: list = None, max_watchers: int = 3):
+        """
+        Cleanup old watchers, keeping only the most recent ones.
+        This implements LRU-style caching to avoid cold starts on file switch.
+        """
+        keep_paths = keep_paths or []
+        current_count = len(self.watchers)
+        
+        if current_count <= max_watchers:
+            return
+        
+        # Find watchers to remove (those not in keep_paths)
+        to_remove = []
+        for path in self.watchers:
+            if path not in keep_paths:
+                to_remove.append(path)
+        
+        # Remove oldest watchers until we're at max_watchers
+        while len(self.watchers) > max_watchers and to_remove:
+            oldest_path = to_remove.pop(0)
+            print(f"[Preview] Evicting old watcher: {oldest_path}")
+            self._force_stop_watch(oldest_path)
+    
+    def _force_stop_watch(self, file_path: str):
+        """Force stop a watcher without ref count check."""
+        if file_path not in self.watchers:
+            return
+        
+        watcher = self.watchers[file_path]
+        watcher['running'] = False
+        if watcher.get('process'):
+            try:
+                watcher['process'].terminate()
+            except:
+                pass
+        try:
+            shutil.rmtree(watcher['cache_dir'])
+        except:
+            pass
+        del self.watchers[file_path]
+    
     def _monitor_loop(self, file_path, watcher):
         """Monitor cache directory for SVG updates."""
         last_mtimes = {}

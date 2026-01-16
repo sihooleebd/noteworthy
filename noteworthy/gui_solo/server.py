@@ -171,26 +171,35 @@ async def doc_endpoint(websocket: WebSocket):
                 path = msg.get("path") or msg.get("file", "")
                 if path:
                     global _current_watched_file
-                    # Stop previous watcher if switching to a different file
-                    if _current_watched_file and _current_watched_file != path:
-                        preview_manager.stop_watch(_current_watched_file)
-                    
                     _current_watched_file = path
+                    
+                    # Start watching (will reuse existing watcher if already running)
                     preview_manager.start_watch(path)
                     
-                    # Run initial diagnostics
-                    diags = await run_diagnostics_check()
-                    await websocket.send_text(json.dumps({
-                        "type": "diagnostics",
-                        "diagnostics": diags,
-                        "file": path
-                    }))
+                    # Cleanup old watchers but keep recent ones warm (LRU)
+                    preview_manager.cleanup_old_watchers(keep_paths=[path], max_watchers=3)
+                    
+                    # Run diagnostics in BACKGROUND - don't block preview!
+                    asyncio.create_task(send_diagnostics_async(websocket, path))
                     
     except WebSocketDisconnect:
         _active_websocket = None
     except Exception as e:
         print(f"[Solo Doc] Error: {e}")
         _active_websocket = None
+
+
+async def send_diagnostics_async(websocket: WebSocket, path: str):
+    """Run diagnostics in background and send to client."""
+    try:
+        diags = await run_diagnostics_check()
+        await websocket.send_text(json.dumps({
+            "type": "diagnostics",
+            "diagnostics": diags,
+            "file": path
+        }))
+    except Exception as e:
+        print(f"[Diagnostics] Background check failed: {e}")
 
 
 async def run_diagnostics_check():
@@ -226,7 +235,9 @@ async def run_diagnostics_check():
                 )
                 page_folders[str(idx)] = pg_files
         
-        result = subprocess.run(
+        # Run in thread pool to avoid blocking event loop
+        result = await asyncio.to_thread(
+            subprocess.run,
             [
                 typst_bin, "compile", str(RENDERER_FILE), tmp_path, 
                 "--root", str(BASE_DIR),
