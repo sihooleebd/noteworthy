@@ -3271,17 +3271,9 @@ const app = {
             </div>
         `;
 
-        // If tinymist is already running, just show it
-        if (this.state.tinymistRunning && this.state.tinymistUrl) {
-            container.innerHTML = `
-                <iframe 
-                    id="tinymist-iframe"
-                    src="${this.state.tinymistUrl}" 
-                    style="width: 100%; height: 100%; border: none; border-radius: 16px;"
-                    title="Tinymist Preview"
-                ></iframe>
-            `;
-            return;
+        // Stop existing tinymist if running (we need to restart with new target)
+        if (this.state.tinymistRunning) {
+            await this.stopTinymistPreview();
         }
 
         // Start tinymist with the target file
