@@ -20,21 +20,23 @@ from .utils import generate_updater
 def main():
     parser = argparse.ArgumentParser(description='Noteworthy Launcher')
     parser.add_argument('--print-inputs', action='store_true', help='Print Typst input flags')
-    parser.add_argument('-g', '--gui', action='store_true', help='Launch web GUI instead of TUI')
-    parser.add_argument('-nc', '--no-coop', action='store_true', help='No collaboration mode (solo, direct file save)')
-    parser.add_argument('-p', '--port', type=int, default=8000, help='Port for GUI server (default: 8000)')
+    
+    # GUI flags
+    parser.add_argument('-g', '--gui', action='store_true', help='Launch web GUI')
+    parser.add_argument('-p', '--port', type=int, default=8000, help='[-g] Specify port (default: 8000)')
+    parser.add_argument('-nc', '--no-coop', action='store_true', help='[-g] Solo mode (no collaboration)')
     
     # Update flags
     parser.add_argument('-u', '--update', action='store_true', help='Update noteworthy')
-    parser.add_argument('-n', '--nightly', action='store_true', help='Use nightly branch')
-    parser.add_argument('-f', '--force', action='store_true', help='Force update (clean install)')
+    parser.add_argument('-n', '--nightly', action='store_true', help='[-u] Use nightly branch')
+    parser.add_argument('-f', '--force', action='store_true', help='[-u] Force clean install')
 
     # Legacy (Backward Compatibility)
-    parser.add_argument('--update-nightly', action='store_true', help='Legacy: Update to nightly')
-    parser.add_argument('--load', action='store_true', help='Legacy: Alias for --update')
-    parser.add_argument('--load-nightly', action='store_true', help='Legacy: Alias for --update-nightly')
-    parser.add_argument('--force-update', action='store_true', help='Legacy: Alias for --update --force')
-    parser.add_argument('--force-update-nightly', action='store_true', help='Legacy: Alias for --update-nightly --force')
+    parser.add_argument('--update-nightly', action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument('--load', action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument('--load-nightly', action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument('--force-update', action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument('--force-update-nightly', action='store_true', help=argparse.SUPPRESS)
     
     args = parser.parse_args()
 

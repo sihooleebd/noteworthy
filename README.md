@@ -65,15 +65,12 @@ python3 noteworthy.py
 
 ## Commands
 
-| Command                        | Description                   |
-| :----------------------------- | :---------------------------- |
-| `python3 noteworthy.py`        | Launch Terminal UI            |
-| `python3 noteworthy.py -g`     | Launch Web GUI                |
-| `python3 noteworthy.py -u`     | Update from GitHub            |
-| `python3 noteworthy.py -n`     | Update from GitHub nightly    |
-| `python3 noteworthy.py -f`     | Force update from GitHub      |
-| `python3 noteworthy.py -g -nc` | Launch Solo Web GUI (No-Coop) |
-| `python3 noteworthy_cli.py`    | Non-interactive CLI build     |
+| Command                               | Description                                                          |
+| :------------------------------------ | :------------------------------------------------------------------- |
+| `python3 noteworthy.py`               | Launch Terminal UI                                                   |
+| `python3 noteworthy.py -g (-p) (-nc)` | Launch Web GUI<br>`-p xxxx` for specific port<br>`-nc` for solo mode |
+| `python3 noteworthy.py -u (-n) (-f)`  | Update from GitHub<br>`-n` for nightly<br>`-f` for force             |
+| `python3 noteworthy_cli.py`           | Non-interactive CLI build                                            |
 
 **[Full CLI Reference](https://noteworthy.benjaminlee.kr/docs.html#reference/cli)**
 
