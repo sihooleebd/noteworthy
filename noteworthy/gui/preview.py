@@ -355,8 +355,8 @@ class PreviewManager:
             except Exception as e:
                 print(f"[Preview] Log callback error: {e}")
     
-    def start_full_preview(self):
-        """Start the full document preview using tinymist."""
+    def start_full_preview(self, file_path: str = None):
+        """Start the document preview using tinymist with optional target."""
         if self.full_preview_running:
             print("[Preview] Full preview already running")
             return self.get_full_preview_url()
@@ -369,7 +369,7 @@ class PreviewManager:
             self._broadcast_log("error", f"Parser file not found: {parser_file}")
             return None
         
-        # Build content info for inputs (same as partial preview)
+        # Build content info for inputs
         import json
         content_dir = BASE_DIR / "content"
         chapter_folders = []
@@ -388,6 +388,20 @@ class PreviewManager:
                 )
                 page_folders[str(idx)] = pg_files
         
+        # Parse target from file_path (e.g., "content/2/5.typ" -> "2/4")
+        target = None
+        if file_path and file_path.startswith("content/"):
+            parts = file_path.replace("content/", "").replace(".typ", "").split("/")
+            if len(parts) == 2:
+                ch_name = parts[0]
+                pg_name = parts[1]
+                if ch_name in chapter_folders:
+                    ch_idx = chapter_folders.index(ch_name)
+                    pg_files = page_folders.get(str(ch_idx), [])
+                    if pg_name in pg_files:
+                        pg_idx = pg_files.index(pg_name)
+                        target = f"{ch_idx}/{pg_idx}"
+        
         cmd = [
             tinymist_bin, "preview", str(parser_file),
             "--root", str(BASE_DIR),
@@ -395,6 +409,10 @@ class PreviewManager:
             "--input", f"page-folders={json.dumps(page_folders)}",
             "--no-open"
         ]
+        
+        # Add target if we have one
+        if target:
+            cmd.extend(["--input", f"target={target}"])
         
         print(f"[Preview] Starting full preview: {' '.join(cmd)}")
         

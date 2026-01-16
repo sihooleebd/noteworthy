@@ -728,6 +728,33 @@ def start_watch(data: dict = Body(...)):
     return {"success": True}
 
 # ============================================================
+# TINYMIST PREVIEW API (Synctex-like navigation)
+# ============================================================
+
+@app.post("/api/tinymist/start")
+def start_tinymist_preview(data: dict = Body(default={})):
+    """Start tinymist preview server for synctex-like navigation."""
+    file_path = data.get("path")
+    url = preview_manager.start_full_preview(file_path)
+    if url:
+        return {"success": True, "url": url}
+    return {"success": False, "error": "Failed to start tinymist preview"}
+
+@app.post("/api/tinymist/stop")
+def stop_tinymist_preview():
+    """Stop tinymist preview server."""
+    preview_manager.stop_full_preview()
+    return {"success": True}
+
+@app.get("/api/tinymist/status")
+def get_tinymist_status():
+    """Get tinymist preview status."""
+    return {
+        "running": preview_manager.full_preview_running,
+        "url": preview_manager.get_full_preview_url() if preview_manager.full_preview_running else None
+    }
+
+# ============================================================
 # MODULES API
 # ============================================================
 

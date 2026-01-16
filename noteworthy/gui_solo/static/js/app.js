@@ -8,7 +8,9 @@ const app = {
         ws: null,
         configData: {},
         editorTheme: localStorage.getItem('editorTheme') || 'vs-dark',
-        previewMode: 'file', // Always file mode
+        previewMode: 'partial', // 'partial' = SVG (fast), 'full' = tinymist (synctex)
+        tinymistRunning: false,
+        tinymistUrl: null,
         soloMode: true // Single-user mode - no Yjs/chat
     },
     // ============================================================
@@ -1558,12 +1560,9 @@ const app = {
             });
         }
 
-        // Join DocumentHub for Diagnostics/Preview (no cursor/chat)
-        if (this.state.docSocket && this.state.docSocket.readyState === WebSocket.OPEN) {
-            this.state.docSocket.send(JSON.stringify({
-                type: 'join',
-                path: path
-            }));
+        // Start tinymist preview for .typ files (synctex-enabled)
+        if (path.endsWith('.typ')) {
+            this.startTinymistPreview(path);
         }
     },
 
@@ -3255,6 +3254,96 @@ const app = {
             console.log(`[SourceMap] Jumped to line ${startLineNumber}`);
         } else {
             console.log('[SourceMap] No match found in source');
+        }
+    },
+
+    // ============================================================
+    // TINYMIST PREVIEW (Synctex-like navigation)
+    // ============================================================
+
+    startTinymistPreview: async function (path) {
+        const container = document.getElementById('preview-container');
+
+        // Show loading state
+        container.innerHTML = `
+            <div class="preview-loading" style="display: flex; align-items: center; justify-content: center; height: 100%;">
+                <span style="color: var(--text-secondary);">Loading preview...</span>
+            </div>
+        `;
+
+        // If tinymist is already running, just show it
+        if (this.state.tinymistRunning && this.state.tinymistUrl) {
+            container.innerHTML = `
+                <iframe 
+                    id="tinymist-iframe"
+                    src="${this.state.tinymistUrl}" 
+                    style="width: 100%; height: 100%; border: none; border-radius: 16px;"
+                    title="Tinymist Preview"
+                ></iframe>
+            `;
+            return;
+        }
+
+        // Start tinymist with the target file
+        try {
+            const res = await fetch('/api/tinymist/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: path })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                this.state.tinymistRunning = true;
+                this.state.tinymistUrl = data.url;
+
+                // Wait for tinymist to be ready
+                await new Promise(r => setTimeout(r, 1500));
+
+                // Show tinymist iframe
+                container.innerHTML = `
+                    <iframe 
+                        id="tinymist-iframe"
+                        src="${data.url}" 
+                        style="width: 100%; height: 100%; border: none; border-radius: 16px;"
+                        title="Tinymist Preview"
+                    ></iframe>
+                `;
+            } else {
+                console.error('[Tinymist] Failed to start:', data.error);
+                container.innerHTML = `
+                    <div class="preview-placeholder">
+                        <i data-lucide="alert-circle"></i>
+                        <span>Preview failed to start</span>
+                    </div>
+                `;
+                if (window.lucide) lucide.createIcons();
+            }
+        } catch (e) {
+            console.error('[Tinymist] Error:', e);
+            container.innerHTML = `
+                <div class="preview-placeholder">
+                    <i data-lucide="alert-circle"></i>
+                    <span>Preview error</span>
+                </div>
+            `;
+            if (window.lucide) lucide.createIcons();
+        }
+    },
+
+    stopTinymistPreview: async function () {
+        if (this.state.tinymistRunning) {
+            try {
+                await fetch('/api/tinymist/stop', { method: 'POST' });
+                this.state.tinymistRunning = false;
+                this.state.tinymistUrl = null;
+                if (this.state.tinymistWs) {
+                    this.state.tinymistWs.close();
+                    this.state.tinymistWs = null;
+                }
+            } catch (e) {
+                console.error('[Tinymist] Error stopping:', e);
+            }
         }
     },
 
