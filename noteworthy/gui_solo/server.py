@@ -65,8 +65,9 @@ async def broadcast_preview(updates: list, source_path: str):
                 "updates": updates,
                 "file": source_path
             }))
-        except Exception:
-            pass
+            print(f"[Debug] Sent preview update for {{source_path}} ({{len(updates)}} pages)")
+        except Exception as e:
+            print(f"[Debug] Broadcast error: {{e}}")
 
 
 def validate_modules_json():
