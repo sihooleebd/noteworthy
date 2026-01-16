@@ -26,7 +26,7 @@ For users who prefer working alone or offline, Noteworthy offers a dedicated **S
 ### Why use Solo Mode?
 - **Privacy**: No external connections, no chat, no online user visibility.
 - **Simplicity**: Direct file editing without synchronization overhead.
-- **Speed**: Optimized for single-user performance.
+- **Fast Live Preview**: Powered by [Tinymist](https://github.com/Myriad-Dreamin/tinymist) for instant rendering.
 
 ### Usage
 Launch with the `-nc` flag:
@@ -36,6 +36,13 @@ noteworthy -g -nc
 ```
 
 In Solo Mode, the "Solo" badge appears in the header, and collaboration features (Chat, Online Users) are disabled.
+
+### Fast Preview
+
+Solo Mode uses Tinymist for live preview instead of standard `typst watch`:
+- **Instant updates**: Sub-100ms render times
+- **Efficient**: Incremental SVG updates via WebSocket
+- **Embedded**: Preview runs directly in the browser
 
 ---
 

@@ -56,7 +56,8 @@ python3 noteworthy.py
 | :-------------- | :---------------------------------------------------------------- |
 | **15+ Themes**  | Pre-built color schemes, easy customization                       |
 | **Modules**     | Math, plotting, geometry, data structures                         |
-| **Web Studio**  | **Google Docs-style** editing, source preview jump, Monaco editor |
+| **Web Studio**  | Google Docs-style editing, Monaco editor, real-time collaboration |
+| **Solo Mode**   | Single-user mode with tinymist-powered fast live preview          |
 | **Fast Builds** | Parallel compilation, incremental updates                         |
 | **PDF Output**  | Merged PDFs with bookmarks and metadata                           |
 
@@ -121,6 +122,7 @@ MIT License — See [LICENSE](LICENSE) for details.
 
 Built with:
 - [Typst](https://typst.app/) — The typesetting system
+- [Tinymist](https://github.com/Myriad-Dreamin/tinymist) — Fast live preview
 - [CeTZ](https://github.com/cetz-package/cetz) — Drawing library
 - [FastAPI](https://fastapi.tiangolo.com/) — Web framework
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/) — Code editor
