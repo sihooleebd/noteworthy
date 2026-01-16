@@ -2620,7 +2620,10 @@ const app = {
 
                 // Rejoin current file if we have one
                 if (this.state.activeFile) {
-                    this.joinFile(this.state.activeFile);
+                    this.state.docSocket.send(JSON.stringify({
+                        type: 'join',
+                        path: this.state.activeFile
+                    }));
                 }
             };
 
@@ -3155,11 +3158,15 @@ const app = {
             if (svgElement) {
                 svgElement.style.width = '100%';
                 svgElement.style.height = 'auto';
-                svgElement.style.cursor = 'pointer';
+                // Remove global pointer cursor to allow text selection
+                // Users must Ctrl+Click or Cmd+Click to navigate
 
                 // Add click handler for text elements
                 svgElement.addEventListener('click', (e) => {
-                    this.handlePreviewClick(e);
+                    // Only navigate if modifier key is pressed
+                    if (e.ctrlKey || e.metaKey) {
+                        this.handlePreviewClick(e);
+                    }
                 });
             }
         });
