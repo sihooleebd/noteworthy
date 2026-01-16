@@ -925,6 +925,7 @@ const app = {
         const resizer = document.getElementById('editor-resizer');
         const previewPanel = document.querySelector('.preview-panel');
         const mainContent = document.querySelector('.main-content');
+        const previewContainer = document.getElementById('preview-container');
 
         if (!resizer || !previewPanel || !mainContent) return;
 
@@ -935,6 +936,14 @@ const app = {
             resizer.classList.add('active');
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
+
+            // Disable pointer events on preview iframes to prevent them from capturing mouse events during resize
+            if (previewContainer) {
+                const iframes = previewContainer.querySelectorAll('iframe');
+                iframes.forEach(iframe => {
+                    iframe.style.pointerEvents = 'none';
+                });
+            }
         });
 
         document.addEventListener('mousemove', (e) => {
@@ -966,6 +975,14 @@ const app = {
                 resizer.classList.remove('active');
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
+
+                // Re-enable pointer events on preview iframes
+                if (previewContainer) {
+                    const iframes = previewContainer.querySelectorAll('iframe');
+                    iframes.forEach(iframe => {
+                        iframe.style.pointerEvents = '';
+                    });
+                }
 
                 // Final layout update
                 if (this.state.editor) this.state.editor.layout();
