@@ -14,6 +14,27 @@ Noteworthy Studio is built with:
 | **Editor**    | Monaco Editor + OT Sync |
 | **Preview**   | PDF.js / SVG            |
 
+
+
+---
+
+## Architecture Variants
+
+Noteworthy Studio runs in two distinct modes:
+
+### 1. Collaborative Mode (Default)
+Full feature set with real-time sync.
+- **State**: Managed by `DocumentHub` (Server Authority) + `Yjs` (CRDT)
+- **Sync**: WebSocket-based Operational Transformation (OT)
+- **Communication**: Bidirectional (Cursor, Chat, Selection)
+
+### 2. Solo Mode (`-nc`)
+Simplified stack for local-only editing.
+- **State**: Direct file system read/write
+- **Sync**: HTTP `POST /api/file` (Debounced)
+- **Communication**: None (No Chat, No Cursors)
+- **WebSocket**: Reduced to one-way (Server -> Client) for Preview/Diagnostics
+
 ---
 
 ## Architecture Diagram

@@ -19,12 +19,9 @@ Noteworthy is a powerful Typst framework for creating beautiful educational docu
   - *Geometry* — 2D geometric primixtives (points, lines, circles)
   - *Canvas* — Rendering canvases for plots and visualizations
   - *Data* — Tables, data series, and curve interpolation
-  - 
   - *Cover* — Document covers and title pages
   - *Layout* — Page layouts and table of contents
 ]
-
-fjoweifj
 
 == How to Use This Guide
 

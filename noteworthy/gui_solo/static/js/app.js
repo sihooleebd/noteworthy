@@ -1,5 +1,5 @@
 /**
- * Noteworthy GUI - Main Application
+ * Noteworthy GUI Solo - Single-user Mode (No Collaboration)
  */
 const app = {
     state: {
@@ -8,13 +8,8 @@ const app = {
         ws: null,
         configData: {},
         editorTheme: localStorage.getItem('editorTheme') || 'vs-dark',
-        sessionName: localStorage.getItem('sessionName') || 'Anonymous',
         previewMode: 'file', // Always file mode
-
-        // Yjs State
-        ydoc: null,
-        yjsProvider: null,
-        yjsBinding: null
+        soloMode: true // Single-user mode - no Yjs/chat
     },
     // ============================================================
     // INITIALIZATION
@@ -101,6 +96,8 @@ const app = {
         this.debouncedSaveSnippets = this.debounce(() => this.saveSnippets(), 1000);
         this.debouncedSavePreface = this.debounce(() => this.savePreface(), 1000);
         this.debouncedSaveIgnored = this.debounce(() => this.saveIgnored(), 1000);
+        // Solo mode: debounced direct file save
+        this.debouncedSaveFile = this.debounce(() => this.saveCurrentFile(), 500);
 
         // Apply saved CSS theme to body on page load
         const savedTheme = this.state.editorTheme;
@@ -716,24 +713,7 @@ const app = {
                 scrollBeyondLastLine: false
             });
 
-            // Yjs-based Cursor Awareness
-            this.state.editor.onDidChangeCursorSelection((e) => {
-                if (this.state.yjsProvider && this.state.yjsProvider.awareness) {
-                    const pos = e.selection.getPosition();
-                    const sel = e.selection;
-
-                    this.state.yjsProvider.awareness.setLocalStateField('cursor', {
-                        line: pos.lineNumber,
-                        column: pos.column,
-                        selection: !sel.isEmpty() ? {
-                            startLine: sel.startLineNumber,
-                            startColumn: sel.startColumn,
-                            endLine: sel.endLineNumber,
-                            endColumn: sel.endColumn
-                        } : null
-                    });
-                }
-            });
+            // Solo mode: no cursor awareness needed (single user)
 
             // ============================================================
             // SMART EDITOR BEHAVIORS
@@ -1378,14 +1358,13 @@ const app = {
         if (!newPath || newPath === path) return;
 
         try {
-            // Use rename API since it supports full path changes
             const res = await fetch('/api/rename', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     path,
                     newName: newPath.split('/').pop(),
-                    newPath: newPath  // Full new path
+                    newPath: newPath
                 })
             });
             const result = await res.json();
@@ -1393,7 +1372,6 @@ const app = {
             if (result.success) {
                 this.showSaveStatus('File Moved');
                 this.refreshTree();
-                // Update active file if it was moved
                 if (this.state.activeFile === path) {
                     this.state.activeFile = result.newPath || newPath;
                     document.getElementById('active-filename').textContent = result.newPath || newPath;
@@ -1551,163 +1529,36 @@ const app = {
             }
         }
 
-        // Initialize Yjs for Real-time Collaboration
+
+        // ==========================================
+        // SOLO MODE: Direct File Loading (No Yjs)
         // ==========================================
 
-        // 1. Cleanup previous Yjs
-        if (this.state.yjsBinding) {
-            this.state.yjsBinding.destroy();
-            this.state.yjsBinding = null;
-        }
-        if (this.state.yjsProvider) {
-            this.state.yjsProvider.destroy();
-            this.state.yjsProvider = null;
-        }
-        if (this.state.ydoc) {
-            this.state.ydoc.destroy();
-        }
+        // Simply load the file content via API
+        try {
+            const res = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+            const data = await res.json();
 
-        // 2. Clear editor content before connecting to avoid flashes/conflicts
-        if (this.state.editor) {
-            this.state.editor.setValue('');
-            this.state.editor.updateOptions({ readOnly: true }); // Lock until synced
-        }
-
-        // 3. Create new Yjs Doc
-        this.state.ydoc = new Y.Doc();
-
-        // 4. Connect Provider
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // Connect to Yjs WebSocket
-        // Note: WebsocketProvider joins the room name to the URL if not empty? 
-        // Actually standard y-websocket connects to url/roomname?
-        // Let's use the base Yjs endpoint.
-        const wsUrl = `${wsProtocol}//${window.location.host}/yjs`;
-
-        console.log(`[Yjs] Connecting to ${wsUrl}, room: ${path}`);
-
-        // Disconnect old provider if exists
-        if (this.state.yjsProvider) {
-            this.state.yjsProvider.destroy();
-        }
-
-        this.state.yjsProvider = new WebsocketProvider(
-            wsUrl,
-            path, // room name
-            this.state.ydoc,
-            { maxBackoffTime: 2500, disableBc: true } // Reduce backoff for faster local retry
-        );
-
-        // Debug logging for Yjs Provider
-        this.state.yjsProvider.on('status', event => {
-            console.log(`[Yjs] Status: ${event.status}`);
-            if (event.status === 'connected') {
-                if (this.state.editor) this.state.editor.updateOptions({ readOnly: false });
+            if (this.state.editor && data.content !== undefined) {
+                this.state.editor.setValue(data.content);
+                document.getElementById('save-status').textContent = 'Loaded';
+                setTimeout(() => document.getElementById('save-status').textContent = '', 1500);
             }
-        });
+        } catch (err) {
+            console.error('[Solo] Error loading file:', err);
+        }
 
-        this.state.yjsProvider.on('sync', isSynced => {
-            console.log(`[Yjs] Sync status: ${isSynced}`);
-        });
-
-        // Log outgoing/incoming messages
-        // Note: this requires accessing the internal `ws` property, which might not always be available immediately
-        // or stable across y-websocket versions.
-        // It's generally better to rely on the provider's 'status' and 'sync' events for debugging.
-        // However, if direct websocket message logging is needed, ensure `ws` is initialized.
-        if (this.state.yjsProvider.ws) {
-            this.state.yjsProvider.ws.binaryType = 'arraybuffer'; // Enforce binaryType
-
-            const originalSend = this.state.yjsProvider.ws.send;
-            this.state.yjsProvider.ws.send = function (data) {
-                console.log(`[YjsClient] >>> SEND ${data.byteLength || data.length} bytes`);
-                originalSend.apply(this, arguments);
-            };
-
-            this.state.yjsProvider.ws.addEventListener('message', (event) => {
-                let size = 0;
-                let type = 'unknown';
-                if (event.data instanceof ArrayBuffer) {
-                    size = event.data.byteLength;
-                    type = 'ArrayBuffer';
-                } else if (event.data instanceof Blob) {
-                    size = event.data.size;
-                    type = 'Blob';
-                } else if (typeof event.data === 'string') {
-                    size = event.data.length;
-                    type = 'String';
+        // Setup content change listener for auto-save
+        if (this.state.editor && !this.state.editor._soloChangeListener) {
+            this.state.editor._soloChangeListener = this.state.editor.onDidChangeModelContent(() => {
+                if (this.state.activeFile) {
+                    document.getElementById('save-status').textContent = 'Editing...';
+                    this.debouncedSaveFile();
                 }
-                console.log(`[YjsClient] <<< RECV ${size} bytes (Type: ${type})`);
             });
         }
 
-        // 5. Setup Awareness (Cursors)
-        this.state.yjsProvider.awareness.setLocalStateField('user', {
-            name: this.state.sessionName,
-            color: this.getUserColor(this.state.yjsProvider.awareness.clientID || 0)
-        });
-
-        this.state.yjsProvider.awareness.on('change', () => {
-            this.updateRemoteCursors();
-        });
-
-        // 6. Bind to Monaco IMMEDIATELY
-        const ytext = this.state.ydoc.getText('content');
-
-        if (this.state.editor) {
-            console.log('[Yjs] Creating MonacoBinding...');
-
-            // Debug: Monitor Yjs updates
-            ytext.observe(event => {
-                const content = ytext.toString();
-                console.log(`[Yjs] Text updated (len=${content.length}):`, content.substring(0, 50) + '...');
-                console.log('[Yjs] Delta:', JSON.stringify(event.delta));
-            });
-
-            console.log('DEBUG: ytext length:', ytext.length);
-            // console.log('DEBUG: ytext content:', ytext.toString());
-            try {
-                // TEMPORARILY DISABLED TO DEBUG SYNC
-                // this.state.yjsBinding = new MonacoBinding(
-                //     ytext,
-                //     this.state.editor.getModel(),
-                //     new Set([this.state.editor]),
-                //     this.state.yjsProvider.awareness
-                // );
-                console.log('[Yjs] MonacoBinding PAUSED for debugging');
-
-                this.state.yjsProvider.on('sync', isSynced => {
-                    console.log('[Yjs] Sync event:', isSynced);
-                    if (isSynced) {
-                        this.state.editor.updateOptions({ readOnly: false });
-                    }
-                });
-            } catch (e) {
-                console.error('[Yjs] Error creating MonacoBinding:', e);
-            }
-        }
-
-        this.state.yjsProvider.on('sync', (isSynced) => {
-            console.log(`[Yjs] Sync event: ${isSynced}`);
-            if (isSynced) {
-                if (this.state.editor) {
-                    // this.state.editor.updateOptions({ readOnly: false }); // This is now handled in the try block
-                    document.getElementById('save-status').textContent = 'Synced';
-                }
-            }
-        });
-
-        this.state.yjsProvider.on('status', (event) => {
-            console.log(`[Yjs] Status: ${event.status}`);
-            if (event.status === 'connected') {
-                document.getElementById('save-status').textContent = 'Live';
-            } else {
-                document.getElementById('save-status').textContent = 'Offline';
-            }
-        });
-
-        // 7. Join DocumentHub for Presence (Chat/Diagnostics/Preview)
-        // We still use the main socket for non-content features
+        // Join DocumentHub for Diagnostics/Preview (no cursor/chat)
         if (this.state.docSocket && this.state.docSocket.readyState === WebSocket.OPEN) {
             this.state.docSocket.send(JSON.stringify({
                 type: 'join',
@@ -1715,6 +1566,7 @@ const app = {
             }));
         }
     },
+
 
     saveCurrentFile: async function () {
         if (!this.state.activeFile) return;
@@ -3416,16 +3268,8 @@ const app = {
 
         container.innerHTML = `
             <div class="config-section">
-                <h3>Session Settings</h3>
-                <p>Configure your appearance in collaboration sessions</p>
-                
-                <div class="form-group">
-                    <label>Display Name</label>
-                    <input type="text" id="session-name" value="${this.state.sessionName}" oninput="app.updateSessionName(this.value)" placeholder="Anonymous">
-                    <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
-                        This name will be visible to other users editing the same file. It is saved in your browser storage.
-                    </p>
-                </div>
+                <h3>Editor Settings</h3>
+                <p>Customize your editor appearance</p>
 
                 <div class="form-group">
                     <label>Editor Theme</label>

@@ -21,6 +21,7 @@ def main():
     parser = argparse.ArgumentParser(description='Noteworthy Launcher')
     parser.add_argument('--print-inputs', action='store_true', help='Print Typst input flags')
     parser.add_argument('-g', '--gui', action='store_true', help='Launch web GUI instead of TUI')
+    parser.add_argument('-nc', '--no-coop', action='store_true', help='No collaboration mode (solo, direct file save)')
     parser.add_argument('-p', '--port', type=int, default=8000, help='Port for GUI server (default: 8000)')
     
     # Update flags
@@ -106,8 +107,14 @@ def main():
     # Launch GUI if requested
     if args.gui:
         try:
-            from .gui.app import run_gui
-            run_gui(port=args.port)
+            if args.no_coop:
+                # Solo mode: no collaboration, direct file editing
+                from .gui_solo.app import run_gui
+                run_gui(port=args.port)
+            else:
+                # Full collaborative mode
+                from .gui.app import run_gui
+                run_gui(port=args.port)
         except ImportError as e:
             print("Error: GUI requires additional dependencies.")
             print("Install with: pip install fastapi uvicorn")

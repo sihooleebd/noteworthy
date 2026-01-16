@@ -16,6 +16,27 @@ Noteworthy Studio supports real-time collaboration, allowing multiple users to e
 | **Global Chat**            | Built-in messaging                   |
 | **Conflict-Free**          | Optional Yjs CRDT integration        |
 
+
+---
+
+## Solo Mode
+
+For users who prefer working alone or offline, Noteworthy offers a dedicated **Solo Mode**.
+
+### Why use Solo Mode?
+- **Privacy**: No external connections, no chat, no online user visibility.
+- **Simplicity**: Direct file editing without synchronization overhead.
+- **Speed**: Optimized for single-user performance.
+
+### Usage
+Launch with the `-nc` flag:
+
+```bash
+noteworthy -g -nc
+```
+
+In Solo Mode, the "Solo" badge appears in the header, and collaboration features (Chat, Online Users) are disabled.
+
 ---
 
 ## Starting a Session

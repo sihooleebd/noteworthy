@@ -32,6 +32,7 @@ noteworthy [OPTIONS]
 | Flag      | Long             | Description                        |
 | --------- | ---------------- | ---------------------------------- |
 | `-g`      | `--gui`          | Launch Noteworthy Studio           |
+| `-nc`     | `--no-coop`      | Launch Solo Mode (local only)      |
 | `-p PORT` | `--port PORT`    | Studio server port (default: 8000) |
 | `-u`      | `--update`       | Update from GitHub                 |
 | `-n`      | `--nightly`      | Use nightly branch (with `-u`)     |
@@ -46,6 +47,9 @@ noteworthy
 
 # Launch Noteworthy Studio
 noteworthy -g
+
+# Launch Studio in Solo Mode (No collaboration)
+noteworthy -g -nc
 
 # Studio on custom port
 noteworthy -g -p 3000

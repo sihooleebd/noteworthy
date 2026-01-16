@@ -64,12 +64,13 @@ python3 noteworthy.py
 
 ## Commands
 
-| Command                     | Description               |
-| :-------------------------- | :------------------------ |
-| `python3 noteworthy.py`     | Launch Terminal UI        |
-| `python3 noteworthy.py -g`  | Launch Web GUI            |
-| `python3 noteworthy.py -u`  | Update from GitHub        |
-| `python3 noteworthy_cli.py` | Non-interactive CLI build |
+| Command                        | Description                   |
+| :----------------------------- | :---------------------------- |
+| `python3 noteworthy.py`        | Launch Terminal UI            |
+| `python3 noteworthy.py -g`     | Launch Web GUI                |
+| `python3 noteworthy.py -u`     | Update from GitHub            |
+| `python3 noteworthy.py -g -nc` | Launch Solo Web GUI (No-Coop) |
+| `python3 noteworthy_cli.py`    | Non-interactive CLI build     |
 
 **[Full CLI Reference](https://noteworthy.benjaminlee.kr/docs.html#reference/cli)**
 

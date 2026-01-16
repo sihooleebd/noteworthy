@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Noteworthy Studio</title>
+    <title>Noteworthy Studio (Solo)</title>
     <link rel="stylesheet" href="css/main.css?v=8">
     <link rel="stylesheet" href="css/collab.css">
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -12,16 +12,7 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=EB+Garamond:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
-    <!-- Yjs CRDT for collaborative editing -->
-    <script type="module">
-        import * as Y from 'https://esm.sh/yjs@13.6.14';
-        import { WebsocketProvider } from 'https://esm.sh/y-websocket@1.5.4';
-        import { MonacoBinding } from 'https://esm.sh/y-monaco@0.1.6';
-
-        window.Y = Y;
-        window.WebsocketProvider = WebsocketProvider;
-        window.MonacoBinding = MonacoBinding;
-    </script>
+    <!-- No Yjs imports for solo mode -->
 </head>
 
 <body>
@@ -65,8 +56,9 @@
                         <div class="editor-filename">
                             <i data-lucide="file-code"></i>
                             <span id="active-filename">Select a file</span>
+                            <span class="solo-badge" title="Single-user mode">Solo</span>
                         </div>
-                        <div id="online-users" class="user-avatars"></div>
+                        <!-- No online users panel for solo mode -->
                         <div class="error-container" id="error-container">
                             <div id="error-count" class="error-count" onclick="app.toggleErrorDetails()">
                                 <i data-lucide="alert-circle"></i>
@@ -80,8 +72,7 @@
                         </div>
                     </div>
 
-                    <!-- Chat Panel -->
-
+                    <!-- No Chat Panel for solo mode -->
 
                     <div id="monaco-container"></div>
                 </section>
@@ -226,15 +217,7 @@
                     <span class="dock-label">Build</span>
                     <span class="dock-dot"></span>
                 </div>
-                <!-- Chat Dock Item -->
-                <div class="dock-item" id="dock-chat-btn" onclick="app.toggleChat()">
-                    <div class="dock-icon" style="position: relative;">
-                        <i data-lucide="message-square"></i>
-                        <span class="unread-badge" id="chat-unread-badge" style="display: none;"></span>
-                    </div>
-                    <span class="dock-label">Chat</span>
-                    <span class="dock-dot"></span>
-                </div>
+                <!-- No Chat dock item for solo mode -->
             </div>
         </div>
 
@@ -299,18 +282,7 @@
         </button>
     </div>
 
-    <!-- GLOBAL CHAT PANEL -->
-    <div id="chat-panel" class="chat-panel hidden" style="position: fixed; bottom: 80px; right: 20px; z-index: 1000;">
-        <div class="chat-header">
-            <h4>Chat</h4>
-            <button class="icon-btn-small" onclick="app.toggleChat()"><i data-lucide="x"></i></button>
-        </div>
-        <div id="chat-messages" class="chat-messages"></div>
-        <div class="chat-input-area">
-            <input type="text" id="chat-input" placeholder="Type a message..." onkeypress="app.handleChatKey(event)">
-            <button class="icon-btn-small" onclick="app.sendChatMessage()"><i data-lucide="send"></i></button>
-        </div>
-    </div>
+    <!-- No Global Chat Panel for solo mode -->
 
     <!-- Hidden file input for uploads -->
     <input type="file" id="file-upload-input" multiple style="display: none;" onchange="app.handleFileUpload(event)">
@@ -321,6 +293,21 @@
             lucide.createIcons();
         });
     </script>
+
+    <style>
+        /* Solo mode badge - matches selected file styling */
+        .solo-badge {
+            font-size: 10px;
+            background: var(--accent);
+            color: #000;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+    </style>
 </body>
 
 </html>
