@@ -3307,6 +3307,14 @@ const app = {
                 </a>
             </div>
             
+            <div class="config-section" style="text-align: center; padding: 16px 24px;">
+                <p style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Special Thanks</p>
+                <p style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+                    Design feedback: <strong>discord@ㅅㅈㅁ</strong><br>
+                    Beta testing: <strong>discord@Andrew</strong>
+                </p>
+            </div>
+            
             <div class="config-section" style="text-align: center; padding: 16px 24px; border-top: 1px solid var(--border-color);">
                 <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
                     Created by <strong>Benjamin Lee</strong> & <strong>Hojun Lee</strong>
