@@ -192,7 +192,7 @@ async def doc_endpoint(websocket: WebSocket):
 async def send_diagnostics_async(websocket: WebSocket, path: str):
     """Run diagnostics in background and send to client."""
     try:
-        diags = await run_diagnostics_check()
+        diags = await run_diagnostics_check(target_file=path)
         await websocket.send_text(json.dumps({
             "type": "diagnostics",
             "diagnostics": diags,
@@ -202,8 +202,13 @@ async def send_diagnostics_async(websocket: WebSocket, path: str):
         print(f"[Diagnostics] Background check failed: {e}")
 
 
-async def run_diagnostics_check():
-    """Run typst compile to check for errors."""
+async def run_diagnostics_check(target_file: str = None):
+    """Run typst compile to check for errors.
+    
+    Args:
+        target_file: Optional path to compile (relative to project root).
+                     If provided, compiles this file directly for accurate line numbers.
+    """
     typst_bin = shutil.which("typst")
     if not typst_bin:
         for path in ["/opt/homebrew/bin/typst", "/usr/local/bin/typst", os.path.expanduser("~/.cargo/bin/typst")]:
@@ -218,35 +223,52 @@ async def run_diagnostics_check():
         tmp_path = tmp.name
     
     try:
-        content_dir = BASE_DIR / "content"
-        chapter_folders = []
-        page_folders = {}
-        
-        if content_dir.exists():
-            ch_dirs = sorted(
-                [d for d in content_dir.iterdir() if d.is_dir() and d.name.replace('.', '', 1).lstrip('-').isdigit()],
-                key=lambda d: float(d.name) if d.name.replace('.', '', 1).lstrip('-').isdigit() else 999
-            )
-            for idx, ch_dir in enumerate(ch_dirs):
-                chapter_folders.append(ch_dir.name)
-                pg_files = sorted(
-                    [f.stem for f in ch_dir.glob("*.typ") if f.stem.replace('.', '', 1).lstrip('-').isdigit()],
-                    key=lambda s: float(s) if s.replace('.', '', 1).lstrip('-').isdigit() else 999
+        # If target file is provided and exists, compile it directly for accurate diagnostics
+        if target_file and target_file.endswith('.typ'):
+            target_path = BASE_DIR / target_file
+            if target_path.exists():
+                # Compile the individual file directly
+                result = await asyncio.to_thread(
+                    subprocess.run,
+                    [
+                        typst_bin, "compile", str(target_path), tmp_path, 
+                        "--root", str(BASE_DIR)
+                    ],
+                    capture_output=True,
+                    text=True
                 )
-                page_folders[str(idx)] = pg_files
-        
-        # Run in thread pool to avoid blocking event loop
-        result = await asyncio.to_thread(
-            subprocess.run,
-            [
-                typst_bin, "compile", str(RENDERER_FILE), tmp_path, 
-                "--root", str(BASE_DIR),
-                "--input", f"chapter-folders={json.dumps(chapter_folders)}",
-                "--input", f"page-folders={json.dumps(page_folders)}"
-            ],
-            capture_output=True,
-            text=True
-        )
+            else:
+                return []
+        else:
+            # Fall back to compiling the full parser
+            content_dir = BASE_DIR / "content"
+            chapter_folders = []
+            page_folders = {}
+            
+            if content_dir.exists():
+                ch_dirs = sorted(
+                    [d for d in content_dir.iterdir() if d.is_dir() and d.name.replace('.', '', 1).lstrip('-').isdigit()],
+                    key=lambda d: float(d.name) if d.name.replace('.', '', 1).lstrip('-').isdigit() else 999
+                )
+                for idx, ch_dir in enumerate(ch_dirs):
+                    chapter_folders.append(ch_dir.name)
+                    pg_files = sorted(
+                        [f.stem for f in ch_dir.glob("*.typ") if f.stem.replace('.', '', 1).lstrip('-').isdigit()],
+                        key=lambda s: float(s) if s.replace('.', '', 1).lstrip('-').isdigit() else 999
+                    )
+                    page_folders[str(idx)] = pg_files
+            
+            result = await asyncio.to_thread(
+                subprocess.run,
+                [
+                    typst_bin, "compile", str(RENDERER_FILE), tmp_path, 
+                    "--root", str(BASE_DIR),
+                    "--input", f"chapter-folders={json.dumps(chapter_folders)}",
+                    "--input", f"page-folders={json.dumps(page_folders)}"
+                ],
+                capture_output=True,
+                text=True
+            )
         
         diagnostics = []
         lines = result.stderr.split('\n')
@@ -831,8 +853,9 @@ def save_module_config(name: str, data: dict = Body(...)):
 
 @app.post("/api/check")
 async def check_diagnostics(data: dict = Body(...)):
-    """Run typst compile to get diagnostics."""
-    diagnostics = await run_diagnostics_check()
+    """Run typst compile to get diagnostics for a specific file."""
+    target_path = data.get("path")
+    diagnostics = await run_diagnostics_check(target_file=target_path)
     return {"diagnostics": diagnostics}
 
 # ============================================================

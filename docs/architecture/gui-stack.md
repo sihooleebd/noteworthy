@@ -29,13 +29,68 @@ Full feature set with real-time sync.
 - **Communication**: Bidirectional (Cursor, Chat, Selection)
 
 ### 2. Solo Mode (`-nc`)
-Simplified stack for local-only editing.
-- **State**: Direct file system read/write
-- **Sync**: HTTP `POST /api/file` (Debounced)
-- **Communication**: None (No Chat, No Cursors)
-- **WebSocket**: Reduced to one-way (Server -> Client) for Preview/Diagnostics
+Simplified stack for local-only editing with fast live preview.
 
----
+| Component        | Technology                                |
+| ---------------- | ----------------------------------------- |
+| **Backend**      | FastAPI (simplified routes)               |
+| **State**        | Direct file system read/write             |
+| **Sync**         | HTTP `POST /api/file` (500ms debounce)    |
+| **Preview**      | Tinymist HTML preview (fast, auto-reload) |
+| **WebSocket**    | One-way (Server → Client) for diagnostics |
+| **Chat/Cursors** | Disabled (No collaboration features)      |
+
+**Key Differences from Collaborative Mode:**
+
+```mermaid
+graph LR
+    subgraph Collaborative["Collaborative Mode"]
+        A1[Monaco Editor] <-->|OT Sync| B1[DocumentHub]
+        B1 <-->|WebSocket| C1[Other Users]
+        B1 --> D1[SVG Preview]
+    end
+    
+    subgraph Solo["Solo Mode"]
+        A2[Monaco Editor] -->|HTTP POST| B2[File System]
+        B2 --> C2[Tinymist]
+        C2 --> D2[HTML Preview]
+    end
+```
+
+**Solo Mode Components:**
+
+| File                         | Purpose                        |
+| ---------------------------- | ------------------------------ |
+| `gui_solo/server.py`         | Simplified FastAPI server      |
+| `gui_solo/static/js/app.js`  | Frontend without collaboration |
+| `gui_solo/static/index.html` | UI without chat/cursors        |
+
+**Tinymist Preview Integration:**
+
+Solo mode uses [Tinymist](https://github.com/Myriad-Dreamin/tinymist) for live preview:
+
+1. Server spawns Tinymist process on file open
+2. Tinymist serves HTML preview on random port  
+3. Frontend embeds preview via iframe
+4. Tinymist auto-reloads on file changes (via file watcher)
+
+```mermaid
+sequenceDiagram
+    participant Editor as Monaco Editor
+    participant Server as FastAPI
+    participant FS as File System
+    participant TM as Tinymist
+    participant Preview as Preview iframe
+
+    Editor->>Server: POST /api/file (debounced)
+    Server->>FS: Write file
+    FS-->>TM: File change detected
+    TM->>TM: Recompile
+    TM-->>Preview: Auto-reload HTML
+```
+
+> [!TIP]
+> Solo mode is ideal for single-user editing where fast preview is prioritized over collaboration features.
 
 ## Architecture Diagram
 

@@ -7,7 +7,7 @@ const app = {
         editor: null,
         ws: null,
         configData: {},
-        editorTheme: localStorage.getItem('editorTheme') || 'vs-dark',
+        editorTheme: localStorage.getItem('editorTheme') || 'noteworthy-dark',
         previewMode: 'partial', // 'partial' = SVG (fast), 'full' = tinymist (synctex)
         tinymistRunning: false,
         tinymistUrl: null,
@@ -698,12 +698,104 @@ const app = {
                 });
             });
 
+            // Register Typst language for .typ files
+            monaco.languages.register({ id: 'typst' });
+            monaco.languages.setMonarchTokensProvider('typst', {
+                defaultToken: '',
+                tokenPostfix: '.typst',
+
+                keywords: [
+                    'let', 'set', 'show', 'if', 'else', 'for', 'while', 'import', 'include',
+                    'return', 'break', 'continue', 'in', 'not', 'and', 'or', 'none', 'auto',
+                    'true', 'false'
+                ],
+
+                typeKeywords: [
+                    'int', 'float', 'str', 'bool', 'array', 'dictionary', 'content', 'function'
+                ],
+
+                operators: [
+                    '=', '+', '-', '*', '/', '<', '>', '<=', '>=', '==', '!=', '=>', ':', '..'
+                ],
+
+                symbols: /[=><!~?:&|+\-*\/\^%]+/,
+
+                tokenizer: {
+                    root: [
+                        // Function calls: #name or #name( or #name[
+                        [/#[a-zA-Z_][\w-]*/, 'keyword'],
+
+                        // Math mode: $...$
+                        [/\$/, { token: 'string.math', next: '@math' }],
+
+                        // Strings
+                        [/"([^"\\]|\\.)*$/, 'string.invalid'],  // Unterminated string
+                        [/"/, { token: 'string.quote', next: '@string' }],
+
+                        // Comments
+                        [/\/\/.*$/, 'comment'],
+                        [/\/\*/, { token: 'comment', next: '@comment' }],
+
+                        // Labels and references
+                        [/<[a-zA-Z_][\w-]*>/, 'type.identifier'],
+                        [/@[a-zA-Z_][\w-]*/, 'type.identifier'],
+
+                        // Numbers
+                        [/\d+\.?\d*(em|pt|cm|mm|in|%)?/, 'number'],
+
+                        // Identifiers and keywords
+                        [/[a-zA-Z_][\w-]*/, {
+                            cases: {
+                                '@keywords': 'keyword',
+                                '@typeKeywords': 'type',
+                                '@default': 'identifier'
+                            }
+                        }],
+
+                        // Brackets
+                        [/[{}()\[\]]/, '@brackets'],
+
+                        // Operators
+                        [/@symbols/, {
+                            cases: {
+                                '@operators': 'operator',
+                                '@default': ''
+                            }
+                        }],
+
+                        // Whitespace
+                        { include: '@whitespace' },
+                    ],
+
+                    math: [
+                        [/\$/, { token: 'string.math', next: '@pop' }],
+                        [/./, 'string.math']
+                    ],
+
+                    string: [
+                        [/[^\\"]+/, 'string'],
+                        [/\\./, 'string.escape'],
+                        [/"/, { token: 'string.quote', next: '@pop' }]
+                    ],
+
+                    comment: [
+                        [/[^\/*]+/, 'comment'],
+                        [/\*\//, { token: 'comment', next: '@pop' }],
+                        [/[\/*]/, 'comment']
+                    ],
+
+                    whitespace: [
+                        [/[ \t\r\n]+/, 'white'],
+                    ],
+                }
+            });
+
             // Use saved theme or default to noteworthy-dark
             const themeToUse = this.state.editorTheme || 'noteworthy-dark';
 
             this.state.editor = monaco.editor.create(document.getElementById('monaco-container'), {
                 value: '',
-                language: 'markdown',
+                language: 'typst',
                 theme: themeToUse,
                 automaticLayout: true,
                 fontSize: 14,
@@ -1598,6 +1690,9 @@ const app = {
 
         document.getElementById('save-status').textContent = 'Saved';
         setTimeout(() => document.getElementById('save-status').textContent = '', 2000);
+
+        // Refresh diagnostics after save
+        this.checkDiagnostics();
     },
 
 
@@ -2705,7 +2800,7 @@ const app = {
                 if (this.state.editor) {
                     this.state.applyingRemote = true;
                     const ext = this.state.activeFile?.split('.').pop() || 'typ';
-                    const lang = ext === 'typ' ? 'markdown' : (ext === 'json' ? 'json' : 'plaintext');
+                    const lang = ext === 'typ' ? 'typst' : (ext === 'json' ? 'json' : 'plaintext');
                     monaco.editor.setModelLanguage(this.state.editor.getModel(), lang);
                     // Content is now loaded by Yjs
                     // this.state.editor.setValue(msg.content);

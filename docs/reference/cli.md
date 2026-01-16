@@ -29,15 +29,15 @@ noteworthy [OPTIONS]
 
 ### Options
 
-| Flag      | Long             | Description                        |
-| --------- | ---------------- | ---------------------------------- |
-| `-g`      | `--gui`          | Launch Noteworthy Studio           |
-| `-nc`     | `--no-coop`      | Launch Solo Mode (local only)      |
-| `-p PORT` | `--port PORT`    | Studio server port (default: 8000) |
-| `-u`      | `--update`       | Update from GitHub                 |
-| `-n`      | `--nightly`      | Use nightly branch (with `-u`)     |
-| `-f`      | `--force`        | Force clean reinstall (with `-u`)  |
-|           | `--print-inputs` | Print Typst input flags            |
+| Flag      | Long             | Description                         |
+| --------- | ---------------- | ----------------------------------- |
+|           | `--print-inputs` | Print Typst input flags             |
+| `-g`      | `--gui`          | Launch Noteworthy Studio            |
+| `-p PORT` | `--port PORT`    | `[-g]` Specify port (default: 8000) |
+| `-nc`     | `--no-coop`      | `[-g]` Solo mode (no collaboration) |
+| `-u`      | `--update`       | Update from GitHub                  |
+| `-n`      | `--nightly`      | `[-u]` Use nightly branch           |
+| `-f`      | `--force`        | `[-u]` Force clean install          |
 
 ### Examples
 
