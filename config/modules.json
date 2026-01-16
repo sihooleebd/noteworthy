@@ -1,107 +1,66 @@
 {
     "meta": {
         "commit": "68783483ad642cc6a2bb0c0b403df348129aa2b5",
-        "last_sync": "2026-01-08T15:30:20.745393",
-        "repo_commit": "2061e34b760c1a803e541406884fde736bdaf9fa"
+        "last_sync": "2026-01-17T01:56:04.707906",
+        "repo_commit": "ddac077e8f47492c988fc606d9fa69d13c1f9022"
     },
     "modules": {
         "layout": {
-            "source": "remote",
-            "version": "0.1.0",
             "status": "disabled",
-            "description": "Page layouts and document configuration",
-            "dependencies": []
-        },
-        "trees": {
             "source": "remote",
-            "version": "0.1.0",
-            "status": "disabled",
-            "description": "Tree visualizations for hierarchical data",
-            "dependencies": []
+            "sha": null
         },
         "shape": {
+            "status": "qualified",
             "source": "remote",
-            "version": "0.1.0",
-            "status": "disabled",
-            "description": "2D geometric primitives: points, lines, circles, polygons",
-            "dependencies": []
+            "sha": "fbc023a7786291298dd05c38d2725cf98b036e3c"
         },
         "data": {
-            "source": "remote",
-            "version": "0.1.0",
             "status": "disabled",
-            "description": "Data visualization: tables, series, and curve interpolation",
-            "dependencies": []
+            "source": "remote",
+            "sha": null
         },
         "graph": {
-            "source": "remote",
-            "version": "0.1.0",
             "status": "disabled",
-            "description": "Function plotting and vector visualization",
-            "dependencies": []
-        },
-        "block": {
-            "source": "orphaned",
-            "version": "0.1.0",
-            "status": "disabled"
+            "source": "remote",
+            "sha": null
         },
         "canvas": {
+            "status": "qualified",
             "source": "remote",
-            "version": "0.1.0",
-            "status": "disabled",
-            "description": "Plotting canvases for graphs, shapes, and diagrams",
-            "dependencies": [
-                "shape"
-            ]
+            "sha": "46070a7edee64b9173326463bcb914a5526f46c2"
         },
         "dsa": {
-            "source": "remote",
-            "version": "0.1.0",
             "status": "disabled",
-            "description": "Data structures: linked lists, stacks, queues, graphs",
-            "dependencies": []
-        },
-        "cover": {
-            "source": "orphaned",
-            "version": "0.1.0",
-            "status": "disabled"
+            "source": "remote",
+            "sha": null
         },
         "combi": {
-            "source": "remote",
-            "version": "0.1.0",
             "status": "disabled",
-            "description": "Combinatorics: permutations, combinations, counting trees",
-            "dependencies": []
+            "source": "remote",
+            "sha": null
         },
         "timeline": {
-            "source": "remote",
             "status": "disabled",
-            "description": "Create vertical and horizontal timelines for events and milestones",
-            "dependencies": []
+            "source": "remote",
+            "sha": null
+        },
+        "trees": {
+            "status": "qualified",
+            "source": "remote",
+            "sha": "ca6aac7901923499bc28cdb8ffc1e6b7db902374"
         }
     },
     "core_modules": {
         "block": {
             "status": "global",
             "source": "core",
-            "description": "Semantic content blocks: definitions, theorems, proofs, examples",
-            "exports": [
-                "definition",
-                "theorem",
-                "proof",
-                "example",
-                "note",
-                "solution"
-            ]
+            "sha": "ecbac600e4b6c5a05eaa80805be1c4f051d1dd1d"
         },
         "cover": {
             "status": "global",
             "source": "core",
-            "description": "Document covers and title pages",
-            "exports": [
-                "cover-page",
-                "chapter-cover"
-            ]
+            "sha": "218ba5213ba890b89d802ddc2dcd4d0e2efa551a"
         }
     },
     "local_modules": {}

@@ -9,6 +9,7 @@ Reference for all JSON configuration files in the `config/` directory.
 | `metadata.json`  | Document title, authors, affiliation |
 | `constants.json` | Theme, display options               |
 | `hierarchy.json` | Chapter/page structure               |
+| `modules.json`   | Module installation state            |
 | `snippets.typ`   | Custom Typst macros                  |
 | `preface.typ`    | Preface content                      |
 | `modules/*.json` | Per-module settings                  |
@@ -142,6 +143,92 @@ Defines the document structure with chapter and page titles.
 
 > [!NOTE]
 > The hierarchy must match the files in `content/`. Use the TUI sync wizard to detect mismatches.
+
+---
+
+## modules.json
+
+Tracks installed modules, their status, and synchronization metadata.
+
+### Schema
+
+```json
+{
+  "meta": {
+    "commit": "string",
+    "last_sync": "ISO timestamp",
+    "repo_commit": "string"
+  },
+  "modules": {
+    "<name>": {
+      "status": "disabled | qualified | global",
+      "source": "remote | local | orphaned",
+      "sha": "string | null"
+    }
+  },
+  "core_modules": {
+    "<name>": {
+      "status": "global",
+      "source": "core",
+      "sha": "string"
+    }
+  },
+  "local_modules": {
+    "<name>": {
+      "status": "disabled | qualified | global"
+    }
+  }
+}
+```
+
+### Example
+
+```json
+{
+  "meta": {
+    "last_sync": "2026-01-17T01:54:43.221056",
+    "repo_commit": "ddac077e8f47492c988fc606d9fa69d13c1f9022"
+  },
+  "modules": {
+    "canvas": { "status": "qualified", "source": "remote", "sha": "46070a7..." },
+    "shape": { "status": "qualified", "source": "remote", "sha": "fbc023a..." },
+    "graph": { "status": "disabled", "source": "remote", "sha": null }
+  },
+  "core_modules": {
+    "block": { "status": "global", "source": "core", "sha": "ecbac60..." },
+    "cover": { "status": "global", "source": "core", "sha": "218ba52..." }
+  },
+  "local_modules": {}
+}
+```
+
+### Sections
+
+| Section         | Description                          |
+| --------------- | ------------------------------------ |
+| `meta`          | Sync timestamps and repository state |
+| `modules`       | Remote extension modules             |
+| `core_modules`  | Required system modules              |
+| `local_modules` | User-created custom modules          |
+
+### Module Fields
+
+| Field    | Required        | Values                                | Description               |
+| -------- | --------------- | ------------------------------------- | ------------------------- |
+| `status` | ✅               | `disabled`, `qualified`, `global`     | Import style              |
+| `source` | ✅               | `remote`, `local`, `core`, `orphaned` | Origin of module          |
+| `sha`    | For remote/core | Git tree SHA                          | Used for update detection |
+
+### Status Values
+
+| Status      | Import           | Description                      |
+| ----------- | ---------------- | -------------------------------- |
+| `disabled`  | None             | Not loaded at all                |
+| `qualified` | `#import mod`    | Namespaced access (`mod.func()`) |
+| `global`    | `#import mod: *` | Global access (`func()`)         |
+
+> [!NOTE]
+> The `sha` field tracks the git tree hash for update detection. If `sha` differs from the remote repository, an update is available.
 
 ---
 

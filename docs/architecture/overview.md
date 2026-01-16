@@ -81,6 +81,7 @@ The `noteworthy/` package handles:
 | `core/build.py`         | Typst compilation logic      |
 | `core/build_manager.py` | Parallel build orchestration |
 | `core/deps.py`          | Dependency checking          |
+| `core/pm.py`            | Package manager for modules  |
 | `gui/server.py`         | FastAPI backend              |
 | `gui/document_hub.py`   | Real-time OT Sync            |
 

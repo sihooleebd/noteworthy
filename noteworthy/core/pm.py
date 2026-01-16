@@ -182,6 +182,123 @@ def discover_local_modules(remote_module_names):
 
 
 # ============================================================================
+# Dependency Resolution
+# ============================================================================
+
+def get_module_dependencies(module_name, is_core=False):
+    """
+    Get dependencies for a module from its metadata.json.
+    First checks the cache, then falls back to local installation.
+    """
+    # Try cache first
+    if is_core:
+        meta_path = CACHE_DIR / "core" / module_name / "metadata.json"
+    else:
+        meta_path = CACHE_DIR / module_name / "metadata.json"
+    
+    meta = parse_metadata(meta_path)
+    if meta:
+        return meta.get("dependencies", [])
+    
+    # Fallback to local installation
+    if is_core:
+        meta_path = MODULES_DIR / "core" / module_name / "metadata.json"
+    else:
+        meta_path = MODULES_DIR / module_name / "metadata.json"
+    
+    meta = parse_metadata(meta_path)
+    if meta:
+        return meta.get("dependencies", [])
+    
+    return []
+
+
+def resolve_all_dependencies(module_names, include_requested=True):
+    """
+    Resolve all dependencies for a list of modules using DFS with cycle detection.
+    Returns topologically sorted list (dependencies first, then dependents).
+    
+    Args:
+        module_names: List of module names to resolve
+        include_requested: If True, include the requested modules in the result
+    
+    Returns:
+        Tuple of (ordered_modules, cycles_detected)
+        - ordered_modules: List of module names in install order (deps first)
+        - cycles_detected: List of detected cycles as tuples
+    
+    Raises:
+        Nothing - cycles are returned, not raised
+    """
+    # Track visited nodes and current recursion stack for cycle detection
+    visited = set()
+    in_stack = set()
+    result = []
+    cycles = []
+    
+    def dfs(module, path):
+        """DFS with cycle detection. Returns True if cycle detected."""
+        if module in in_stack:
+            # Cycle detected - find the cycle in the path
+            cycle_start = path.index(module)
+            cycle = tuple(path[cycle_start:] + [module])
+            cycles.append(cycle)
+            return True
+        
+        if module in visited:
+            return False
+        
+        visited.add(module)
+        in_stack.add(module)
+        path.append(module)
+        
+        # Get dependencies for this module
+        deps = get_module_dependencies(module, is_core=False)
+        
+        for dep in deps:
+            dfs(dep, path)
+        
+        path.pop()
+        in_stack.remove(module)
+        result.append(module)
+        return False
+    
+    # Run DFS from each requested module
+    for module in module_names:
+        if module not in visited:
+            dfs(module, [])
+    
+    # Result is in reverse topological order, so reverse it
+    # Dependencies will be at the front, dependents at the back
+    ordered = list(reversed(result))
+    
+    if not include_requested:
+        # Filter out the originally requested modules
+        ordered = [m for m in ordered if m not in module_names]
+    
+    return ordered, cycles
+
+
+def get_required_dependencies(module_names):
+    """
+    Get all required dependencies for a list of modules.
+    These dependencies MUST be installed regardless of user selection.
+    
+    Returns:
+        List of module names that must also be installed (not including the input modules)
+    """
+    all_needed, cycles = resolve_all_dependencies(module_names, include_requested=True)
+    
+    # Warn about cycles in logs (but don't fail)
+    for cycle in cycles:
+        print(f"[Warning] Dependency cycle detected: {' -> '.join(cycle)}")
+    
+    # Return only the dependencies, not the originally requested modules
+    requested_set = set(module_names)
+    return [m for m in all_needed if m not in requested_set]
+
+
+# ============================================================================
 # Config Management
 # ============================================================================
 
@@ -204,10 +321,62 @@ def load_full_config():
 
 
 def save_full_config(config):
-    """Save the full modules.json config."""
+    """Save the full modules.json config after normalizing."""
     MODULES_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    normalized = normalize_config(config)
     with open(MODULES_CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=4)
+        json.dump(normalized, f, indent=4)
+
+
+def normalize_config(config):
+    """
+    Normalize config to only contain required fields.
+    Strips runtime metadata (description, dependencies, exports, version).
+    
+    Required fields per module:
+    - status: "disabled" | "qualified" | "global"
+    - source: "local" | "remote" | "core"
+    - sha: string (for remote/core) or null
+    """
+    normalized = {
+        "meta": config.get("meta", {}),
+        "modules": {},
+        "core_modules": {},
+        "local_modules": {}
+    }
+    
+    # Get core module names to exclude from regular modules
+    core_names = set(config.get("core_modules", {}).keys())
+    
+    # Normalize regular modules
+    for name, state in config.get("modules", {}).items():
+        # Skip entries that got duplicated (e.g., "core/block" in modules)
+        if name.startswith("core/"):
+            continue
+        # Skip entries that share a name with core modules (duplicates)
+        if name in core_names:
+            continue
+        normalized["modules"][name] = {
+            "status": state.get("status", "disabled"),
+            "source": state.get("source", "remote"),
+            "sha": state.get("sha")
+        }
+    
+    # Normalize core modules
+    for name, state in config.get("core_modules", {}).items():
+        normalized["core_modules"][name] = {
+            "status": state.get("status", "global"),
+            "source": "core",
+            "sha": state.get("sha")
+        }
+    
+    # Normalize local modules (no sha needed)
+    for name, state in config.get("local_modules", {}).items():
+        normalized["local_modules"][name] = {
+            "status": state.get("status", "qualified")
+        }
+    
+    return normalized
 
 
 def sync_modules_config(callback=None):
@@ -231,14 +400,13 @@ def sync_modules_config(callback=None):
     # Sync core modules (always global, always enabled)
     for name, meta in core_remote.items():
         if name not in config["core_modules"]:
-             config["core_modules"][name] = {}
+            config["core_modules"][name] = {}
         
-        # Update metadata while preserving SHA if present
+        # Only save essential fields
         cm = config["core_modules"][name]
         cm["status"] = "global"
         cm["source"] = "core"
-        cm["description"] = meta.get("description", "")
-        cm["exports"] = meta.get("exports", [])
+        # Preserve existing SHA if present
     
     # Remove core modules that no longer exist in remote
     for name in list(config["core_modules"].keys()):
@@ -252,35 +420,26 @@ def sync_modules_config(callback=None):
             config["modules"][name] = {
                 "status": "disabled",
                 "source": "remote",
-                "description": meta.get("description", ""),
-                "dependencies": meta.get("dependencies", [])
+                "sha": None
             }
         else:
-            # Update metadata but keep user's status
-            config["modules"][name]["description"] = meta.get("description", "")
-            config["modules"][name]["dependencies"] = meta.get("dependencies", [])
+            # Ensure source is correct, keep user's status
+            config["modules"][name]["source"] = "remote"
     
-    # Mark modules that were removed from remote
+    # Mark modules that were removed from remote as orphaned
     for name in list(config["modules"].keys()):
-        if name not in default_remote and config["modules"][name].get("source") == "remote":
+        if name.startswith("core/"):
+            # Remove old duplicate core entries
+            del config["modules"][name]
+        elif name not in default_remote and config["modules"][name].get("source") == "remote":
             config["modules"][name]["source"] = "orphaned"
             
-    # Verify local integrity of enabled modules (Removed to allow auto-restore)
-    # for name, state in config["modules"].items():
-    #     if state.get("status") != "disabled":
-    #         mod_path = MODULES_DIR / name
-    #         if not mod_path.exists() or not (mod_path / "metadata.json").exists():
-    #             state["status"] = "disabled"
-
-    
     # Discover and sync local modules
     local_discovered = discover_local_modules(set(default_remote.keys()))
     for name, meta in local_discovered.items():
         if name not in config["local_modules"]:
             config["local_modules"][name] = {
-                "status": "qualified",
-                "source": "local",
-                "description": meta.get("description", "")
+                "status": "qualified"
             }
     
     # Remove local modules that no longer have valid metadata
@@ -373,6 +532,7 @@ def copy_module_from_cache(module_name, is_core=False, callback=None, current_lo
 def install_modules(module_names, callback=None, current_config=None):
     """
     Install a list of default modules from cache.
+    Automatically resolves and installs dependencies first (force-installed).
     Returns dict of {module_name: sha} for successfully installed modules.
     """
     # Ensure cache exists
@@ -381,9 +541,24 @@ def install_modules(module_names, callback=None, current_config=None):
             callback("Failed to access module cache")
         return {}
     
+    # Resolve all dependencies (topologically sorted - deps first)
+    all_modules, cycles = resolve_all_dependencies(module_names, include_requested=True)
+    
+    # Log any cycles detected
+    for cycle in cycles:
+        if callback:
+            callback(f"Warning: dependency cycle detected: {' -> '.join(cycle)}")
+        else:
+            print(f"[Warning] Dependency cycle detected: {' -> '.join(cycle)}")
+    
+    # Report if additional dependencies were added
+    deps_added = set(all_modules) - set(module_names)
+    if deps_added and callback:
+        callback(f"Installing dependencies: {', '.join(deps_added)}")
+    
     installed = {}
-    total = len(module_names)
-    for i, name in enumerate(module_names, 1):
+    total = len(all_modules)
+    for i, name in enumerate(all_modules, 1):
         if callback:
             callback(f"Installing {name} ({i}/{total})...")
             

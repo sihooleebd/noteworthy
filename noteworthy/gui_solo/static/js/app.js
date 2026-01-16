@@ -2447,29 +2447,68 @@ const app = {
 
     renderModulesTab: async function (container) {
         const res = await fetch('/api/modules');
-        const modules = await res.json();
-        console.log("Modules data:", modules);
+        const data = await res.json();
+        console.log("Modules data:", data);
+
+        const { installed, remote, conflicts, updates_available } = data;
+
+        // Build conflict warning HTML
+        let conflictHtml = '';
+        if (conflicts && conflicts.length > 0) {
+            const conflictItems = conflicts.map(c =>
+                `<div class="conflict-item"><i data-lucide="alert-triangle"></i> ${c.message}</div>`
+            ).join('');
+            conflictHtml = `
+                <div class="warning-banner">
+                    <div class="warning-header"><i data-lucide="alert-circle"></i> Module Conflicts Detected</div>
+                    <div class="conflict-list">${conflictItems}</div>
+                </div>
+            `;
+        }
 
         container.innerHTML = `
+            ${conflictHtml}
             <div class="config-section">
-                <h3>Installed Modules</h3>
+                <div class="section-header">
+                    <h3>Installed Modules</h3>
+                    <button class="btn btn-secondary btn-sm" onclick="app.syncModules()">
+                        <i data-lucide="refresh-cw"></i> Sync
+                    </button>
+                </div>
                 <p>Modules extend Noteworthy with additional features</p>
                 <div id="modules-list"></div>
             </div>
+            <div class="config-section" id="remote-modules-section" style="display: ${Object.keys(remote || {}).length > 0 ? 'block' : 'none'}">
+                <h3>Available from Remote</h3>
+                <p>These modules can be installed from the repository</p>
+                <div id="remote-modules-list"></div>
+            </div>
         `;
 
+        // Render installed modules
         const list = document.getElementById('modules-list');
-        Object.entries(modules).forEach(([name, info]) => {
+        Object.entries(installed || {}).forEach(([name, info]) => {
             const cleanName = name.split('/').pop();
             const el = document.createElement('div');
             el.className = 'list-item module-item';
 
-            let actionHtml = '';
+            const hasUpdate = (updates_available || []).includes(name);
+
+            let configBtn = '';
             if (info.has_config) {
-                // Pass full name to configureModule
-                actionHtml = `
+                configBtn = `
                     <button onclick="app.configureModule('${name}')" class="icon-btn" title="Configure">
                         <i data-lucide="settings"></i>
+                    </button>
+                `;
+            }
+
+            // Update button inline with status
+            let updateBtn = '';
+            if (hasUpdate) {
+                updateBtn = `
+                    <button onclick="app.updateModule('${name}')" class="btn btn-accent btn-sm" title="Update to latest version">
+                        <i data-lucide="download"></i> Update
                     </button>
                 `;
             }
@@ -2477,17 +2516,135 @@ const app = {
             el.innerHTML = `
                 <div class="module-info">
                     <div class="module-name">${cleanName}</div>
+                    <div class="module-description">${info.description || ''}</div>
                     <div class="module-meta">
                         <span class="module-source">${info.source}</span>
                         <span class="module-status">${info.status.toUpperCase()}</span>
+                        ${updateBtn}
                     </div>
                 </div>
-                ${actionHtml}
+                ${configBtn}
             `;
             list.appendChild(el);
         });
 
+        // Render remote (available for install) modules
+        const remoteList = document.getElementById('remote-modules-list');
+        Object.entries(remote || {}).forEach(([name, info]) => {
+            const el = document.createElement('div');
+            el.className = 'list-item module-item remote-module';
+
+            el.innerHTML = `
+                <div class="module-info">
+                    <div class="module-name">${name}</div>
+                    <div class="module-description">${info.description || ''}</div>
+                    ${info.dependencies?.length ? `<div class="module-deps">Requires: ${info.dependencies.join(', ')}</div>` : ''}
+                </div>
+                <button onclick="app.installModule('${name}')" class="btn btn-primary btn-sm">
+                    <i data-lucide="download"></i> Install
+                </button>
+            `;
+            remoteList.appendChild(el);
+        });
+
         if (window.lucide) lucide.createIcons();
+    },
+
+    installModule: async function (name) {
+        const btn = event.target.closest('button');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader"></i> Installing...';
+            if (window.lucide) lucide.createIcons();
+        }
+
+        try {
+            const res = await fetch('/api/modules/install', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modules: [name] })
+            });
+            const result = await res.json();
+
+            if (result.success) {
+                this.showSaveStatus(`Installed: ${name}`);
+                // Refresh the modules tab using the correct container
+                const container = document.getElementById('config-content');
+                if (container) this.renderModulesTab(container);
+            } else {
+                alert('Install failed: ' + (result.error || 'Unknown error'));
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i data-lucide="download"></i> Install';
+                    if (window.lucide) lucide.createIcons();
+                }
+            }
+        } catch (e) {
+            alert('Install failed: ' + e.message);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="download"></i> Install';
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+    },
+
+    syncModules: async function () {
+        this.showSaveStatus('Syncing modules...');
+        try {
+            const res = await fetch('/api/modules/sync', { method: 'POST' });
+            const result = await res.json();
+
+            if (result.success) {
+                this.showSaveStatus(`Synced: ${result.modules_count} modules`);
+                // Refresh the modules tab using the correct container
+                const container = document.getElementById('config-content');
+                if (container) this.renderModulesTab(container);
+            } else {
+                this.showSaveStatus('Sync failed');
+            }
+        } catch (e) {
+            this.showSaveStatus('Sync failed');
+        }
+    },
+
+    updateModule: async function (name) {
+        const btn = event.target.closest('button');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader"></i> Updating...';
+            if (window.lucide) lucide.createIcons();
+        }
+
+        try {
+            // Use the install endpoint - it will update if already present
+            const res = await fetch('/api/modules/install', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modules: [name] })
+            });
+            const result = await res.json();
+
+            if (result.success) {
+                this.showSaveStatus(`Updated: ${name}`);
+                const container = document.getElementById('config-content');
+                if (container) this.renderModulesTab(container);
+            } else {
+                alert('Update failed: ' + (result.error || 'Unknown error'));
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i data-lucide="download"></i> Update';
+                    if (window.lucide) lucide.createIcons();
+                }
+            }
+        } catch (e) {
+            alert('Update failed: ' + e.message);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="download"></i> Update';
+                if (window.lucide) lucide.createIcons();
+            }
+        }
     },
 
     // ============================================================

@@ -87,6 +87,7 @@ The `config/` directory contains JSON and Typst configuration files.
 | `metadata.json`  | Title, authors, affiliation |
 | `constants.json` | Theme, display options      |
 | `hierarchy.json` | Chapter/page titles for TOC |
+| `modules.json`   | Module installation state   |
 | `preface.typ`    | Preface Typst content       |
 | `snippets.typ`   | Custom Typst definitions    |
 | `modules/*.json` | Per-module configuration    |
@@ -155,7 +156,9 @@ noteworthy/
 ├── core/
 │   ├── build.py          # Compilation logic
 │   ├── build_manager.py  # Parallel build orchestration
-│   └── deps.py           # Dependency checking
+│   ├── deps.py           # Dependency checking
+│   ├── pm.py             # Package manager for modules
+│   └── modules.py        # Module imports generation
 │
 ├── tui/
 │   ├── app.py        # TUI application

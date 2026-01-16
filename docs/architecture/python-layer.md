@@ -132,6 +132,54 @@ def check_dependencies():
     # Return missing dependencies
 ```
 
+### core/pm.py
+
+Package manager for modules:
+
+| Function                      | Purpose                                 |
+| ----------------------------- | --------------------------------------- |
+| `ensure_module_cache()`       | Clone/update modules repo cache         |
+| `get_module_sha_from_cache()` | Get git tree SHA for a module           |
+| `check_module_updates()`      | Compare local vs remote SHAs            |
+| `resolve_all_dependencies()`  | DFS with cycle detection                |
+| `get_required_dependencies()` | Force-required dependencies             |
+| `install_modules()`           | Install with auto-dependency resolution |
+| `normalize_config()`          | Enforce schema on save                  |
+| `sync_modules_config()`       | Sync with remote + local filesystem     |
+
+#### Dependency Resolution
+
+Uses DFS with cycle detection:
+
+```python
+def resolve_all_dependencies(module_names, include_requested=True):
+    """
+    Returns topologically sorted list (deps first).
+    Cycles are detected and logged but don't prevent installation.
+    """
+    visited = set()
+    in_stack = set()  # For cycle detection
+    result = []
+    
+    def dfs(module, path):
+        if module in in_stack:
+            # Cycle detected
+            return
+        # ... traverse dependencies
+    
+    return ordered, cycles
+```
+
+#### Config Normalization
+
+Strips runtime metadata, enforces unified schema:
+
+```python
+def normalize_config(config):
+    # Only keeps: status, source, sha
+    # Removes: version, description, dependencies, exports
+```
+
 ---
 
 ## TUI Module

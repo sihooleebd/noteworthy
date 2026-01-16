@@ -14,13 +14,16 @@ CORE_MODULES = {'block', 'cover'}
 
 
 def get_available_modules():
-    """Scan local modules and fetch remote modules from GitHub."""
-    from ...core.pm import fetch_index
+    """Scan local modules and fetch remote modules from GitHub cache."""
+    from ...core.pm import ensure_module_cache, discover_modules_from_cache
     
     modules = {}
     module_dir = Path("templates/module")
     
-    # First, scan local modules
+    # First, ensure the module cache is up to date
+    ensure_module_cache()
+    
+    # Scan local modules (already installed)
     if module_dir.exists():
         for d in sorted(module_dir.iterdir()):
             if d.is_dir() and not d.name.startswith('.') and d.name != 'core':
@@ -49,10 +52,10 @@ def get_available_modules():
                         "source": "local"
                     }
     
-    # Then fetch remote modules and merge (remote fills in missing)
+    # Fetch remote modules from cache and merge (remote fills in missing)
     try:
-        remote = fetch_index()
-        for name, data in remote.items():
+        _, remote_modules = discover_modules_from_cache()
+        for name, data in remote_modules.items():
             # Skip core modules - they're always enabled
             if name in CORE_MODULES:
                 continue
@@ -64,7 +67,7 @@ def get_available_modules():
                     "source": "remote"
                 }
     except:
-        pass  # Offline
+        pass  # Offline or cache not available
     
     return sorted(modules.values(), key=lambda m: m['name'])
 
@@ -74,7 +77,15 @@ class InitWizard:
 
     def __init__(self, scr):
         self.scr = scr
+        
+        # Ensure schemes folder is restored before extracting themes
+        from ...core.templates import restore_templates
+        restore_templates(scr)
+        
         themes = extract_themes()
+        # Fallback default themes if schemes folder doesn't exist yet
+        if not themes:
+            themes = ['rose-pine', 'rose-pine-moon', 'rose-pine-dawn', 'catppuccin-mocha', 'gruvbox-dark']
         self.config = {
             'title': '', 'subtitle': '', 'authors': [], 'affiliation': '',
             'show-solution': True, 'chapter-name': 'Chapter', 'subchap-name': 'Section',
@@ -296,20 +307,91 @@ class InitWizard:
                     self._enable_dependencies(dep)  # Recursive
                 break
 
-    def _save_module_config(self):
-        """Save selected modules to config."""
-        modules = {}
+    def _show_progress(self, message):
+        """Display a progress message on screen."""
+        h, w = self.scr.getmaxyx()
+        self.scr.clear()
+        
+        y = TOP_PAD
+        for i, line in enumerate(LOGO[:min(len(LOGO), 6)]):
+            TUI.safe_addstr(self.scr, y + i, LEFT_PAD, line, curses.color_pair(1) | curses.A_BOLD)
+        
+        y += len(LOGO[:6]) + 2
+        TUI.safe_addstr(self.scr, y, LEFT_PAD, 'Installing Modules...', curses.color_pair(1) | curses.A_BOLD)
+        y += 2
+        TUI.safe_addstr(self.scr, y, LEFT_PAD, message, curses.color_pair(4))
+        self.scr.refresh()
+
+    def _install_and_save_modules(self):
+        """Install selected modules and save config."""
+        from ...core.pm import (
+            install_modules, install_core_modules_with_sha, 
+            load_full_config, save_full_config, get_module_sha_from_cache
+        )
+        from datetime import datetime
+        
+        # Show initial progress
+        self._show_progress("Preparing installation...")
+        
+        # Get currently selected remote modules to install
+        remote_to_install = []
+        for mod in self.available_modules:
+            name = mod['name']
+            if self.selected_modules.get(name, False) and mod.get('source') == 'remote':
+                remote_to_install.append(name)
+        
+        # Install core modules first
+        self._show_progress("Installing core modules...")
+        core_shas = install_core_modules_with_sha(callback=lambda msg: self._show_progress(msg))
+        
+        # Install selected remote modules
+        installed_shas = {}
+        if remote_to_install:
+            self._show_progress(f"Installing {len(remote_to_install)} modules...")
+            installed_shas = install_modules(
+                remote_to_install, 
+                callback=lambda msg: self._show_progress(msg)
+            )
+        
+        # Build and save config
+        self._show_progress("Saving configuration...")
+        
+        config = load_full_config()
+        
+        # Update core modules
+        config["core_modules"] = {}
+        for name, sha in core_shas.items():
+            config["core_modules"][name] = {
+                "status": "global",
+                "source": "core",
+                "sha": sha
+            }
+        
+        # Update default modules
+        config["modules"] = {}
         for mod in self.available_modules:
             name = mod['name']
             source = mod.get('source', 'local')
-            if self.selected_modules.get(name, False):
-                modules[name] = {"status": "global", "source": source}
+            is_selected = self.selected_modules.get(name, False)
+            
+            if is_selected:
+                entry = {"status": "global", "source": source}
+                # Add SHA if we installed it
+                if name in installed_shas:
+                    entry["sha"] = installed_shas[name]
+                elif source == 'local':
+                    # For local modules, get SHA if available
+                    sha = get_module_sha_from_cache(name, is_core=False)
+                    if sha:
+                        entry["sha"] = sha
+                config["modules"][name] = entry
             else:
-                modules[name] = {"status": "disabled", "source": source}
+                config["modules"][name] = {"status": "disabled", "source": source}
         
-        MODULES_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        config = {"modules": modules, "meta": {}}
-        MODULES_CONFIG_FILE.write_text(json.dumps(config, indent=4))
+        # Update meta
+        config["meta"]["last_sync"] = datetime.now().isoformat()
+        
+        save_full_config(config)
 
     def run(self):
         # Welcome screen
@@ -371,11 +453,11 @@ class InitWizard:
             elif k in (ord('\n'), 10, curses.KEY_ENTER):
                 break
         
-        # Save everything
+        # Save everything and install modules
         try:
             METADATA_FILE.parent.mkdir(parents=True, exist_ok=True)
             save_config(self.config)
-            self._save_module_config()
+            self._install_and_save_modules()
             return True
         except:
             return None

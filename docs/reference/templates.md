@@ -109,12 +109,33 @@ Each module follows a standard structure:
 ```
 module/<name>/
 ├── mod.typ              # Public API
+├── metadata.json        # Module info (required)
 ├── src/
 │   ├── impl.typ         # Implementation
 │   └── helpers.typ      # Internal helpers
 ├── blueprint.json       # Configuration schema (optional)
 └── examples.typ         # Usage examples
 ```
+
+### metadata.json (Required)
+
+Defines module identity and dependencies:
+
+```json
+{
+  "name": "mymodule",
+  "description": "Short description of the module",
+  "dependencies": ["shape"],
+  "exports": ["myfunction", "myother"]
+}
+```
+
+| Field          | Required | Description                             |
+| -------------- | -------- | --------------------------------------- |
+| `name`         | ✅        | Module identifier (matches folder name) |
+| `description`  | ✅        | Human-readable description              |
+| `dependencies` | ❌        | Required modules (auto-installed)       |
+| `exports`      | ❌        | List of exported symbols                |
 
 ### mod.typ (Public API)
 

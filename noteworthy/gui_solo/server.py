@@ -782,32 +782,212 @@ def get_tinymist_status():
 
 @app.get("/api/modules")
 def get_modules():
-    """Get installed modules and their status."""
-    modules = {}
+    """
+    Get comprehensive module status including:
+    - Installed modules (local + core)
+    - Remote modules available for installation
+    - Config/folder conflicts
+    - Update availability
+    """
+    from ..core.pm import (
+        ensure_module_cache, discover_modules_from_cache, 
+        load_full_config, check_module_updates
+    )
+    
     modules_dir = BASE_DIR / "templates/module"
+    
+    # Result structure
+    result = {
+        "installed": {},      # Modules on disk
+        "remote": {},         # Available from remote, not installed
+        "conflicts": [],      # Config/folder mismatches
+        "updates_available": []  # Modules with updates
+    }
+    
+    # 1. Scan installed modules from disk
+    installed_on_disk = set()
     if modules_dir.exists():
         for item in modules_dir.iterdir():
-            if item.is_dir() and not item.name.startswith('.'):
+            if item.is_dir() and not item.name.startswith('.') and item.name != 'core':
+                installed_on_disk.add(item.name)
                 blueprint_path = item / "blueprint.json"
-                modules[item.name] = {
+                meta_path = item / "metadata.json"
+                description = ""
+                if meta_path.exists():
+                    try:
+                        description = json.loads(meta_path.read_text()).get("description", "")
+                    except:
+                        pass
+                result["installed"][item.name] = {
                     "source": "local", 
                     "status": "installed",
+                    "description": description,
                     "has_config": blueprint_path.exists()
                 }
         
+        # Core modules
         core_dir = modules_dir / "core"
         if core_dir.exists():
             for item in core_dir.iterdir():
                 if item.is_dir():
                     name = f"core/{item.name}"
+                    installed_on_disk.add(name)
                     blueprint_path = item / "blueprint.json"
-                    modules[name] = {
+                    meta_path = item / "metadata.json"
+                    description = ""
+                    if meta_path.exists():
+                        try:
+                            description = json.loads(meta_path.read_text()).get("description", "")
+                        except:
+                            pass
+                    result["installed"][name] = {
                         "source": "core", 
                         "status": "installed",
+                        "description": description,
                         "has_config": blueprint_path.exists()
                     }
     
-    return modules
+    # 2. Load modules.json config
+    config = load_full_config()
+    config_modules = set(config.get("modules", {}).keys())
+    config_core = set(f"core/{k}" for k in config.get("core_modules", {}).keys())
+    all_in_config = config_modules | config_core
+    
+    # 3. Check for conflicts
+    # In config but not on disk (missing files)
+    for name in config_modules:
+        if name not in installed_on_disk:
+            status = config.get("modules", {}).get(name, {}).get("status", "disabled")
+            if status != "disabled":
+                result["conflicts"].append({
+                    "type": "missing_folder",
+                    "module": name,
+                    "message": f"'{name}' is enabled in config but missing from disk"
+                })
+    
+    # On disk but not in config (orphaned modules)
+    for name in installed_on_disk:
+        if not name.startswith("core/") and name not in config_modules:
+            result["conflicts"].append({
+                "type": "missing_config",
+                "module": name,
+                "message": f"'{name}' exists on disk but not in modules.json"
+            })
+    
+    # 4. Fetch remote modules and find ones not installed
+    try:
+        ensure_module_cache()
+        core_remote, default_remote = discover_modules_from_cache()
+        
+        for name, meta in default_remote.items():
+            if name not in installed_on_disk:
+                result["remote"][name] = {
+                    "description": meta.get("description", ""),
+                    "dependencies": meta.get("dependencies", [])
+                }
+        
+        # 5. Check for updates
+        outdated = check_module_updates(config)
+        result["updates_available"] = list(outdated)
+        
+    except Exception as e:
+        # Offline or cache not available
+        pass
+    
+    return result
+
+
+@app.post("/api/modules/install")
+def install_module(data: dict = Body(...)):
+    """Install or update one or more modules from remote repository."""
+    from ..core.pm import (
+        ensure_module_cache, install_modules, install_core_modules_with_sha,
+        load_full_config, save_full_config, copy_module_from_cache,
+        get_module_sha_from_cache
+    )
+    from ..core.modules import generate_imports_file
+    
+    module_names = data.get("modules", [])
+    if not module_names:
+        return {"success": False, "error": "No modules specified"}
+    
+    try:
+        # Ensure cache is ready
+        if not ensure_module_cache():
+            return {"success": False, "error": "Could not access module repository"}
+        
+        # Load current config
+        config = load_full_config()
+        
+        # Separate core modules from regular modules
+        core_to_update = []
+        regular_to_install = []
+        
+        for name in module_names:
+            if name.startswith("core/"):
+                # Extract core module name (e.g., "core/block" -> "block")
+                core_to_update.append(name.replace("core/", ""))
+            else:
+                regular_to_install.append(name)
+        
+        installed = {}
+        
+        # Handle core modules
+        for core_name in core_to_update:
+            # Copy from cache with SHA tracking
+            copy_module_from_cache(core_name, is_core=True, 
+                                   current_local_sha=config.get("core_modules", {}).get(core_name, {}).get("sha"))
+            sha = get_module_sha_from_cache(core_name, is_core=True)
+            if sha:
+                if "core_modules" not in config:
+                    config["core_modules"] = {}
+                if core_name not in config["core_modules"]:
+                    config["core_modules"][core_name] = {}
+                config["core_modules"][core_name]["status"] = "global"
+                config["core_modules"][core_name]["source"] = "core"
+                config["core_modules"][core_name]["sha"] = sha
+                installed[f"core/{core_name}"] = sha
+        
+        # Handle regular modules
+        if regular_to_install:
+            regular_installed = install_modules(regular_to_install, current_config=config)
+            for name, sha in regular_installed.items():
+                if "modules" not in config:
+                    config["modules"] = {}
+                if name not in config["modules"]:
+                    config["modules"][name] = {}
+                config["modules"][name]["status"] = "qualified"
+                config["modules"][name]["source"] = "remote"
+                config["modules"][name]["sha"] = sha
+                installed[name] = sha
+        
+        save_full_config(config)
+        generate_imports_file()
+        
+        return {"success": True, "installed": list(installed.keys())}
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/modules/sync")
+def sync_modules():
+    """Re-sync with remote repository to discover new modules and updates."""
+    from ..core.pm import sync_modules_config, check_module_updates
+    
+    try:
+        config = sync_modules_config()
+        outdated = check_module_updates(config)
+        
+        return {
+            "success": True, 
+            "modules_count": len(config.get("modules", {})),
+            "updates_available": list(outdated)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.get("/api/modules/{name:path}/config")
 def get_module_config(name: str):

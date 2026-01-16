@@ -1047,6 +1047,16 @@ select {
     border-color: var(--text-secondary);
 }
 
+.btn-accent {
+    background: var(--accent);
+    color: #000;
+    font-weight: 600;
+}
+
+.btn-accent:hover {
+    background: var(--accent-light);
+}
+
 .btn-danger {
     background: var(--danger);
     color: white;
@@ -2024,6 +2034,95 @@ select option {
     padding: 2px 6px;
     border-radius: 4px;
     font-weight: 600;
+}
+
+/* Warning Banner for Conflicts */
+.warning-banner {
+    background: rgba(255, 193, 7, 0.15);
+    border: 1px solid rgba(255, 193, 7, 0.4);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.warning-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #ffc107;
+    margin-bottom: 12px;
+}
+
+.warning-header svg {
+    width: 18px;
+    height: 18px;
+}
+
+.conflict-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.conflict-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.conflict-item svg {
+    width: 14px;
+    height: 14px;
+    color: rgba(255, 193, 7, 0.8);
+    flex-shrink: 0;
+}
+
+/* Section Header with Action Button */
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.section-header h3 {
+    margin: 0;
+}
+
+/* Module Actions Container */
+.module-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* Module Description */
+.module-description {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* Module Dependencies */
+.module-deps {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 4px;
+}
+
+/* Remote Module Styling */
+.remote-module {
+    border-style: dashed;
+    background: transparent;
+}
+
+.remote-module .module-name {
+    color: var(--text-secondary);
 }
 
 /* ============================================
