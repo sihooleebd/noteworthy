@@ -296,8 +296,8 @@ def save_file(data: dict = Body(...)):
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding='utf-8')
     
-    # Trigger preview update after save
-    preview_manager.start_watch(path)
+    # Preview update is handled by typst watch via file system events
+    # No need to manual trigger start_watch which restarts process if ref counting is off
     
     return {"success": True}
 
