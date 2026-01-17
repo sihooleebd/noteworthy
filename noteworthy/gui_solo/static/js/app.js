@@ -702,6 +702,7 @@ const app = {
             monaco.languages.register({ id: 'typst' });
 
             // Language configuration for brackets and auto-closing
+            // Note: $ is handled by custom onDidType handler, not Monaco's autoClosingPairs
             monaco.languages.setLanguageConfiguration('typst', {
                 brackets: [
                     ['{', '}'],
@@ -714,16 +715,16 @@ const app = {
                     { open: '[', close: ']' },
                     { open: '(', close: ')' },
                     { open: '"', close: '"', notIn: ['string'] },
-                    { open: "'", close: "'", notIn: ['string'] },
-                    { open: '$', close: '$', notIn: ['string.math'] }
+                    { open: "'", close: "'", notIn: ['string'] }
+                    // $ handled by custom onDidType handler
                 ],
                 surroundingPairs: [
                     { open: '{', close: '}' },
                     { open: '[', close: ']' },
                     { open: '(', close: ')' },
                     { open: '"', close: '"' },
-                    { open: "'", close: "'" },
-                    { open: '$', close: '$' }
+                    { open: "'", close: "'" }
+                    // $ handled by custom onDidType handler
                 ]
             });
 
@@ -912,6 +913,34 @@ const app = {
                     }
                 }
 
+                // ---- BACKSPACE: Delete entire $$ or $ $ when cursor is between ----
+                if (e.keyCode === monaco.KeyCode.Backspace && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+                    const col = position.column;
+                    // lineContent indices are 0-based, col is 1-based
+                    // lineContent[col - 2] is char before cursor, lineContent[col - 1] is char at/after cursor
+
+                    // Pattern 1: $|$ (cursor between two $)
+                    if (col >= 2 && lineContent[col - 2] === '$' && lineContent[col - 1] === '$') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        // Delete both $ chars
+                        const range = new monaco.Range(position.lineNumber, col - 1, position.lineNumber, col + 1);
+                        this.state.editor.executeEdits('', [{ range, text: '' }]);
+                        return;
+                    }
+
+                    // Pattern 2: $ |CURSOR| $ (cursor between two spaces, surrounded by $)
+                    if (col >= 3 && lineContent[col - 3] === '$' && lineContent[col - 2] === ' ' &&
+                        lineContent[col - 1] === ' ' && lineContent[col] === '$') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        // Delete the entire $ ... $ (5 chars: $ space space $)
+                        const range = new monaco.Range(position.lineNumber, col - 2, position.lineNumber, col + 2);
+                        this.state.editor.executeEdits('', [{ range, text: '' }]);
+                        return;
+                    }
+                }
+
                 // ---- TAB / SHIFT+TAB: List indentation ----
                 if (e.keyCode === monaco.KeyCode.Tab) {
                     const isBulletOrNumber = /^(\s*)([-*+]|\d+\.)\s/.test(lineContent);
@@ -950,51 +979,48 @@ const app = {
                 if (!model || !position) return;
 
                 // When user types $, handle auto-pairing and step-over
+                // Monaco doesn't handle same-character pairs like $$ well, so we do it manually
                 if (text === '$') {
                     const lineContent = model.getLineContent(position.lineNumber);
                     // position.column is AFTER the $ we just typed
                     const charAfter = lineContent[position.column - 1] || '';  // char at cursor (0-indexed)
-                    const charBefore = position.column > 2 ? lineContent[position.column - 3] : '';  // char before the $
+                    const charBefore = position.column > 2 ? lineContent[position.column - 3] : '';  // char before the typed $
 
-                    // Step-over: if the char after the typed $ is already $, we're closing a math expression
-                    // Delete the $ we just typed and move cursor past the existing $
+                    // Step-over: if the char right after is already $, move past it
+                    // This happens when cursor is at: content$|$ and user types $
                     if (charAfter === '$') {
-                        // Delete the $ we just typed (it's at position.column - 1)
+                        // Delete the $ we just typed and move cursor past the existing $
                         this.state.editor.executeEdits('', [{
                             range: new monaco.Range(position.lineNumber, position.column - 1, position.lineNumber, position.column),
                             text: ''
                         }]);
-                        // Cursor is now at the position of the existing $, move past it
                         this.state.editor.setPosition({
                             lineNumber: position.lineNumber,
-                            column: position.column  // Stay at same column (which is now past the $)
+                            column: position.column  // After deleting, this puts us past the $
                         });
                         return;
                     }
 
                     // Step-over with space: if char after is space and char after that is $
                     // Pattern: content$| $ where | is cursor after typing $
-                    const charAfter2 = lineContent[position.column] || '';  // second char after typed $
+                    const charAfter2 = lineContent[position.column] || '';
                     if (charAfter === ' ' && charAfter2 === '$') {
                         // Delete the $ we just typed and move cursor past the space and $
                         this.state.editor.executeEdits('', [{
                             range: new monaco.Range(position.lineNumber, position.column - 1, position.lineNumber, position.column),
                             text: ''
                         }]);
-                        // Move cursor past the space and $
                         this.state.editor.setPosition({
                             lineNumber: position.lineNumber,
-                            column: position.column + 1  // Past the space and $ 
+                            column: position.column + 1  // Past the space and $
                         });
                         return;
                     }
 
-                    // Also handle: user typed "$content$" pattern - if char before is not $, 
-                    // but we're effectively completing an expression (char 2 before is $)
-                    // Don't auto-complete if there's already a $ right before (user typed $$)
+                    // Don't auto-pair if char before the typed $ is also $ (user typed $$)
                     if (charBefore === '$') return;
 
-                    // Insert another $ after cursor for auto-pairing
+                    // Auto-pair: insert closing $ after cursor
                     this.state.editor.executeEdits('', [{
                         range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
                         text: '$'
