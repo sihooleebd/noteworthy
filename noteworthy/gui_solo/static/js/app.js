@@ -1416,11 +1416,17 @@ const app = {
 
         const path = `${parentDir}/${filename}`;
 
+        // For .typ files, add templater import
+        let initialContent = '';
+        if (filename.endsWith('.typ')) {
+            initialContent = '#import "../../templates/templater.typ": *\n\n';
+        }
+
         try {
             const res = await fetch('/api/file', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path, content: '' })
+                body: JSON.stringify({ path, content: initialContent })
             });
 
             if (res.ok) {
