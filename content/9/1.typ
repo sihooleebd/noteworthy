@@ -6,11 +6,11 @@ Visualizing hierarchical data structures.
 
 
 #definition("Structuring Trees")[
-  Use `tree-node(value, children: (...))` to define the hierarchy recursively.
+  Use `trees.tree-node(value, children: (...))` to define the hierarchy recursively.
   ```typst
-  let root = tree-node("Root", children: (
-    tree-node("Child 1"),
-    tree-node("Child 2"),
+  let root = trees.tree-node("Root", children: (
+    trees.tree-node("Child 1"),
+    trees.tree-node("Child 2"),
   ))
   ```
 ]
@@ -22,23 +22,23 @@ Standard top-down tree visualization, commonly used for binary trees or organiza
 #definition("Vertical Tree")[
   Set `direction: "vertical"` to arrange nodes from top to bottom.
   ```typst
-  tree(root, direction: "vertical")
+  trees.tree(root, direction: "vertical")
   ```
 ]
 
-#let my-tree-node = tree-node("Root", children: (
-  tree-node("A", children: (
-    tree-node("A1"),
-    tree-node("A2"),
+#let my-tree-node = trees.tree-node("Root", children: (
+  trees.tree-node("A", children: (
+    trees.tree-node("A1"),
+    trees.tree-node("A2"),
   )),
-  tree-node("B", children: (
-    tree-node("B1"),
+  trees.tree-node("B", children: (
+    trees.tree-node("B1"),
   )),
-  tree-node("C"),
+  trees.tree-node("C"),
 ))
 
-#blank-canvas(
-  tree(
+#canvas.blank-canvas(
+  trees.tree(
     my-tree-node,
     direction: "vertical",
     highlight-items: ("A",),
@@ -53,24 +53,24 @@ Left-to-right tree visualization, useful for file systems or taxonomies.
 #definition("Horizontal Tree")[
   Set `direction: "horizontal"` to arrange nodes from left to right.
   ```typst
-  tree(root, direction: "horizontal")
+  trees.tree(root, direction: "horizontal")
   ```
 ]
 
-#let fs-tree = tree-node("/", children: (
-  tree-node("bin", children: (
-    tree-node("ls"),
-    tree-node("pwd"),
+#let fs-tree = trees.tree-node("/", children: (
+  trees.tree-node("bin", children: (
+    trees.tree-node("ls"),
+    trees.tree-node("pwd"),
   )),
-  tree-node("usr", children: (
-    tree-node("local"),
-    tree-node("lib"),
+  trees.tree-node("usr", children: (
+    trees.tree-node("local"),
+    trees.tree-node("lib"),
   )),
-  tree-node("home"),
+  trees.tree-node("home"),
 ))
 
-#blank-canvas(
-  tree(
+#canvas.blank-canvas(
+  trees.tree(
     fs-tree,
     direction: "horizontal",
     highlight-path: ("/", "usr", "local"),
@@ -84,25 +84,25 @@ You can highlight specific paths to emphasize a traversal or a lineage.
 #definition("Path Highlighting")[
   Provide a list of node names to `highlight-path`. The visualizer will highlight the nodes and the edges connecting them.
   ```typst
-  tree(
+  trees.tree(
     root,
     highlight-path: ("Root", "Child", "Grandchild")
   )
   ```
 ]
 
-#let path-tree = tree-node("Start", children: (
-  tree-node("Step 1", children: (
-    tree-node("Option A"),
-    tree-node("Option B", children: (
-      tree-node("Goal"),
+#let path-tree = trees.tree-node("Start", children: (
+  trees.tree-node("Step 1", children: (
+    trees.tree-node("Option A"),
+    trees.tree-node("Option B", children: (
+      trees.tree-node("Goal"),
     )),
   )),
-  tree-node("Step 2"),
+  trees.tree-node("Step 2"),
 ))
 
-#blank-canvas(
-  tree(
+#canvas.blank-canvas(
+  trees.tree(
     path-tree,
     direction: "vertical",
     highlight-path: ("Start", "Step 1", "Option B", "Goal"),

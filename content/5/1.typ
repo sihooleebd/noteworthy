@@ -16,7 +16,7 @@ The Data module provides table rendering with theme-aware styling.
   ```
 ]
 
-#table-plot(
+#data.table-plot(
   headers: ("Variable", "Mean", "Std Dev"),
   data: (
     ("Height", "175 cm", "8.5"),
@@ -39,7 +39,7 @@ The Data module provides table rendering with theme-aware styling.
   ```
 ]
 
-#value-table(
+#data.value-table(
   variable: $x$,
   func: $x^2$,
   values: (-2, -1, 0, 1, 2),
@@ -58,7 +58,7 @@ The Data module provides table rendering with theme-aware styling.
   ```
 ]
 
-#grid-table(
+#data.grid-table(
   data: (
     (1, 2, 3),
     (4, 5, 6),
@@ -71,7 +71,7 @@ The Data module provides table rendering with theme-aware styling.
 
 For inline or small tables:
 
-#compact-table(
+#data.compact-table(
   headers: ("n", "n!"),
   data: ((0, 1), (1, 1), (2, 2), (3, 6), (4, 24)),
 )

@@ -16,21 +16,21 @@ Visualize 3D geometry and vectors.
   ```
 ]
 
-#space-canvas(
+#canvas.space-canvas(
   width: 10cm,
-  point(2, 1, z: 3, label: "P"),
+  shape.point(2, 1, z: 3, label: "P"),
 )
 
 == 3D Points
 
 Use `point()` with z coordinate for 3D points:
 
-#space-canvas(
+#canvas.space-canvas(
   width: 10cm,
-  point(0, 0, z: 0, label: "O"),
-  point(3, 0, z: 0, label: "A"),
-  point(0, 3, z: 0, label: "B"),
-  point(0, 0, z: 3, label: "C"),
+  shape.point(0, 0, z: 0, label: "O"),
+  shape.point(3, 0, z: 0, label: "A"),
+  shape.point(0, 3, z: 0, label: "B"),
+  shape.point(0, 0, z: 3, label: "C"),
 )
 
 == 3D Vectors
@@ -44,10 +44,10 @@ Use `vec()` with 3 components for 3D vectors:
   ```
 ]
 
-#space-canvas(
+#canvas.space-canvas(
   width: 10cm,
-  vec((2, 1, 2), label: $arrow(v)$),
-  vec((1, 3, 1), label: $arrow(w)$),
+  graph.vec((2, 1, 2), label: $arrow(v)$),
+  graph.vec((1, 3, 1), label: $arrow(w)$),
 )
 
 == Coordinate Axes
