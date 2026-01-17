@@ -700,6 +700,33 @@ const app = {
 
             // Register Typst language for .typ files
             monaco.languages.register({ id: 'typst' });
+
+            // Language configuration for brackets and auto-closing
+            monaco.languages.setLanguageConfiguration('typst', {
+                brackets: [
+                    ['{', '}'],
+                    ['[', ']'],
+                    ['(', ')'],
+                    ['$', '$']
+                ],
+                autoClosingPairs: [
+                    { open: '{', close: '}' },
+                    { open: '[', close: ']' },
+                    { open: '(', close: ')' },
+                    { open: '"', close: '"', notIn: ['string'] },
+                    { open: "'", close: "'", notIn: ['string'] },
+                    { open: '$', close: '$', notIn: ['string.math'] }
+                ],
+                surroundingPairs: [
+                    { open: '{', close: '}' },
+                    { open: '[', close: ']' },
+                    { open: '(', close: ')' },
+                    { open: '"', close: '"' },
+                    { open: "'", close: "'" },
+                    { open: '$', close: '$' }
+                ]
+            });
+
             monaco.languages.setMonarchTokensProvider('typst', {
                 defaultToken: '',
                 tokenPostfix: '.typst',
