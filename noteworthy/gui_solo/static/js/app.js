@@ -940,6 +940,23 @@ const app = {
                         return;
                     }
 
+                    // Step-over with space: if char after is space and char after that is $
+                    // Pattern: content$| $ where | is cursor after typing $
+                    const charAfter2 = lineContent[position.column] || '';  // second char after typed $
+                    if (charAfter === ' ' && charAfter2 === '$') {
+                        // Delete the $ we just typed and move cursor past the space and $
+                        this.state.editor.executeEdits('', [{
+                            range: new monaco.Range(position.lineNumber, position.column - 1, position.lineNumber, position.column),
+                            text: ''
+                        }]);
+                        // Move cursor past the space and $
+                        this.state.editor.setPosition({
+                            lineNumber: position.lineNumber,
+                            column: position.column + 1  // Past the space and $ 
+                        });
+                        return;
+                    }
+
                     // Also handle: user typed "$content$" pattern - if char before is not $, 
                     // but we're effectively completing an expression (char 2 before is $)
                     // Don't auto-complete if there's already a $ right before (user typed $$)
