@@ -3115,8 +3115,8 @@ const app = {
                 break;
 
             case 'preview':
-                // Preview updates
-                this.updatePreview(msg.updates);
+                // SVG preview updates - DISABLED, using tinymist only
+                // this.updatePreview(msg.updates);
                 break;
 
             case 'diagnostics':

@@ -108,3 +108,4 @@ You can highlight specific paths to emphasize a traversal or a lineage.
     highlight-path: ("Start", "Step 1", "Option B", "Goal"),
   ),
 )
+

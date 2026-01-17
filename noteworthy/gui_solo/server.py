@@ -35,16 +35,11 @@ _current_watched_file: str = None  # Track current file for cleanup on switch
 @app.on_event("startup")
 async def startup_event():
     """Initialize on startup."""
-    loop = asyncio.get_running_loop()
-    
-    def on_preview_bridge(updates, source_path):
-        """Bridge thread callback to asyncio loop."""
-        asyncio.run_coroutine_threadsafe(
-            broadcast_preview(updates, source_path),
-            loop
-        )
-            
-    preview_manager.add_callback(on_preview_bridge)
+    # SVG preview callback DISABLED - using tinymist only
+    # loop = asyncio.get_running_loop()
+    # def on_preview_bridge(updates, source_path):
+    #     asyncio.run_coroutine_threadsafe(broadcast_preview(updates, source_path), loop)
+    # preview_manager.add_callback(on_preview_bridge)
     
     # Stop any stale tinymist preview from previous session
     preview_manager.stop_full_preview()
@@ -174,17 +169,15 @@ async def doc_endpoint(websocket: WebSocket):
             msg = json.loads(data)
             
             if msg["type"] == "join":
-                # User joins a file - start watching for preview
+                # User joins a file - run diagnostics only (tinymist handles preview)
                 path = msg.get("path") or msg.get("file", "")
                 if path:
                     global _current_watched_file
                     _current_watched_file = path
                     
-                    # Start watching (will reuse existing watcher if already running)
-                    preview_manager.start_watch(path)
-                    
-                    # Cleanup old watchers but keep recent ones warm (LRU)
-                    preview_manager.cleanup_old_watchers(keep_paths=[path], max_watchers=3)
+                    # SVG preview watcher DISABLED - using tinymist only
+                    # preview_manager.start_watch(path)
+                    # preview_manager.cleanup_old_watchers(keep_paths=[path], max_watchers=3)
                     
                     # Run diagnostics in BACKGROUND - don't block preview!
                     asyncio.create_task(send_diagnostics_async(websocket, path))
@@ -749,12 +742,13 @@ def download_output():
         )
     return {"error": "No output file found"}
 
-@app.post("/api/watch")
-def start_watch(data: dict = Body(...)):
-    """Start watching a file for preview."""
-    path = data.get("path")
-    preview_manager.start_watch(path)
-    return {"success": True}
+# SVG preview watch endpoint DISABLED - using tinymist only
+# @app.post("/api/watch")
+# def start_watch(data: dict = Body(...)):
+#     """Start watching a file for preview."""
+#     path = data.get("path")
+#     preview_manager.start_watch(path)
+#     return {"success": True}
 
 # ============================================================
 # TINYMIST PREVIEW API (Synctex-like navigation)
