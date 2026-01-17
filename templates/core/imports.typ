@@ -7,7 +7,12 @@
 #import "../module/core/block/mod.typ": *
 #import "../module/core/cover/mod.typ": *
 
-// Optional Modules
+// Optional Modules (qualified imports)
 #import "../module/canvas/mod.typ" as canvas
+#import "../module/combi/mod.typ" as combi
+#import "../module/data/mod.typ" as data
+#import "../module/dsa/mod.typ" as dsa
+#import "../module/graph/mod.typ" as graph
 #import "../module/shape/mod.typ" as shape
 #import "../module/trees/mod.typ" as trees
+

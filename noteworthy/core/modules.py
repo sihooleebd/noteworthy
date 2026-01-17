@@ -10,7 +10,11 @@ IMPORTS_FILE = Path("templates/core/imports.typ")
 
 
 def generate_imports_file():
-    """Generates templates/core/imports.typ based on enabled modules."""
+    """Generates templates/core/imports.typ based on installed modules.
+    
+    All installed modules use qualified imports (e.g., #import "path" as name).
+    Core modules continue to use global imports.
+    """
     lines = []
     
     lines.append("// =====================================================")
@@ -19,7 +23,7 @@ def generate_imports_file():
     lines.append("// =====================================================")
     lines.append("")
     
-    # Always import core modules (from core/ directory)
+    # Always import core modules globally (from core/ directory)
     lines.append("// Core Modules (always enabled)")
     if CORE_DIR.exists():
         for core_mod in sorted(CORE_DIR.iterdir()):
@@ -29,26 +33,27 @@ def generate_imports_file():
                 lines.append(f'#import "{import_path}": *')
     lines.append("")
     
-    # Load full config with new structure
+    # Load full config
     config = {}
     if MODULES_CONFIG_FILE.exists():
         config = load_json_safe(MODULES_CONFIG_FILE)
     
-    # Get default modules
+    # Get modules from all sources
     modules = config.get("modules", {})
     local_modules = config.get("local_modules", {})
     
-    # Combine default and local modules
+    # Combine all optional modules
     all_optional = {}
     all_optional.update(modules)
     all_optional.update(local_modules)
     
-    lines.append("// Optional Modules")
+    # Import all installed modules as qualified
+    lines.append("// Optional Modules (qualified imports)")
     for name in sorted(all_optional.keys()):
         state = all_optional[name]
-        status = state.get("status", "disabled")
         
-        if status == "disabled":
+        # Only import if module has a sha (i.e., is installed)
+        if not state.get("sha"):
             continue
         
         # Verify module exists on disk
@@ -57,52 +62,29 @@ def generate_imports_file():
             continue
         
         import_path = f"../module/{name}/mod.typ"
-        
-        if status == "global":
-            lines.append(f'#import "{import_path}": *  // {name}')
-        elif status == "qualified":
-            lines.append(f'#import "{import_path}" as {name}')
+        lines.append(f'#import "{import_path}" as {name}')
     
+    lines.append("")
     IMPORTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     IMPORTS_FILE.write_text("\n".join(lines) + "\n")
 
 
+
 def get_module_conflicts(enabled_modules=None):
     """
-    Check for naming collisions between GLOBAL modules.
+    Check for naming collisions between GLOBAL modules (core modules only).
+    Since all optional modules now use qualified imports, only core modules
+    can have conflicts.
     Returns dict { "symbol_name": ["mod1", "mod2"] }
     """
-    config = {}
-    if MODULES_CONFIG_FILE.exists():
-        config = load_json_safe(MODULES_CONFIG_FILE)
-    
-    modules = config.get("modules", {})
-    local_modules = config.get("local_modules", {})
-    
     sym_map = {}
     
-    # Include core modules (always global)
+    # Only core modules are global, check them for conflicts
     all_modules = []
     if CORE_DIR.exists():
         for d in CORE_DIR.iterdir():
             if d.is_dir():
                 all_modules.append((d.name, d))
-    
-    # Add global default modules
-    for name, state in modules.items():
-        if state.get("status") != "global":
-            continue
-        mod_dir = MODULES_DIR / name
-        if mod_dir.exists():
-            all_modules.append((name, mod_dir))
-    
-    # Add global local modules
-    for name, state in local_modules.items():
-        if state.get("status") != "global":
-            continue
-        mod_dir = MODULES_DIR / name
-        if mod_dir.exists():
-            all_modules.append((name, mod_dir))
     
     for name, mod_dir in all_modules:
         meta_file = mod_dir / "metadata.json"

@@ -25,19 +25,19 @@ The Algo module provides visualizations for graph algorithms, pathfinding, and m
   - `highlight-nodes`: List of node names to highlight.
 ]
 
-#blank-canvas(length: 10cm, height: 6cm, {
+#canvas.blank-canvas(length: 10cm, height: 6cm, {
   // No positions specified - nodes will be auto-positioned on a triangle
   let nodes = (
-    graph-node("A"),
-    graph-node("B"),
-    graph-node("C"),
+    dsa.graph-node("A"),
+    dsa.graph-node("B"),
+    dsa.graph-node("C"),
   )
   let edges = (
-    graph-edge("A", "B", weight: 5, directed: true),
-    graph-edge("B", "C", weight: 3, directed: true),
-    graph-edge("C", "A", weight: 2, directed: true),
+    dsa.graph-edge("A", "B", weight: 5, directed: true),
+    dsa.graph-edge("B", "C", weight: 3, directed: true),
+    dsa.graph-edge("C", "A", weight: 2, directed: true),
   )
-  free-graph(nodes, edges, style: (label: "Simple Graph"))
+  dsa.free-graph(nodes, edges, style: (label: "Simple Graph"))
 })
 
 == Grid World
@@ -61,7 +61,7 @@ The Algo module provides visualizations for graph algorithms, pathfinding, and m
   - `path`: List of coordinates to highlight as the path.
 ]
 
-#blank-canvas(length: 6cm, height: 6cm, grid-world(
+#canvas.blank-canvas(length: 6cm, height: 6cm, dsa.grid-world(
   5,
   5,
   start: (0, 0),
@@ -89,7 +89,7 @@ The Algo module provides visualizations for graph algorithms, pathfinding, and m
   - `highlight-cells`: List of `(row, col)` tuples to highlight.
 ]
 
-#blank-canvas(length: 6cm, height: 6cm, adjacency-matrix(
+#canvas.blank-canvas(length: 6cm, height: 6cm, dsa.adjacency-matrix(
   ((0, 5), (none, 0)),
   labels: ("A", "B"),
   label: "Weights",

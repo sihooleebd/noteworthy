@@ -88,11 +88,11 @@ def check_module_updates(config):
     """
     outdated = set()
     
-    # Check default modules
+    # Check default modules - only those with a sha (installed)
     for name, state in config.get("modules", {}).items():
-        if state.get("status") == "disabled":
-            continue
         stored_sha = state.get("sha")
+        if not stored_sha:
+            continue  # Not installed
         current_sha = get_module_sha_from_cache(name, is_core=False)
         if current_sha and stored_sha != current_sha:
             outdated.add(name)
@@ -334,9 +334,8 @@ def normalize_config(config):
     Strips runtime metadata (description, dependencies, exports, version).
     
     Required fields per module:
-    - status: "disabled" | "qualified" | "global"
     - source: "local" | "remote" | "core"
-    - sha: string (for remote/core) or null
+    - sha: string (for installed modules) or null (not installed)
     """
     normalized = {
         "meta": config.get("meta", {}),
@@ -357,7 +356,6 @@ def normalize_config(config):
         if name in core_names:
             continue
         normalized["modules"][name] = {
-            "status": state.get("status", "disabled"),
             "source": state.get("source", "remote"),
             "sha": state.get("sha")
         }
@@ -365,7 +363,6 @@ def normalize_config(config):
     # Normalize core modules
     for name, state in config.get("core_modules", {}).items():
         normalized["core_modules"][name] = {
-            "status": state.get("status", "global"),
             "source": "core",
             "sha": state.get("sha")
         }
@@ -373,7 +370,7 @@ def normalize_config(config):
     # Normalize local modules (no sha needed)
     for name, state in config.get("local_modules", {}).items():
         normalized["local_modules"][name] = {
-            "status": state.get("status", "qualified")
+            "source": "local"
         }
     
     return normalized
@@ -397,14 +394,13 @@ def sync_modules_config(callback=None):
     # Load current config
     config = load_full_config()
     
-    # Sync core modules (always global, always enabled)
+    # Sync core modules (always enabled)
     for name, meta in core_remote.items():
         if name not in config["core_modules"]:
             config["core_modules"][name] = {}
         
         # Only save essential fields
         cm = config["core_modules"][name]
-        cm["status"] = "global"
         cm["source"] = "core"
         # Preserve existing SHA if present
     
@@ -416,14 +412,13 @@ def sync_modules_config(callback=None):
     # Sync default modules
     for name, meta in default_remote.items():
         if name not in config["modules"]:
-            # New module, default to disabled
+            # New module, not installed yet (no sha)
             config["modules"][name] = {
-                "status": "disabled",
                 "source": "remote",
                 "sha": None
             }
         else:
-            # Ensure source is correct, keep user's status
+            # Ensure source is correct
             config["modules"][name]["source"] = "remote"
     
     # Mark modules that were removed from remote as orphaned
@@ -439,7 +434,7 @@ def sync_modules_config(callback=None):
     for name, meta in local_discovered.items():
         if name not in config["local_modules"]:
             config["local_modules"][name] = {
-                "status": "qualified"
+                "source": "local"
             }
     
     # Remove local modules that no longer have valid metadata
@@ -707,27 +702,25 @@ def create_custom_module(name):
     
     # Add to config
     config = load_full_config()
-    config["local_modules"][name] = {"status": "qualified", "source": "local"}
+    config["local_modules"][name] = {"source": "local"}
     save_full_config(config)
     return True
 
 
 def get_all_enabled_modules():
-    """Get list of all enabled module names (core + default + local)."""
+    """Get list of all installed module names (core + default + local)."""
     config = load_full_config()
     enabled = []
     
     # Core modules are always enabled
     enabled.extend(config.get("core_modules", {}).keys())
     
-    # Enabled default modules
+    # Installed default modules (have sha)
     for name, state in config.get("modules", {}).items():
-        if state.get("status") != "disabled":
+        if state.get("sha"):
             enabled.append(name)
     
-    # Enabled local modules
-    for name, state in config.get("local_modules", {}).items():
-        if state.get("status") != "disabled":
-            enabled.append(name)
+    # Local modules are always enabled
+    enabled.extend(config.get("local_modules", {}).keys())
     
     return enabled

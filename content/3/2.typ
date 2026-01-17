@@ -13,21 +13,21 @@ The Graph module includes vector operations for 2D vector mathematics.
   ```
 ]
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  vec((3, 2), label: $arrow(v)$),
+  graph.vec((3, 2), label: $arrow(v)$),
 )
 
 == Vector from Point
 
 Vectors can start from any origin:
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  point(1, 1, label: "A", label-anchor: "south"),
-  vec((2, 1.5), origin: (1, 1), label: $arrow(v)$),
+  shape.point(1, 1, label: "A", label-anchor: "south"),
+  graph.vec((2, 1.5), origin: (1, 1), label: $arrow(v)$),
 )
 
 == Vector Addition
@@ -39,14 +39,14 @@ Vectors can start from any origin:
   ```
 ]
 
-#blank-canvas(
+#canvas.blank-canvas(
   x-tick: 1,
   y-tick: 1,
-  vec((3, 1), label: $arrow(a)$),
-  vec((1, 2), label: $arrow(b)$),
-  vec-add(
-    vec((3, 1), label: $arrow(a)$),
-    vec((1, 2), label: $arrow(b)$),
+  graph.vec((3, 1), label: $arrow(a)$),
+  graph.vec((1, 2), label: $arrow(b)$),
+  graph.vec-add(
+    graph.vec((3, 1), label: $arrow(a)$),
+    graph.vec((1, 2), label: $arrow(b)$),
     helplines: true,
   ),
 )
@@ -60,12 +60,12 @@ Vectors can start from any origin:
   ```
 ]
 
-#blank-canvas(
+#canvas.blank-canvas(
   x-tick: 1,
   y-tick: 1,
-  vec((4, 3)),
-  vec-components(
-    vec((4, 3)),
+  graph.vec((4, 3)),
+  graph.vec-components(
+    graph.vec((4, 3)),
     labels: ($v_x$, $v_y$),
     helplines: true,
   ),
@@ -80,13 +80,13 @@ Vectors can start from any origin:
   ```
 ]
 
-#blank-canvas(
+#canvas.blank-canvas(
   x-tick: 1,
   y-tick: 1,
-  vec((3, 4)),
-  vec-project(
-    vec((3, 4), label: $arrow(v)$),
-    onto: vec((5, 0), label: $arrow(w)$),
+  graph.vec((3, 4)),
+  graph.vec-project(
+    graph.vec((3, 4), label: $arrow(v)$),
+    onto: graph.vec((5, 0), label: $arrow(w)$),
     helplines: true,
   ),
 )

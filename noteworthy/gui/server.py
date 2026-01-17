@@ -126,6 +126,7 @@ def regenerate_modules_json():
     """Regenerate modules.json by scanning templates/module directory."""
     modules_dir = BASE_DIR / "templates/module"
     modules = {}
+    core_modules = {}
     
     if modules_dir.exists():
         for item in modules_dir.iterdir():
@@ -134,25 +135,27 @@ def regenerate_modules_json():
                     # Scan core modules
                     for core_item in item.iterdir():
                         if core_item.is_dir():
-                            modules[f"core/{core_item.name}"] = {
-                                "source": "local",
-                                "status": "installed"
+                            core_modules[core_item.name] = {
+                                "source": "core",
+                                "sha": None
                             }
                 else:
                     modules[item.name] = {
                         "source": "local",
-                        "status": "installed"
+                        "sha": None
                     }
     
     new_data = {
         "meta": {"recovered": True},
-        "modules": modules
+        "modules": modules,
+        "core_modules": core_modules,
+        "local_modules": {}
     }
     
     try:
         MODULES_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         MODULES_CONFIG_FILE.write_text(json.dumps(new_data, indent=4))
-        print(f"[Startup] Regenerated modules.json with {len(modules)} modules")
+        print(f"[Startup] Regenerated modules.json with {len(modules)} modules + {len(core_modules)} core modules")
     except Exception as e:
         print(f"[Startup] ERROR: Failed to regenerate modules.json: {e}")
 
@@ -746,7 +749,7 @@ def start_watch(data: dict = Body(...)):
 
 @app.get("/api/modules")
 def get_modules():
-    """Get installed modules and their status."""
+    """Get installed modules."""
     modules = {}
     modules_dir = BASE_DIR / "templates/module"
     if modules_dir.exists():
@@ -755,7 +758,7 @@ def get_modules():
                 blueprint_path = item / "blueprint.json"
                 modules[item.name] = {
                     "source": "local", 
-                    "status": "installed",
+                    "installed": True,
                     "has_config": blueprint_path.exists()
                 }
         
@@ -768,7 +771,7 @@ def get_modules():
                     blueprint_path = item / "blueprint.json"
                     modules[name] = {
                         "source": "core", 
-                        "status": "installed",
+                        "installed": True,
                         "has_config": blueprint_path.exists()
                     }
     

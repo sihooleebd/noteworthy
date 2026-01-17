@@ -362,7 +362,6 @@ class InitWizard:
         config["core_modules"] = {}
         for name, sha in core_shas.items():
             config["core_modules"][name] = {
-                "status": "global",
                 "source": "core",
                 "sha": sha
             }
@@ -375,7 +374,7 @@ class InitWizard:
             is_selected = self.selected_modules.get(name, False)
             
             if is_selected:
-                entry = {"status": "global", "source": source}
+                entry = {"source": source}
                 # Add SHA if we installed it
                 if name in installed_shas:
                     entry["sha"] = installed_shas[name]
@@ -386,7 +385,8 @@ class InitWizard:
                         entry["sha"] = sha
                 config["modules"][name] = entry
             else:
-                config["modules"][name] = {"status": "disabled", "source": source}
+                # Module not selected - no sha, just track source
+                config["modules"][name] = {"source": source, "sha": None}
         
         # Update meta
         config["meta"]["last_sync"] = datetime.now().isoformat()

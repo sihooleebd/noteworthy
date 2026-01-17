@@ -15,9 +15,6 @@ from ..config import BASE_DIR, RENDERER_FILE
 class PreviewManager:
     """Manages live preview compilation and WebSocket updates."""
     
-    # Fixed port for full preview (tinymist)
-    FULL_PREVIEW_PORT = 23126
-    
     def __init__(self):
         # Maps path -> {process, thread, ref_count, cache_dir}
         self.watchers = {}
@@ -28,6 +25,7 @@ class PreviewManager:
         self.full_preview_process = None
         self.full_preview_thread = None
         self.full_preview_running = False
+        self.full_preview_port = None  # Dynamic port for tinymist
         
         # Base cache directory
         self.base_cache_dir = BASE_DIR / "build" / ".preview_cache"
@@ -37,6 +35,19 @@ class PreviewManager:
             except:
                 pass
         self.base_cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    def _find_available_port(self, start_port: int = 23625, max_attempts: int = 100):
+        """Find an available port starting from start_port."""
+        import socket
+        for offset in range(max_attempts):
+            port = start_port + offset
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.bind(('127.0.0.1', port))
+                    return port
+            except OSError:
+                continue
+        return None
     
     def _find_tinymist(self):
         """Find tinymist binary."""
@@ -407,8 +418,21 @@ class PreviewManager:
             "--root", str(BASE_DIR),
             "--input", f"chapter-folders={json.dumps(chapter_folders)}",
             "--input", f"page-folders={json.dumps(page_folders)}",
-            "--no-open"
+            "--no-open",
         ]
+        
+        # Find an available port for this instance (data plane and control plane)
+        data_port = self._find_available_port(start_port=23625)
+        if data_port:
+            self.full_preview_port = data_port
+            control_port = self._find_available_port(start_port=data_port + 1)
+            cmd.extend(["--data-plane-host", f"127.0.0.1:{data_port}"])
+            if control_port:
+                cmd.extend(["--control-plane-host", f"127.0.0.1:{control_port}"])
+            print(f"[Preview] Using ports {data_port} (data) / {control_port} (control) for tinymist")
+        else:
+            print("[Preview] Warning: Could not find available port, using default")
+            self.full_preview_port = 23625  # Default tinymist port
         
         # Add target if we have one
         if target:
@@ -482,7 +506,7 @@ class PreviewManager:
             self.full_preview_process = None
     
     def get_full_preview_url(self):
-        """Get the URL for the full preview. Tinymist uses default port 23625."""
-        # tinymist preview defaults to port 23625
-        return f"http://127.0.0.1:23625"
+        """Get the URL for the full preview using the dynamically assigned port."""
+        port = self.full_preview_port or 23625  # Fall back to default if not set
+        return f"http://127.0.0.1:{port}"
 

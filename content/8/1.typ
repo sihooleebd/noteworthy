@@ -8,22 +8,22 @@ Visual representations for counting problems.
 
 Arrange items in a row:
 
-#blank-canvas(
-  linear-perm(permutation(("A", "B", "C", "D"), labels: ("1st", "2nd", "3rd", "4th"))),
+#canvas.blank-canvas(
+  combi.linear-perm(combi.permutation(("A", "B", "C", "D"), labels: ("1st", "2nd", "3rd", "4th"))),
 )
 
 Highlight specific positions:
 
-#blank-canvas(
-  linear-perm(permutation(("1", "2", "3", "4", "5")), highlight: (0, 2, 4)),
+#canvas.blank-canvas(
+  combi.linear-perm(combi.permutation(("1", "2", "3", "4", "5")), highlight: (0, 2, 4)),
 )
 
 == Circular Permutations
 
 Arrange items in a circle:
 
-#blank-canvas(
-  circular-perm(permutation(("A", "B", "C", "D", "E")), radius: 1.5),
+#canvas.blank-canvas(
+  combi.circular-perm(combi.permutation(("A", "B", "C", "D", "E")), radius: 1.5),
 )
 
 == Balls and Boxes
@@ -37,14 +37,14 @@ Distribute balls into boxes:
 ]
 
 #example("Distinguishable Balls")[
-  #blank-canvas(
-    balls-boxes(5, 3, distribution: (2, 2, 1), balls-identical: false),
+  #canvas.blank-canvas(
+    combi.balls-boxes(5, 3, distribution: (2, 2, 1), balls-identical: false),
   )
 ]
 
 #example("Identical Balls")[
-  #blank-canvas(
-    balls-boxes(3, 3, distribution: (3, 2, 1), balls-identical: true),
+  #canvas.blank-canvas(
+    combi.balls-boxes(3, 3, distribution: (3, 2, 1), balls-identical: true),
   )
 ]
 
@@ -52,16 +52,16 @@ Distribute balls into boxes:
 
 Highlight a subset of elements:
 
-#blank-canvas(
-  subset-vis(("a", "b", "c", "d", "e", "f"), subset: (1, 3, 5)),
+#canvas.blank-canvas(
+  combi.subset-vis(("a", "b", "c", "d", "e", "f"), subset: (1, 3, 5)),
 )
 
 == Counting Trees
 
 Visualize multiplication principle:
 
-#blank-canvas(
-  counting-tree((("R", "B"), ("S", "M", "L"), ("L", "R"))),
+#canvas.blank-canvas(
+  combi.counting-tree((("R", "B"), ("S", "M", "L"), ("L", "R"))),
 )
 
 == Partition Diagrams
@@ -75,18 +75,18 @@ Ferrers/Young diagram for partitions:
   ```
 ]
 
-#blank-canvas(
-  partition-vis((4, 3, 2, 1)),
+#canvas.blank-canvas(
+  combi.partition-vis((4, 3, 2, 1)),
 )
 
-#blank-canvas(
-  partition-vis((5, 5, 3, 1)),
+#canvas.blank-canvas(
+  combi.partition-vis((5, 5, 3, 1)),
 )
 
 == Pigeonhole Principle
 
 Visualize when items must share containers:
 
-#blank-canvas(
-  pigeonhole(5, 3), // 5 pigeons, 3 holes - at least one has 2+
+#canvas.blank-canvas(
+  combi.pigeonhole(5, 3), // 5 pigeons, 3 holes - at least one has 2+
 )

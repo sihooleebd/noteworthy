@@ -27,7 +27,9 @@ The CS module provides visualizations for fundamental data structures like Array
   - `show-index`: Toggle index visibility (default: true).
 ]
 
-#blank-canvas(length: 10cm, height: 4cm, cs-array(
+
+
+#canvas.blank-canvas(length: 10cm, height: 4cm, dsa.cs-array(
   (38, 27, 43, 3),
   separators: (1,),
   label: "Split Step",
@@ -53,7 +55,7 @@ The CS module provides visualizations for fundamental data structures like Array
   - `show-index`: Show indices on the left (default: false).
 ]
 
-#blank-canvas(length: 10cm, height: 6cm, cs-stack(
+#canvas.blank-canvas(length: 10cm, height: 6cm, dsa.cs-stack(
   (10, 20),
   outgoing: 30,
   label: "Pop Operation",
@@ -79,7 +81,7 @@ The CS module provides visualizations for fundamental data structures like Array
   - `show-index`: Show indices below items (default: false).
 ]
 
-#blank-canvas(length: 10cm, height: 4cm, cs-queue(
+#canvas.blank-canvas(length: 10cm, height: 4cm, dsa.cs-queue(
   (1, 2, 3),
   incoming: 4,
   label: "Enqueue",
@@ -103,7 +105,7 @@ The CS module provides visualizations for fundamental data structures like Array
   - `show-index`: Show indices below nodes (default: false).
 ]
 
-#blank-canvas(length: 10cm, height: 4cm, cs-linked-list(
+#canvas.blank-canvas(length: 10cm, height: 4cm, dsa.cs-linked-list(
   (12, 99, 37),
   pointers: ("0": "head"),
   label: "Singly Linked List",

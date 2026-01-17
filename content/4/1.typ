@@ -17,10 +17,10 @@ The Canvas module provides rendering surfaces for shapes and graphs.
   ```
 ]
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  point(2, 3, label: "P"),
+  shape.point(2, 3, label: "P"),
 )
 
 == Canvas Options
@@ -32,35 +32,35 @@ The Canvas module provides rendering surfaces for shapes and graphs.
   - `show-grid` -- Toggle grid visibility
 ]
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   width: 10cm,
   height: 6cm,
   x-tick: 2,
   y-tick: 1,
   x-label: $x$,
   y-label: $y$,
-  point(4, 2, label: "A"),
-  point(-2, 1, label: "B"),
+  shape.point(4, 2, label: "A"),
+  shape.point(-2, 1, label: "B"),
 )
 
 == Combining Shapes and Graphs
 
 The cartesian canvas can display both shapes and graphs:
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  graph(x => x * x, domain: (-2, 2), label: $x^2$),
-  point(1, 1, label: "P"),
-  segment(point(-2, 0), point(2, 0)),
+  graph.graph(x => x * x, domain: (-2, 2), label: $x^2$),
+  shape.point(1, 1, label: "P"),
+  shape.segment(shape.point(-2, 0), shape.point(2, 0)),
 )
 
 == Graph Canvas
 
 For simpler function-only plots, use `graph-canvas`:
 
-#graph-canvas(
+#canvas.graph-canvas(
   width: 10cm,
   height: 5cm,
-  graph(x => x * x - 2, domain: (-3, 3), label: $x^2 - 2$),
+  graph.graph(x => x * x - 2, domain: (-3, 3), label: $x^2 - 2$),
 )

@@ -14,25 +14,25 @@ Create circles and multi-sided shapes.
   ```
 ]
 
-#let O = point(0, 0, label: "O", label-anchor: "south")
-#cartesian-canvas(
+#let O = shape.point(0, 0, label: "O", label-anchor: "south")
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  circle(O, radius: 2, label: $C$, label-anchor: "south-west"),
+  shape.circle(O, radius: 2, label: $C$, label-anchor: "south-west"),
   O,
 )
 
 == Circle Through Point
 
-#let O = point(1, 1, label: "O", label-anchor: "south")
-#let P = point(3, 2, label: "P", label-anchor: "west")
+#let O = shape.point(1, 1, label: "O", label-anchor: "south")
+#let P = shape.point(3, 2, label: "P", label-anchor: "west")
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
   O,
   P,
-  circle(O, through: P),
+  shape.circle(O, through: P),
 )
 
 == Polygons
@@ -44,15 +44,15 @@ Create circles and multi-sided shapes.
   ```
 ]
 
-#let A = point(0, 0, label: "A", label-anchor: "south-west")
-#let B = point(4, 0, label: "B", label-anchor: "south-east")
-#let C = point(4, 3, label: "C", label-anchor: "north-east")
-#let D = point(0, 3, label: "D", label-anchor: "north-west")
+#let A = shape.point(0, 0, label: "A", label-anchor: "south-west")
+#let B = shape.point(4, 0, label: "B", label-anchor: "south-east")
+#let C = shape.point(4, 3, label: "C", label-anchor: "north-east")
+#let D = shape.point(0, 3, label: "D", label-anchor: "north-west")
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  polygon(A, B, C, D, label: "Rectangle", label-anchor: "center"),
+  shape.polygon(A, B, C, D, label: "Rectangle", label-anchor: "center"),
 )
 
 == Regular Polygons
@@ -68,13 +68,13 @@ Create circles and multi-sided shapes.
 #grid(
   columns: (1fr, 1fr),
   gutter: 1em,
-  blank-canvas(
+  canvas.blank-canvas(
     width: 4cm,
-    regular-polygon(point(0, 0), point(0, 1.5), 3, label: "Triangle"),
+    shape.regular-polygon(shape.point(0, 0), shape.point(0, 1.5), 3, label: "Triangle"),
   ),
-  blank-canvas(
+  canvas.blank-canvas(
     width: 4cm,
-    regular-polygon(point(0, 0), point(1.5, 1.5), 5, label: "Pentagon"),
+    shape.regular-polygon(shape.point(0, 0), shape.point(1.5, 1.5), 5, label: "Pentagon"),
   ),
 )
 
@@ -88,17 +88,17 @@ Create circles and multi-sided shapes.
   The arc is drawn from `p1` to `p2`. The radius is derived from the center-to-p1 distance.
 ]
 
-#let O = point(0, 0, label: "O", label-anchor: "south")
-#let A = point(2, 0, label: "A", label-anchor: "east")
-#let B = point(0, 2, label: "B", label-anchor: "north")
+#let O = shape.point(0, 0, label: "O", label-anchor: "south")
+#let A = shape.point(2, 0, label: "A", label-anchor: "east")
+#let B = shape.point(0, 2, label: "B", label-anchor: "north")
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
   O,
   A,
   B,
-  arc(O, A, B),
+  shape.arc(O, A, B),
 )
 
 == Point at Angle
@@ -112,18 +112,18 @@ Create circles and multi-sided shapes.
 ]
 
 #example("67° Arc")[
-  #let O = point(0, 0, label: "O")
-  #let A = point(2, 0, label: "A")
-  #let B = point-at-angle(O, 67deg, 2, from: A, label: "B")
+  #let O = shape.point(0, 0, label: "O")
+  #let A = shape.point(2, 0, label: "A")
+  #let B = shape.point-at-angle(O, 67deg, 2, from: A, label: "B")
 
-  #cartesian-canvas(
+  #canvas.cartesian-canvas(
     x-tick: 1,
     y-tick: 1,
     O,
     A,
     B,
-    arc(O, A, B),
-    angle(A, O, B, label: "67°"),
+    shape.arc(O, A, B),
+    shape.angle(A, O, B, label: "67°"),
   )
 ]
 
@@ -136,10 +136,10 @@ Create circles and multi-sided shapes.
   ```
 ]
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  semicircle(point(0, 0), point(2, 0)),
+  shape.semicircle(shape.point(0, 0), shape.point(2, 0)),
 )
 
 == Angles
@@ -151,17 +151,17 @@ Create circles and multi-sided shapes.
   ```
 ]
 
-#let O = point(0, 0, label: "O")
-#let A = point(3, 0, label: "A")
-#let B = point(2, 2, label: "B")
+#let O = shape.point(0, 0, label: "O")
+#let A = shape.point(3, 0, label: "A")
+#let B = shape.point(2, 2, label: "B")
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
   O,
   A,
   B,
-  segment(O, A),
-  segment(O, B),
-  angle(A, O, B, label: $theta$),
+  shape.segment(O, A),
+  shape.segment(O, B),
+  shape.angle(A, O, B, label: $theta$),
 )

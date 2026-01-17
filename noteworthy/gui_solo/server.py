@@ -46,6 +46,9 @@ async def startup_event():
             
     preview_manager.add_callback(on_preview_bridge)
     
+    # Stop any stale tinymist preview from previous session
+    preview_manager.stop_full_preview()
+    
     # Sanity check modules.json
     validate_modules_json()
 
@@ -53,6 +56,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
+    preview_manager.stop_full_preview()
     print("[Solo Server] Shutdown complete.")
 
 
@@ -107,6 +111,7 @@ def regenerate_modules_json():
     """Regenerate modules.json by scanning templates/module directory."""
     modules_dir = BASE_DIR / "templates/module"
     modules = {}
+    core_modules = {}
     
     if modules_dir.exists():
         for item in modules_dir.iterdir():
@@ -115,25 +120,27 @@ def regenerate_modules_json():
                     # Scan core modules
                     for core_item in item.iterdir():
                         if core_item.is_dir():
-                            modules[f"core/{core_item.name}"] = {
-                                "source": "local",
-                                "status": "installed"
+                            core_modules[core_item.name] = {
+                                "source": "core",
+                                "sha": None  # Unknown sha for recovered modules
                             }
                 else:
                     modules[item.name] = {
                         "source": "local",
-                        "status": "installed"
+                        "sha": None  # Unknown sha for recovered modules
                     }
     
     new_data = {
         "meta": {"recovered": True},
-        "modules": modules
+        "modules": modules,
+        "core_modules": core_modules,
+        "local_modules": {}
     }
     
     try:
         MODULES_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         MODULES_CONFIG_FILE.write_text(json.dumps(new_data, indent=4))
-        print(f"[Startup] Regenerated modules.json with {len(modules)} modules")
+        print(f"[Startup] Regenerated modules.json with {len(modules)} modules + {len(core_modules)} core modules")
     except Exception as e:
         print(f"[Startup] ERROR: Failed to regenerate modules.json: {e}")
 

@@ -15,6 +15,7 @@ from pathlib import Path
 from .config import BUILD_DIR
 from .tui.app import run_app
 from .utils import generate_updater
+from .core.modules import generate_imports_file
 
 
 def main():
@@ -105,6 +106,12 @@ def main():
             preface_path.write_text('')
         except Exception as e:
             print(f"Warning: Could not create default preface: {e}")
+
+    # Sync imports.typ with installed modules
+    try:
+        generate_imports_file()
+    except Exception as e:
+        print(f"Warning: Could not sync module imports: {e}")
 
     # Launch GUI if requested
     if args.gui:

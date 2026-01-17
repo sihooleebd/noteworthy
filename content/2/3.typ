@@ -13,15 +13,15 @@ Find intersections and construct derived objects.
   ```
 ]
 
-#let l1 = line(point(-2, -1), point(3, 2), label: $ell_1$, label-anchor: "south")
-#let l2 = line(point(-1, 3), point(2, -2), label: $ell_2$, label-anchor: "west")
+#let l1 = shape.line(shape.point(-2, -1), shape.point(3, 2), label: $ell_1$, label-anchor: "south")
+#let l2 = shape.line(shape.point(-1, 3), shape.point(2, -2), label: $ell_2$, label-anchor: "west")
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
   l1,
   l2,
-  intersect-ll(l1, l2, label: "P"),
+  shape.intersect-ll(l1, l2, label: "P"),
 )
 
 == Line-Circle Intersection
@@ -33,15 +33,15 @@ Find intersections and construct derived objects.
   ```
 ]
 
-#let c = circle(point(0, 0), radius: 2)
-#let l = line(point(-3, 1), point(3, 1))
+#let c = shape.circle(shape.point(0, 0), radius: 2)
+#let l = shape.line(shape.point(-3, 1), shape.point(3, 1))
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
   c,
   l,
-  intersect-lc(l, c, labels: ("A", "B")),
+  shape.intersect-lc(l, c, labels: ("A", "B")),
 )
 
 == Constructions
@@ -53,16 +53,16 @@ Find intersections and construct derived objects.
   ```
 ]
 
-#let A = point(1, 1, label: "A", label-anchor: "south-west")
-#let B = point(5, 3, label: "B", label-anchor: "north-east")
+#let A = shape.point(1, 1, label: "A", label-anchor: "south-west")
+#let B = shape.point(5, 3, label: "B", label-anchor: "north-east")
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
   A,
   B,
-  segment(A, B),
-  midpoint(A, B, label: "M", label-anchor: "south"),
+  shape.segment(A, B),
+  shape.midpoint(A, B, label: "M", label-anchor: "south"),
 )
 
 == Perpendicular & Parallel
@@ -81,14 +81,14 @@ Find intersections and construct derived objects.
   ```
 ]
 
-#let l = line(point(0, 0), point(4, 2), label: $ell$, label-anchor: "south")
-#let P = point(1, 3, label: "P", label-anchor: "east")
+#let l = shape.line(shape.point(0, 0), shape.point(4, 2), label: $ell$, label-anchor: "south")
+#let P = shape.point(1, 3, label: "P", label-anchor: "east")
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
   l,
   P,
-  perpendicular(l, P),
-  parallel(l, P),
+  shape.perpendicular(l, P),
+  shape.parallel(l, P),
 )

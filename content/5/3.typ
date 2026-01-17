@@ -19,10 +19,10 @@ Draw smooth curves through data points using spline interpolation.
   - `tension`: Controls curve tightness (0 = linear, 1 = tight)
 ]
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  curve-through(
+  data.curve-through(
     ((0, 1), (1, 3), (2, 2), (3, 4), (4, 3)),
     label: "Smooth",
   ),
@@ -38,11 +38,11 @@ Draw smooth curves through data points using spline interpolation.
     gutter: 1em,
     [
       *Tension: 0.3*
-      #cartesian-canvas(
+      #canvas.cartesian-canvas(
         width: 5cm,
         x-tick: 1,
         y-tick: 1,
-        curve-through(
+        data.curve-through(
           ((0, 1), (1, 3), (2, 1), (3, 3)),
           tension: 0.3,
         ),
@@ -50,11 +50,11 @@ Draw smooth curves through data points using spline interpolation.
     ],
     [
       *Tension: 0.8*
-      #cartesian-canvas(
+      #canvas.cartesian-canvas(
         width: 5cm,
         x-tick: 1,
         y-tick: 1,
-        curve-through(
+        data.curve-through(
           ((0, 1), (1, 3), (2, 1), (3, 3)),
           tension: 0.8,
         ),
@@ -75,10 +75,10 @@ Draw smooth curves through data points using spline interpolation.
   ```
 ]
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  smooth-curve(
+  data.smooth-curve(
     ((0, 0), (1, 2), (2, 1), (3, 3), (4, 2)),
     label: "Auto-smooth",
   ),

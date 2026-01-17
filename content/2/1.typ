@@ -13,12 +13,12 @@ The Shape module provides 2D geometric primitives.
   ```
 ]
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  point(2, 3, label: "A", label-anchor: "south"),
-  point(-1, 2, label: "B", label-anchor: "east"),
-  point(3, -1, label: "C", label-anchor: "north"),
+  shape.point(2, 3, label: "A", label-anchor: "south"),
+  shape.point(-1, 2, label: "B", label-anchor: "east"),
+  shape.point(3, -1, label: "C", label-anchor: "north"),
 )
 
 == Creating Lines
@@ -30,10 +30,10 @@ The Shape module provides 2D geometric primitives.
   ```
 ]
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  line(point(-2, -1), point(3, 2), label: $ell$, label-anchor: "west"),
+  shape.line(shape.point(-2, -1), shape.point(3, 2), label: $ell$, label-anchor: "west"),
 )
 
 == Line Segments
@@ -47,29 +47,29 @@ Use `segment` for lines with definite endpoints:
   ```
 ]
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  point(-2, 1, label: "A", label-anchor: "west"),
-  point(3, 2, label: "B", label-anchor: "east"),
-  segment(point(-2, 1), point(3, 2)),
+  shape.point(-2, 1, label: "A", label-anchor: "west"),
+  shape.point(3, 2, label: "B", label-anchor: "east"),
+  shape.segment(shape.point(-2, 1), shape.point(3, 2)),
 )
 
 == Combining Points and Lines
 
 #example("Triangle Vertices")[
-  #let A = point(0, 0, label: "A", label-anchor: "south-east")
-  #let B = point(4, 0, label: "B", label-anchor: "south-east")
-  #let C = point(2, 3, label: "C", label-anchor: "north")
+  #let A = shape.point(0, 0, label: "A", label-anchor: "south-east")
+  #let B = shape.point(4, 0, label: "B", label-anchor: "south-east")
+  #let C = shape.point(2, 3, label: "C", label-anchor: "north")
 
-  #cartesian-canvas(
+  #canvas.cartesian-canvas(
     x-tick: 1,
     y-tick: 1,
     A,
     B,
     C,
-    segment(A, B),
-    segment(B, C),
-    segment(C, A),
+    shape.segment(A, B),
+    shape.segment(B, C),
+    shape.segment(C, A),
   )
 ]

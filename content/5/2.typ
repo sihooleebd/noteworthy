@@ -17,10 +17,10 @@ Plot data points from arrays or CSV files.
   ```
 ]
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  data-series(
+  data.data-series(
     ((0, 0), (1, 2), (2, 3), (3, 2.5), (4, 4)),
     label: "Data",
   ),
@@ -28,14 +28,14 @@ Plot data points from arrays or CSV files.
 
 == Multiple Series
 
-#cartesian-canvas(
+#canvas.cartesian-canvas(
   x-tick: 1,
   y-tick: 1,
-  data-series(
+  data.data-series(
     ((0, 1), (1, 3), (2, 2), (3, 4)),
     label: "Series A",
   ),
-  data-series(
+  data.data-series(
     ((0, 2), (1, 1), (2, 3), (3, 2)),
     label: "Series B",
   ),
