@@ -917,15 +917,35 @@ const app = {
                 const position = this.state.editor.getPosition();
                 if (!model || !position) return;
 
-                // When user types $, insert $$ and position cursor between
+                // When user types $, handle auto-pairing and step-over
                 if (text === '$') {
                     const lineContent = model.getLineContent(position.lineNumber);
-                    const charBefore = position.column > 2 ? lineContent[position.column - 3] : '';
+                    // position.column is AFTER the $ we just typed
+                    const charAfter = lineContent[position.column - 1] || '';  // char at cursor (0-indexed)
+                    const charBefore = position.column > 2 ? lineContent[position.column - 3] : '';  // char before the $
 
-                    // Don't auto-complete if there's already a $ before (user is closing)
+                    // Step-over: if the char after the typed $ is already $, we're closing a math expression
+                    // Delete the $ we just typed and move cursor past the existing $
+                    if (charAfter === '$') {
+                        // Delete the $ we just typed (it's at position.column - 1)
+                        this.state.editor.executeEdits('', [{
+                            range: new monaco.Range(position.lineNumber, position.column - 1, position.lineNumber, position.column),
+                            text: ''
+                        }]);
+                        // Cursor is now at the position of the existing $, move past it
+                        this.state.editor.setPosition({
+                            lineNumber: position.lineNumber,
+                            column: position.column  // Stay at same column (which is now past the $)
+                        });
+                        return;
+                    }
+
+                    // Also handle: user typed "$content$" pattern - if char before is not $, 
+                    // but we're effectively completing an expression (char 2 before is $)
+                    // Don't auto-complete if there's already a $ right before (user typed $$)
                     if (charBefore === '$') return;
 
-                    // Insert another $ after cursor
+                    // Insert another $ after cursor for auto-pairing
                     this.state.editor.executeEdits('', [{
                         range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
                         text: '$'
