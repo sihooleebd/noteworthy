@@ -86,6 +86,10 @@ This downloads the full framework on first run.
 git clone https://github.com/sihooleebd/noteworthy myproject
 cd myproject
 
+# Clone modules needed for example
+
+git clone https://github.com/sihooleebd/noteworthy-modules ./templates/module/
+
 # Install dependencies
 uv sync
 
