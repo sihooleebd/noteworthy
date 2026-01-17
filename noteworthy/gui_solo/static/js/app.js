@@ -714,16 +714,15 @@ const app = {
                     { open: '{', close: '}' },
                     { open: '[', close: ']' },
                     { open: '(', close: ')' },
-                    { open: '"', close: '"', notIn: ['string'] },
-                    { open: "'", close: "'", notIn: ['string'] }
+                    { open: '"', close: '"', notIn: ['string'] }
                     // $ handled by custom onDidType handler
+                    // ' disabled - conflicts with Typst apostrophes
                 ],
                 surroundingPairs: [
                     { open: '{', close: '}' },
                     { open: '[', close: ']' },
                     { open: '(', close: ')' },
-                    { open: '"', close: '"' },
-                    { open: "'", close: "'" }
+                    { open: '"', close: '"' }
                     // $ handled by custom onDidType handler
                 ]
             });
