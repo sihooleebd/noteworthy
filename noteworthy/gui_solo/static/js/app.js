@@ -804,7 +804,12 @@ const app = {
                 padding: { top: 16 },
                 lineNumbers: 'on',
                 roundedSelection: true,
-                scrollBeyondLastLine: false
+                scrollBeyondLastLine: false,
+                // Auto-closing for brackets and quotes
+                autoClosingBrackets: 'always',
+                autoClosingQuotes: 'always',
+                autoClosingOvertype: 'always',
+                autoSurround: 'languageDefined'
             });
 
             // Solo mode: no cursor awareness needed (single user)
