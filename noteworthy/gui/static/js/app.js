@@ -1667,14 +1667,12 @@ const app = {
             console.log('DEBUG: ytext length:', ytext.length);
             // console.log('DEBUG: ytext content:', ytext.toString());
             try {
-                // TEMPORARILY DISABLED TO DEBUG SYNC
-                // this.state.yjsBinding = new MonacoBinding(
-                //     ytext,
-                //     this.state.editor.getModel(),
-                //     new Set([this.state.editor]),
-                //     this.state.yjsProvider.awareness
-                // );
-                console.log('[Yjs] MonacoBinding PAUSED for debugging');
+                this.state.yjsBinding = new MonacoBinding(
+                    ytext,
+                    this.state.editor.getModel(),
+                    new Set([this.state.editor]),
+                    this.state.yjsProvider.awareness
+                );
 
                 this.state.yjsProvider.on('sync', isSynced => {
                     console.log('[Yjs] Sync event:', isSynced);

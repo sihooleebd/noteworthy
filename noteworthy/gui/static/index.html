@@ -15,8 +15,8 @@
     <!-- Yjs CRDT for collaborative editing -->
     <script type="module">
         import * as Y from 'https://esm.sh/yjs@13.6.14';
-        import { WebsocketProvider } from 'https://esm.sh/y-websocket@1.5.4';
-        import { MonacoBinding } from 'https://esm.sh/y-monaco@0.1.6';
+        import { WebsocketProvider } from 'https://esm.sh/y-websocket@1.5.4?deps=yjs@13.6.14';
+        import { MonacoBinding } from 'https://esm.sh/y-monaco@0.1.6?deps=yjs@13.6.14';
 
         window.Y = Y;
         window.WebsocketProvider = WebsocketProvider;
