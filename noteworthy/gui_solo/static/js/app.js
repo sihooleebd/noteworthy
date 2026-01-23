@@ -708,13 +708,17 @@ const app = {
                     ['{', '}'],
                     ['[', ']'],
                     ['(', ')'],
-                    ['$', '$']
+                    ['$', '$'],
+                    ['*', '*'],
+                    ['_', '_']
                 ],
                 autoClosingPairs: [
                     { open: '{', close: '}' },
                     { open: '[', close: ']' },
                     { open: '(', close: ')' },
-                    { open: '"', close: '"', notIn: ['string'] }
+                    { open: '"', close: '"', notIn: ['string'] },
+                    { open: '*', close: '*' },
+                    { open: '_', close: '_' }
                     // $ handled by custom onDidType handler
                     // ' disabled - conflicts with Typst apostrophes
                 ],
@@ -722,7 +726,9 @@ const app = {
                     { open: '{', close: '}' },
                     { open: '[', close: ']' },
                     { open: '(', close: ')' },
-                    { open: '"', close: '"' }
+                    { open: '"', close: '"' },
+                    { open: '*', close: '*' },
+                    { open: '_', close: '_' }
                     // $ handled by custom onDidType handler
                 ]
             });
@@ -912,7 +918,7 @@ const app = {
                     }
                 }
 
-                // ---- BACKSPACE: Delete entire $$ or $ $ when cursor is between ----
+                // ---- BACKSPACE: Delete entire pair when cursor is between ----
                 if (e.keyCode === monaco.KeyCode.Backspace && !e.shiftKey && !e.ctrlKey && !e.altKey) {
                     const col = position.column;
                     // lineContent indices are 0-based, col is 1-based
@@ -938,6 +944,7 @@ const app = {
                         this.state.editor.executeEdits('', [{ range, text: '' }]);
                         return;
                     }
+
                 }
 
                 // ---- TAB / SHIFT+TAB: List indentation ----
