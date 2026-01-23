@@ -10,6 +10,7 @@
 > - Please uninstall any such files immediately and scan your system.
 > - Always verify that you are downloading from: `https://github.com/sihooleebd/noteworthy`.
 
+> We're making major & breaking changes to the nightly branch. This branch will soon be moved to a legacy branch. We suggest you start off at nightly. 
 
 # Noteworthy
 
