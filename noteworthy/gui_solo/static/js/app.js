@@ -838,6 +838,18 @@ const app = {
                 lineNumbers: 'on',
                 roundedSelection: true,
                 scrollBeyondLastLine: false,
+                // Minimal scrollbar styling
+                scrollbar: {
+                    vertical: 'auto',
+                    horizontal: 'auto',
+                    useShadows: false,
+                    verticalScrollbarSize: 8,
+                    horizontalScrollbarSize: 8,
+                    verticalHasArrows: false,
+                    horizontalHasArrows: false
+                },
+                overviewRulerBorder: false,
+                hideCursorInOverviewRuler: true,
                 // Auto-closing for brackets and quotes
                 autoClosingBrackets: 'always',
                 autoClosingQuotes: 'always',

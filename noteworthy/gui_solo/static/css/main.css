@@ -726,8 +726,9 @@ body {
 }
 
 .tree-item.selected {
-    background: var(--accent);
-    color: #000000;
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+    border: 1px solid var(--glass-border);
 }
 
 .tree-item svg {
@@ -856,6 +857,49 @@ body {
     height: 32px;
     background: rgba(255, 255, 255, 0.1);
     margin: 0 4px;
+}
+
+/* Light theme dock overrides */
+body[data-theme="catppuccin-latte"] .dock {
+    background: rgba(239, 241, 245, 0.85);
+    border-color: rgba(156, 160, 176, 0.4);
+    box-shadow:
+        0 10px 40px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+body[data-theme="catppuccin-latte"] .dock-separator {
+    background: rgba(76, 79, 105, 0.15);
+}
+
+body[data-theme="solarized-light"] .dock {
+    background: rgba(253, 246, 227, 0.85);
+    border-color: rgba(147, 161, 161, 0.4);
+    box-shadow:
+        0 10px 40px rgba(0, 0, 0, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+body[data-theme="solarized-light"] .dock-separator {
+    background: rgba(88, 110, 117, 0.15);
+}
+
+/* Light theme solo badge overrides - use white text for readability */
+body[data-theme="catppuccin-latte"] .solo-badge,
+body[data-theme="solarized-light"] .solo-badge {
+    color: #fff;
+}
+
+/* Light theme editor filename - ensure dark readable text */
+body[data-theme="catppuccin-latte"] .editor-filename,
+body[data-theme="solarized-light"] .editor-filename {
+    color: #333;
+}
+
+/* Light theme tree selection - use darker glass for visibility */
+body[data-theme="catppuccin-latte"] .tree-item.selected,
+body[data-theme="solarized-light"] .tree-item.selected {
+    background: rgba(0, 0, 0, 0.08);
 }
 
 /* ============================================
