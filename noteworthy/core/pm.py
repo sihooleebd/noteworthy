@@ -411,6 +411,9 @@ def sync_modules_config(callback=None):
     
     # Sync default modules
     for name, meta in default_remote.items():
+        # Skip if this module is already a core module
+        if name in config["core_modules"]:
+            continue
         if name not in config["modules"]:
             # New module, not installed yet (no sha)
             config["modules"][name] = {
@@ -424,7 +427,10 @@ def sync_modules_config(callback=None):
     # Mark modules that were removed from remote as orphaned
     for name in list(config["modules"].keys()):
         if name.startswith("core/"):
-            # Remove old duplicate core entries
+            # Remove old duplicate core entries (prefixed)
+            del config["modules"][name]
+        elif name in config["core_modules"]:
+            # Remove duplicates that exist in core_modules
             del config["modules"][name]
         elif name not in default_remote and config["modules"][name].get("source") == "remote":
             config["modules"][name]["source"] = "orphaned"

@@ -137,7 +137,7 @@ def scan_content(content_dir=None):
     Returns:
         Tuple of (ch_folders, pg_folders) where:
         - ch_folders: List of chapter folder names (sorted numerically)
-        - pg_folders: Dict mapping chapter index to list of page file stems
+        - pg_folders: Dict mapping chapter folder name to list of page file stems
     """
     if content_dir is None:
         content_dir = Path('content')
@@ -152,7 +152,6 @@ def scan_content(content_dir=None):
             [d for d in content_dir.iterdir() if d.is_dir() and d.name.isdigit()],
             key=lambda d: int(d.name)
         )
-        idx = 0
         for ch_dir in ch_dirs:
             pg_files = sorted(
                 [f.stem for f in ch_dir.glob('*.typ') if f.stem.isdigit()],
@@ -160,8 +159,8 @@ def scan_content(content_dir=None):
             )
             if pg_files:
                 ch_folders.append(ch_dir.name)
-                pg_folders[str(idx)] = pg_files
-                idx += 1
+                # Use folder name as key, not index
+                pg_folders[ch_dir.name] = pg_files
                 
     return ch_folders, pg_folders
 

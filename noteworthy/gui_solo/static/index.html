@@ -74,6 +74,16 @@
 
                     <!-- No Chat Panel for solo mode -->
 
+                    <!-- Title bar for hierarchy files -->
+                    <div id="hierarchy-title-bar" class="hierarchy-title-bar" style="display: none;">
+                        <label for="hierarchy-title-input">
+                            <i data-lucide="bookmark"></i>
+                            Page Title
+                        </label>
+                        <input type="text" id="hierarchy-title-input" placeholder="Enter page title..."
+                            oninput="app.onHierarchyTitleInput(this.value)">
+                    </div>
+
                     <div id="monaco-container"></div>
                 </section>
 
@@ -301,6 +311,54 @@
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+        }
+
+        /* Hierarchy title bar */
+        .hierarchy-title-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .hierarchy-title-bar label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .hierarchy-title-bar label i {
+            width: 14px;
+            height: 14px;
+        }
+
+        .hierarchy-title-bar input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .hierarchy-title-bar input:focus {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--accent);
+        }
+
+        .hierarchy-title-bar input::placeholder {
+            color: var(--text-muted);
+            opacity: 0.6;
         }
     </style>
 </body>

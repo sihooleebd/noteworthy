@@ -45,8 +45,8 @@
   let chapter-display-id = format-chapter-id(ch-folder, total-chapters)
   let total-pages = chapter.pages.len()
 
-  // Get page files for this chapter
-  let pg-files = page-folders.at(str(i), default: range(total-pages).map(j => str(j)))
+  // Get page files for this chapter (using folder name, not index)
+  let pg-files = page-folders.at(ch-folder, default: range(total-pages).map(j => str(j)))
 
   if target == none or target == "chapter-" + str(i) {
     if display-chap-cover or target != none {

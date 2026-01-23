@@ -1,14 +1,10 @@
 {
     "meta": {
         "commit": "68783483ad642cc6a2bb0c0b403df348129aa2b5",
-        "last_sync": "2026-01-17T01:56:04.707906",
-        "repo_commit": "ddac077e8f47492c988fc606d9fa69d13c1f9022"
+        "last_sync": "2026-01-23T20:26:57.464660",
+        "repo_commit": "4e26263c651210170c209cfd5dc052e559e3cb55"
     },
     "modules": {
-        "layout": {
-            "source": "remote",
-            "sha": null
-        },
         "shape": {
             "source": "remote",
             "sha": "fbc023a7786291298dd05c38d2725cf98b036e3c"
@@ -50,6 +46,10 @@
         "cover": {
             "source": "core",
             "sha": "218ba5213ba890b89d802ddc2dcd4d0e2efa551a"
+        },
+        "layout": {
+            "source": "core",
+            "sha": null
         }
     },
     "local_modules": {}

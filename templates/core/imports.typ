@@ -6,6 +6,7 @@
 // Core Modules (always enabled)
 #import "../module/core/block/mod.typ": *
 #import "../module/core/cover/mod.typ": *
+#import "../module/core/layout/mod.typ": *
 
 // Optional Modules (qualified imports)
 #import "../module/canvas/mod.typ" as canvas

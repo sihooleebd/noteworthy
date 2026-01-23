@@ -1780,6 +1780,9 @@ const app = {
         if (path.endsWith('.typ')) {
             this.startTinymistPreview(path);
         }
+
+        // Update hierarchy title bar visibility
+        this.updateHierarchyTitleBar();
     },
 
 
@@ -2079,6 +2082,128 @@ const app = {
     debouncedSaveSnippets: null,
     debouncedSavePreface: null,
     debouncedSaveIgnored: null,
+    debouncedSaveHierarchyTitle: null,
+
+    // ============================================================
+    // HIERARCHY TITLE EDITOR
+    // ============================================================
+
+    // Parse file path to get hierarchy position (chapter index, page index)
+    // Files follow pattern: content/{chapterNum}/{pageNum}.typ
+    // Chapters are sorted numerically to determine their index in the hierarchy
+    getHierarchyPosition: function (path) {
+        const match = path.match(/content\/(\d+)\/(\d+)\.typ$/);
+        if (!match) return null;
+
+        const chapterNum = parseInt(match[1], 10);
+        const pageNum = parseInt(match[2], 10);
+
+        // Get all chapter folder numbers from the file tree
+        const treeItems = this.state.treeData?.items;
+        if (!treeItems) return null;
+
+        const contentNode = treeItems.find(node => node.name === 'content' && node.children);
+        if (!contentNode) return null;
+
+        // Get numeric folder names and sort them
+        const chapterFolders = contentNode.children
+            .filter(child => child.children && /^\d+$/.test(child.name))
+            .map(child => parseInt(child.name, 10))
+            .sort((a, b) => a - b);
+
+        // Find the index of our chapter in the sorted list
+        const chapterIndex = chapterFolders.indexOf(chapterNum);
+        if (chapterIndex === -1) return null;
+
+        // Get page numbers for this chapter folder and sort them
+        const chapterNode = contentNode.children.find(child => child.name === String(chapterNum));
+        if (!chapterNode || !chapterNode.children) return null;
+
+        const pageFiles = chapterNode.children
+            .filter(child => !child.children && /^\d+\.typ$/.test(child.name))
+            .map(child => parseInt(child.name.replace('.typ', ''), 10))
+            .sort((a, b) => a - b);
+
+        // Find the index of our page in the sorted list
+        const pageIndex = pageFiles.indexOf(pageNum);
+        if (pageIndex === -1) return null;
+
+        return {
+            chapterIndex,
+            pageIndex
+        };
+    },
+
+    // Update title bar visibility and content based on current file
+    updateHierarchyTitleBar: async function () {
+        const titleBar = document.getElementById('hierarchy-title-bar');
+        const titleInput = document.getElementById('hierarchy-title-input');
+        if (!titleBar || !titleInput) return;
+
+        const path = this.state.activeFile;
+        if (!path) {
+            titleBar.style.display = 'none';
+            return;
+        }
+
+        const position = this.getHierarchyPosition(path);
+        if (!position) {
+            titleBar.style.display = 'none';
+            return;
+        }
+
+        // Ensure hierarchy is loaded
+        if (!this.state.hierarchy || this.state.hierarchy.length === 0) {
+            try {
+                const res = await fetch('/api/hierarchy');
+                const data = await res.json();
+                this.state.hierarchy = data.hierarchy || [];
+            } catch (e) {
+                console.error('Failed to load hierarchy:', e);
+                titleBar.style.display = 'none';
+                return;
+            }
+        }
+
+        // Get current title from hierarchy
+        const chapter = this.state.hierarchy[position.chapterIndex];
+        if (!chapter || !chapter.pages || !chapter.pages[position.pageIndex]) {
+            titleBar.style.display = 'none';
+            return;
+        }
+
+        const page = chapter.pages[position.pageIndex];
+        titleInput.value = page.title || '';
+        titleBar.style.display = 'flex';
+
+        // Store current position for save operations
+        this.state.currentHierarchyPosition = position;
+
+        // Re-create Lucide icons
+        if (window.lucide) lucide.createIcons();
+    },
+
+    // Handle title input changes
+    onHierarchyTitleInput: function (value) {
+        if (!this.state.currentHierarchyPosition) return;
+
+        const { chapterIndex, pageIndex } = this.state.currentHierarchyPosition;
+
+        // Update local state
+        if (this.state.hierarchy &&
+            this.state.hierarchy[chapterIndex] &&
+            this.state.hierarchy[chapterIndex].pages &&
+            this.state.hierarchy[chapterIndex].pages[pageIndex]) {
+            this.state.hierarchy[chapterIndex].pages[pageIndex].title = value;
+        }
+
+        // Debounced save
+        if (!this.debouncedSaveHierarchyTitle) {
+            this.debouncedSaveHierarchyTitle = this.debounce(() => this.saveHierarchy(), 500);
+        }
+        this.debouncedSaveHierarchyTitle();
+    },
+
 
     renderHierarchyTab: async function (container) {
         const res = await fetch('/api/hierarchy');
