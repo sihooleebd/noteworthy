@@ -92,7 +92,7 @@ python3 noteworthy.py
 ## Example Project
 
 - For the `legacy` branch(formerly `master`), see a complete example at [math-noteworthy](https://github.com/sihooleebd/math-noteworthy).
-- For the `master` branch(formoerly `nightly-v1`), see a complete example at [calculus-1](https://github.com/sihooleebd/calculus-1).
+- For the `master` branch(formerly `nightly-v1`), see a complete example at [calculus-1](https://github.com/sihooleebd/calculus-1).
 - Both projects are handmade by the project authors. 
 
 ---
