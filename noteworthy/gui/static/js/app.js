@@ -833,39 +833,6 @@ const app = {
                         return;
                     }
                 }
-
-                // ---- * / _ : Prevent autoclose inside $$ ----
-                // We check if we are inside a math block by counting $ symbols before the cursor
-                // This is a heuristic: odd number of $ means we are likely inside.
-                // However, since we specifically want to target the $$ block created by the user,
-                // we can also look at local context.
-
-                // For simplicity and effectiveness with the existing $$ logic:
-                // If we are inside $$, we just insert the char and stop propagation.
-
-                // Get the character key (e.browserEvent.key is reliable in modern browsers)
-                const key = e.browserEvent.key;
-                if (key === '*' || key === '_') {
-                    // Check if inside $$
-                    const textBefore = lineContent.substring(0, position.column - 1);
-                    const dollarCount = (textBefore.match(/\$/g) || []).length;
-
-                    // Simple check: if odd number of $ before, we are in math mode (inline or block starts)
-                    // This assumes balanced $ globally, which is a fair assumption for active editing.
-                    if (dollarCount % 2 === 1) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        this.state.editor.executeEdits('', [{
-                            range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
-                            text: key
-                        }]);
-                        this.state.editor.setPosition({
-                            lineNumber: position.lineNumber,
-                            column: position.column + 1
-                        });
-                        return;
-                    }
-                }
             });
 
             // $ autocomplete handler (using onDidType for character input)
