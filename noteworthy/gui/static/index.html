@@ -315,6 +315,15 @@
     <!-- Hidden file input for uploads -->
     <input type="file" id="file-upload-input" multiple style="display: none;" onchange="app.handleFileUpload(event)">
 
+    <!-- Modules (loaded before app.js so mixins are available) -->
+    <script src="js/modules/utils.js"></script>
+    <script src="js/modules/file_tree.js"></script>
+    <script src="js/modules/collab.js"></script>
+    <script src="js/modules/config.js"></script>
+    <script src="js/modules/build.js"></script>
+    <script src="js/modules/chat.js"></script>
+    <script src="js/modules/preview.js"></script>
+    <!-- Core app -->
     <script src="js/app.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
