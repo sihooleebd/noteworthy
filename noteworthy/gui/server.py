@@ -27,7 +27,7 @@ preview_manager = PreviewManager()
 
 # DocumentHub - Unified sync manager
 from .document_hub import document_hub
-from .crdt_manager import crdt_manager
+
 import uuid
 
 # Connect preview manager to document hub
@@ -163,20 +163,17 @@ def regenerate_modules_json():
 @app.websocket("/ws/doc")
 async def doc_endpoint(websocket: WebSocket):
     """
-    Unified document WebSocket.
-    
-    Handles:
-    - Document sync (content updates)
-    - Cursor sharing
-    - Diagnostics updates
-    - Preview updates
-    - Chat
+    Doc-socket: Chat, Preview, File Presence, Identity.
+
+    Strict packet separation — does NOT handle content sync or cursors.
+    Those are exclusively handled by the Yjs WebSocket (/yjs).
     """
     user_name = websocket.query_params.get("name", "Anonymous")
     user_id = websocket.query_params.get("id", None)
+    user_token = websocket.query_params.get("token", None)
     await websocket.accept()
     
-    user = await document_hub.connect(websocket, user_name, user_id)
+    user = await document_hub.connect(websocket, user_name, user_id, token=user_token)
     
     try:
         # Send initial state
@@ -189,64 +186,67 @@ async def doc_endpoint(websocket: WebSocket):
         
         while True:
             data = await websocket.receive_text()
-            msg = json.loads(data)
+            try:
+                msg = json.loads(data)
+            except json.JSONDecodeError:
+                print(f"[Doc] Ignoring malformed JSON from {user.id}")
+                continue
+            msg_type = msg.get("type")
             
-            if msg["type"] == "join":
-                # User joins a file (for presence tracking)
+            if msg_type == "join":
                 path = msg.get("path") or msg.get("file", "")
                 await document_hub.join_file(user.id, path)
-                
-                # Send other users' info (for Emacs cursor display)
-                other_cursors = document_hub.get_users_on_file(path, exclude_user_id=user.id)
-                await websocket.send_text(json.dumps({
-                    "type": "users",
-                    "file": path,
-                    "users": other_cursors
-                }))
 
-            
-
-            
-            elif msg["type"] == "cursor":
-                # Emacs sends "file", web might send "path"
-                # But document_hub.update_cursor doesn't take path, it uses user's active file?
-                # No, update_cursor takes many args but NOT path. 
-                # server.py line 172 call: update_cursor(user_id, line, col, ...)
-                # It relies on document_hub tracking what file the user is on.
-                
-                await document_hub.update_cursor(
-                    user.id,
-                    msg.get("line", 1),
-                    msg.get("column", 1) or msg.get("col", 1),
-                    msg.get("selectionStartLine") or msg.get("selStart", 0), # Emacs sends selStart (char pos) not line
-                    msg.get("selectionStartColumn") or 0, # Emacs doesn't send this
-                    msg.get("selectionEndLine") or msg.get("selEnd", 0), # Emacs sends selEnd (char pos)
-                    msg.get("selectionEndColumn") or 0
-                )
-                # Note: Emacs sends selStart/selEnd as character indices, not line/col.
-                # DocumentHub might expect line/col. Only Yjs Awareness handles char indices well.
-                # Use what we have for now.
-
-            elif msg["type"] == "delta":
-                # Handle Emacs edits (CRDT Delta)
-                path = msg.get("file") or msg.get("path", "")
-                ops = msg.get("ops", [])
-                
-                # Apply via CRDT manager (pushes to Yjs)
-                await crdt_manager.apply_delta(path, ops, source_user=user.id)
-            
-            elif msg["type"] == "identity":
+            elif msg_type == "identity":
                 await document_hub.update_identity(
-                    user.id, 
+                    user.id,
                     msg.get("name", "Anonymous")
                 )
-            
-            elif msg["type"] == "chat":
+
+            elif msg_type == "chat":
                 await document_hub.send_chat(
                     user.id,
                     msg.get("text") or msg.get("message", ""),
                     msg.get("timestamp", 0)
                 )
+            elif msg_type == "cursor":
+                # Real-time cursor position broadcast.
+                # Build a canonical payload from server-owned identity fields.
+                file_path = msg.get("file")
+                if not file_path:
+                    continue
+
+                def int_field(key: str, default: int) -> int:
+                    try:
+                        return int(msg.get(key, default))
+                    except (TypeError, ValueError):
+                        return default
+
+                line = int_field("line", 1)
+                col = int_field("col", 1)
+                sel_start_line = int_field("selStartLine", line)
+                sel_start_col = int_field("selStartCol", col)
+                sel_end_line = int_field("selEndLine", line)
+                sel_end_col = int_field("selEndCol", col)
+
+                cursor_msg = {
+                    "type": "cursor",
+                    "userId": user.id,
+                    "file": file_path,
+                    "line": line,
+                    "col": col,
+                    "selStartLine": sel_start_line,
+                    "selStartCol": sel_start_col,
+                    "selEndLine": sel_end_line,
+                    "selEndCol": sel_end_col,
+                    "name": user.name,
+                    "color": msg.get("color") or user.color,
+                    "token": user.token,
+                }
+                await document_hub._broadcast(cursor_msg, exclude=user.id)
+
+            # delta, users, content, operation, ack, resync are
+            # Yjs-layer packets — silently ignored on this socket.
                 
     except WebSocketDisconnect:
         await document_hub.disconnect(user.id, websocket)

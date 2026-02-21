@@ -26,6 +26,7 @@ def main():
     parser.add_argument('-g', '--gui', action='store_true', help='Launch web GUI')
     parser.add_argument('-p', '--port', type=int, default=8000, help='[-g] Specify port (default: 8000)')
     parser.add_argument('-nc', '--no-coop', action='store_true', help='[-g] Solo mode (no collaboration)')
+    parser.add_argument('--packet-log', action='store_true', help='[-g] Enable low-level Yjs packet logging')
     
     # Update flags
     parser.add_argument('-u', '--update', action='store_true', help='Update noteworthy')
@@ -123,7 +124,7 @@ def main():
             else:
                 # Full collaborative mode
                 from .gui.app import run_gui
-                run_gui(port=args.port)
+                run_gui(port=args.port, packet_log=args.packet_log)
         except ImportError as e:
             print("Error: GUI requires additional dependencies.")
             print("Install with: pip install fastapi uvicorn")

@@ -11,7 +11,14 @@
         ],
 
         getUserColor: function (clientId) {
-            return this.USER_COLORS[clientId % this.USER_COLORS.length];
+            const id = String(clientId ?? '');
+            let hash = 0;
+            for (let i = 0; i < id.length; i++) {
+                hash = ((hash << 5) - hash) + id.charCodeAt(i);
+                hash |= 0;
+            }
+            const idx = Math.abs(hash) % this.USER_COLORS.length;
+            return this.USER_COLORS[idx];
         },
 
         debounce: function (func, wait) {

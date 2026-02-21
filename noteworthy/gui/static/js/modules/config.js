@@ -485,12 +485,12 @@
         updateSessionName: function (name) {
             this.state.sessionName = name || 'Anonymous';
             localStorage.setItem('sessionName', this.state.sessionName);
-            // Update Yjs Awareness with new name
-            if (this.state.yjsProvider) {
-                this.state.yjsProvider.awareness.setLocalStateField('user', {
+            // Presence/identity is handled by docSocket, not Yjs awareness.
+            if (this.state.docSocket && this.state.docSocket.readyState === WebSocket.OPEN) {
+                this.state.docSocket.send(JSON.stringify({
+                    type: 'identity',
                     name: this.state.sessionName,
-                    color: this.state.userColor || this.getUserColor(this.state.yjsProvider.awareness.clientID || 0)
-                });
+                }));
             }
             this.showSaveStatus('Name Updated');
         },

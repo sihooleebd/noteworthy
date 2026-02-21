@@ -20,14 +20,17 @@ const app = {
         editorTheme: localStorage.getItem('editorTheme') || 'vs-dark',
         sessionName: localStorage.getItem('sessionName') || 'Anonymous',
 
-        // Yjs
+        // Yjs — per-file (recreated on each openFile, content sync only)
         ydoc: null,
         yjsProvider: null,
         yjsBinding: null,
 
+        // Identity (stable across file switches, from localStorage)
+        userToken: null,
+        userColor: null,
+
         // Cursor / presence
         userId: null,
-        userColor: null,
         onlineUsers: {},
         remoteCursorDecorations: [],
         externalCursorDecorations: {},
@@ -83,7 +86,31 @@ const app = {
         const themeSelect = document.getElementById('editor-theme-select');
         if (themeSelect) themeSelect.value = this.state.editorTheme;
 
+        // ── Stable identity ───────────────────────────────────────
+        // Must be set BEFORE connectDocSocket() so the URL includes the token.
+        let token = localStorage.getItem('nw_token');
+        if (!token) {
+            token = ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
+                (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+            localStorage.setItem('nw_token', token);
+        }
+        this.state.userToken = token;
+
+        let color = localStorage.getItem('nw_color');
+        const validStoredColor = typeof color === 'string'
+            && color.trim() !== ''
+            && color !== 'undefined'
+            && color !== 'null'
+            && (!window.CSS || !window.CSS.supports || window.CSS.supports('color', color));
+        if (!validStoredColor) {
+            color = this.getUserColor(token);
+            localStorage.setItem('nw_color', color);
+        }
+        this.state.userColor = color;
+        // ─────────────────────────────────────────────────────────
+
         this.connectDocSocket();
+
         this.createWelcomeOverlay();
 
         const container = document.getElementById('monaco-container');
@@ -147,36 +174,33 @@ const app = {
                     suggest: { showKeywords: true, showSnippets: true },
                 });
 
-                // Cursor change -> update Yjs Awareness + send to DocumentHub for Emacs
+                // Cursor change -> broadcast position via docSocket (low latency).
+                // We do NOT touch Yjs awareness here — MonacoBinding owns that field.
+                // Sending via docSocket is async (no Monaco API call), so no recursion risk.
+                let _cursorSendTimer = null;
                 this.state.editor.onDidChangeCursorSelection((e) => {
-                    if (this.state.applyingRemote) return;
-                    const pos = this.state.editor.getPosition();
-                    if (!pos) return;
-
-                    const sel = e.selection;
-                    const hasSelection = !sel.isEmpty();
-
-                    if (this.state.yjsProvider) {
-                        const cursorState = { line: pos.lineNumber, column: pos.column };
-                        if (hasSelection) {
-                            cursorState.selection = {
-                                startLine: sel.startLineNumber, startColumn: sel.startColumn,
-                                endLine: sel.endLineNumber, endColumn: sel.endColumn,
-                            };
-                        }
-                        this.state.yjsProvider.awareness.setLocalStateField('cursor', cursorState);
-                    }
-
-                    if (this.state.docSocket && this.state.docSocket.readyState === WebSocket.OPEN) {
-                        const msg = { type: 'cursor', line: pos.lineNumber, column: pos.column };
-                        if (hasSelection) {
-                            msg.selectionStartLine = sel.startLineNumber;
-                            msg.selectionStartColumn = sel.startColumn;
-                            msg.selectionEndLine = sel.endLineNumber;
-                            msg.selectionEndColumn = sel.endColumn;
-                        }
-                        this.state.docSocket.send(JSON.stringify(msg));
-                    }
+                    if (_cursorSendTimer) return; // throttle at 50ms
+                    _cursorSendTimer = setTimeout(() => {
+                        _cursorSendTimer = null;
+                        if (!this.state.docSocket || this.state.docSocket.readyState !== WebSocket.OPEN) return;
+                        if (!this.state.activeFile) return;
+                        const pos = this.state.editor.getPosition();
+                        const sel = this.state.editor.getSelection();
+                        if (!pos || !sel) return;
+                        this.state.docSocket.send(JSON.stringify({
+                            type: 'cursor',
+                            file: this.state.activeFile,
+                            line: pos.lineNumber,
+                            col: pos.column,
+                            selStartLine: sel.startLineNumber,
+                            selStartCol: sel.startColumn,
+                            selEndLine: sel.endLineNumber,
+                            selEndCol: sel.endColumn,
+                            name: this.state.sessionName,
+                            color: this.state.userColor,
+                            token: this.state.userToken,
+                        }));
+                    }, 50);
                 });
 
                 this._setupSmartEditing();
@@ -399,6 +423,7 @@ const app = {
 
         this.state.externalCursorDecorations = {};
         this.state.remoteCursorDecorations = [];
+        this.clearAllRemoteCursors();
 
         if (this.state.editor) {
             this.state.editor.setValue('');
@@ -421,6 +446,47 @@ const app = {
             if (event.status === 'connected' && this.state.editor) {
                 this.state.editor.updateOptions({ readOnly: false });
             }
+
+            // Hook the underlying WebSocket for raw packet debugging.
+            // y-websocket recreates provider.ws on each (re)connect.
+            if (event.status === 'connected' && window.__NOTEWORTHY_DEBUG_PACKETS) {
+                const ws = this.state.yjsProvider.ws;
+                if (ws && !ws.__debugPatched) {
+                    ws.__debugPatched = true;
+                    const room = path;
+                    // Python-style b'...' repr: printable ASCII as chars, rest as \xNN
+                    const bytesRepr = buf => {
+                        let s = "b'";
+                        for (const b of buf) {
+                            if (b >= 0x20 && b < 0x7f && b !== 0x27 && b !== 0x5c) {
+                                s += String.fromCharCode(b);
+                            } else {
+                                s += '\\x' + b.toString(16).padStart(2, '0');
+                            }
+                        }
+                        return s + "'";
+                    };
+                    const msgType = t => ['Sync', 'Awareness', 'Auth', 'QueryAwareness'][t] ?? `Type=${t}`;
+                    const origOnMessage = ws.onmessage;
+                    ws.onmessage = function (e) {
+                        if (e.data instanceof ArrayBuffer) {
+                            const buf = new Uint8Array(e.data);
+                            console.log(`[Yjs] <<< RECV ${room} (${buf.length}b) [${msgType(buf[0])}]`);
+                            console.log(bytesRepr(buf));
+                        }
+                        if (origOnMessage) origOnMessage.call(this, e);
+                    };
+                    const origSend = ws.send.bind(ws);
+                    ws.send = function (data) {
+                        if (data instanceof Uint8Array || data instanceof ArrayBuffer) {
+                            const buf = data instanceof Uint8Array ? data : new Uint8Array(data);
+                            console.log(`[Yjs] >>> SEND ${room} (${buf.length}b) [${msgType(buf[0])}]`);
+                            console.log(bytesRepr(buf));
+                        }
+                        origSend(data);
+                    };
+                }
+            }
         });
 
         this.state.yjsProvider.on('sync', isSynced => {
@@ -428,26 +494,21 @@ const app = {
             if (isSynced && this.state.editor) {
                 this.state.editor.updateOptions({ readOnly: false });
                 document.getElementById('save-status').textContent = 'Synced';
+
+                // Render existing peers immediately — 'change' only fires for
+                // incremental deltas, not the initial awareness snapshot.
+                if (this._scheduleRenderOnlineUsers) this._scheduleRenderOnlineUsers();
+                else requestAnimationFrame(() => this.renderOnlineUsers());
+
+                // Focus the editor so MonacoBinding publishes our cursor
+                // position to awareness immediately (it tracks cursor via
+                // onDidChangeCursorSelection internally).
+                requestAnimationFrame(() => this.state.editor.focus());
             }
         });
 
-        // Set local awareness: identity
-        const userColor = this.getUserColor(this.state.yjsProvider.awareness.clientID || 0);
-        this.state.userColor = userColor;
-        this.state.yjsProvider.awareness.setLocalStateField('user', {
-            name: this.state.sessionName,
-            color: userColor,
-        });
-        this.state.yjsProvider.awareness.setLocalStateField('cursor', null);
-
-        // Awareness change -> unified cursor + presence rendering (deferred to
-        // avoid re-entrancy with Monaco's synchronous model-attach event chain)
-        this.state.yjsProvider.awareness.on('change', () => {
-            requestAnimationFrame(() => {
-                this.renderCursorsFromAwareness();
-                this.renderOnlineUsers();
-            });
-        });
+        // Yjs per-file awareness is still passed to MonacoBinding for its internal
+        // content-binding mechanics, but we no longer read or write user identity to it.
 
         // MonacoBinding
         const ytext = this.state.ydoc.getText('content');
@@ -460,6 +521,10 @@ const app = {
                     this.state.yjsProvider.awareness
                 );
                 console.log('[Yjs] MonacoBinding created');
+                // Render right away — some peers may already be in the
+                // awareness map even before the first 'change' event fires.
+                if (this._scheduleRenderOnlineUsers) this._scheduleRenderOnlineUsers();
+                else requestAnimationFrame(() => this.renderOnlineUsers());
             } catch (e) {
                 console.error('[Yjs] Error creating MonacoBinding:', e);
             }

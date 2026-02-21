@@ -2096,7 +2096,10 @@ select option {
 
 /* Ensure remote cursor background is visible */
 [class*='remote-cursor-'] {
-    position: absolute;
+    pointer-events: none;
+}
+
+[class*='remote-selection-'] {
     pointer-events: none;
 }
 

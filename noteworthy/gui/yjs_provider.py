@@ -7,6 +7,7 @@ This runs alongside the existing document hub for presence/cursor sharing.
 Updated for pycrdt-websocket 0.16+ API.
 """
 import asyncio
+import os
 from pathlib import Path
 from typing import Dict, Optional, Callable, Awaitable, Any
 from pycrdt import Doc, Text
@@ -14,6 +15,14 @@ from pycrdt.websocket import WebsocketServer, ASGIServer
 from pycrdt.websocket.yroom import YRoom
 
 from ..config import BASE_DIR
+
+_packet_logging_enabled = os.environ.get("NOTEWORTHY_PACKET_LOG", "").lower() in {"1", "true", "yes", "on"}
+
+
+def set_packet_logging(enabled: bool):
+    """Enable/disable low-level Yjs websocket packet logging."""
+    global _packet_logging_enabled
+    _packet_logging_enabled = bool(enabled)
 
 
 class NoteworthyRoom(YRoom):
@@ -192,7 +201,7 @@ def get_yjs_asgi_app():
         # Debug wrappers for packet logging
         async def logging_receive():
             msg = await receive()
-            if msg["type"] == "websocket.receive":
+            if _packet_logging_enabled and msg["type"] == "websocket.receive":
                 data = msg.get("bytes") or msg.get("text")
                 if data:
                     size = len(data)
@@ -206,7 +215,7 @@ def get_yjs_asgi_app():
             return msg
 
         async def logging_send(msg):
-            if msg["type"] == "websocket.send":
+            if _packet_logging_enabled and msg["type"] == "websocket.send":
                 data = msg.get("bytes") or msg.get("text")
                 if data:
                     size = len(data)

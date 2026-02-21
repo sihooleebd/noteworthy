@@ -1,17 +1,18 @@
 // ============================================================
 // COLLAB MODULE
-// Single source of truth for cursor display and user presence.
-// Uses Yjs Awareness for cursor sharing between web clients.
-// The DocumentHub WebSocket is used for: Emacs cursors (bridged
-// from server to Awareness), chat, preview, diagnostics, and
-// file join/leave control. Cursor rendering is driven solely
-// by Awareness state changes.
+//
+// Packet routing:
+//   /yjs  (y-monaco + MonacoBinding)  -> Content sync only.
+//   /ws/doc (docSocket)               -> Chat, Preview, Presence, Cursors.
+//
+// No Yjs Awareness used. Cursors and presence are handled entirely
+// via docSocket JSON messages.
 // ============================================================
 
 (function () {
     const CollabMixin = {
         // --------------------------------------------------------
-        // WebSocket (DocumentHub)
+        // WebSocket (DocumentHub) - NON-YJS functionality only
         // --------------------------------------------------------
         connectDocSocket: function () {
             if (this.state.wsRetryCount === undefined) this.state.wsRetryCount = 0;
@@ -19,13 +20,34 @@
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const name = encodeURIComponent(this.state.sessionName);
 
-                let clientId = sessionStorage.getItem('noteworthy_client_id');
+                // Keep one ID per browser runtime tab. We intentionally do not
+                // reuse a copied sessionStorage value from duplicated tabs.
+                let clientId = this.state.docClientId;
                 if (!clientId) {
-                    clientId = Math.random().toString(36).substring(2, 15);
+                    clientId = (window.crypto && window.crypto.randomUUID)
+                        ? window.crypto.randomUUID()
+                        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
                     sessionStorage.setItem('noteworthy_client_id', clientId);
+                    this.state.docClientId = clientId;
                 }
 
-                this.state.docSocket = new WebSocket(`${protocol}//${window.location.host}/ws/doc?name=${name}&id=${clientId}`);
+                // Include token so the server can include it in user_joined/welcome payloads
+                const token = this.state.userToken || '';
+                this.state.docSocket = new WebSocket(
+                    `${protocol}//${window.location.host}/ws/doc?name=${name}&id=${clientId}&token=${token}`);
+
+                // Wrap send for debugging
+                const originalSend = this.state.docSocket.send;
+                this.state.docSocket.send = function (data) {
+                    if (window.__NOTEWORTHY_DEBUG_PACKETS) {
+                        try {
+                            console.log('[Doc OUT]', JSON.parse(data));
+                        } catch (e) {
+                            console.log('[Doc OUT]', data);
+                        }
+                    }
+                    originalSend.apply(this, arguments);
+                };
 
                 this.state.docSocket.onopen = () => {
                     console.log('[Doc] Connected');
@@ -34,7 +56,16 @@
                 };
 
                 this.state.docSocket.onmessage = (e) => {
-                    const msg = JSON.parse(e.data);
+                    let msg;
+                    try {
+                        msg = JSON.parse(e.data);
+                    } catch (err) {
+                        console.warn('[Doc] Ignoring malformed message:', e.data);
+                        return;
+                    }
+                    if (window.__NOTEWORTHY_DEBUG_PACKETS) {
+                        console.log('[Doc IN]', msg);
+                    }
                     this.handleDocMessage(msg);
                 };
 
@@ -55,126 +86,15 @@
 
         handleDocMessage: function (msg) {
             switch (msg.type) {
-                case 'joined':
-                    // Store our own server-assigned user ID and color
+                // ---- Presence / Identity ----
+                case 'welcome':
                     this.state.userId = msg.userId;
-                    this.state.userColor = msg.color;
-                    console.log(`[Doc] Joined as ${msg.userId}`);
-                    // Render the initial list of online users
+                    // Do NOT overwrite state.userColor — it's the stable localStorage color
+                    // used in cursor messages. msg.color is the server's rotating palette color.
+                    console.log(`[Doc] Welcomed as ${msg.userId} (server color: ${msg.color})`);
                     if (msg.users && Array.isArray(msg.users)) {
-                        this._syncAwarenessFromServerUsers(msg.users);
+                        this._initOnlineUsers(msg.users);
                     }
-                    break;
-
-                case 'init':
-                    // File is loaded – set language mode. Content comes via Yjs.
-                    if (this.state.editor) {
-                        const ext = this.state.activeFile?.split('.').pop() || 'typ';
-                        const lang = ext === 'typ' ? 'markdown' : (ext === 'json' ? 'json' : 'plaintext');
-                        monaco.editor.setModelLanguage(this.state.editor.getModel(), lang);
-                        this.state.docVersion = msg.version || 0;
-                        this.state.docHash = msg.hash || '';
-                        document.getElementById('save-status').textContent = '';
-                        this.startSyncVerification();
-                    }
-                    break;
-
-                case 'content':
-                    // Legacy full-content sync from server (Emacs edits via OT path)
-                    if (msg.userId !== this.state.userId && this.state.editor) {
-                        this.state.applyingRemote = true;
-                        const pos = this.state.editor.getPosition();
-                        this.state.editor.setValue(msg.content);
-                        this.state.docVersion = msg.version;
-                        this.state.docHash = msg.hash;
-                        if (pos) {
-                            const model = this.state.editor.getModel();
-                            const maxLine = model.getLineCount();
-                            const newLine = Math.min(pos.lineNumber, maxLine);
-                            const newCol = Math.min(pos.column, model.getLineMaxColumn(newLine));
-                            this.state.editor.setPosition({ lineNumber: newLine, column: newCol });
-                        }
-                        this.state.applyingRemote = false;
-                    }
-                    break;
-
-                case 'operation':
-                    // Incremental OT operation from a remote user (e.g., Emacs)
-                    if (msg.userId !== this.state.userId && this.state.editor) {
-                        this.state.applyingRemote = true;
-                        const model = this.state.editor.getModel();
-                        const op = msg.op;
-                        const cursorPos = this.state.editor.getPosition();
-                        const cursorOffset = model.getOffsetAt(cursorPos);
-
-                        if (op.type === 'insert') {
-                            const pos = model.getPositionAt(op.position);
-                            this.state.editor.executeEdits('remote', [{
-                                range: new monaco.Range(pos.lineNumber, pos.column, pos.lineNumber, pos.column),
-                                text: op.text
-                            }]);
-                            if (op.position <= cursorOffset) {
-                                const newPos = model.getPositionAt(cursorOffset + op.text.length);
-                                this.state.editor.setPosition(newPos);
-                            }
-                        } else if (op.type === 'delete') {
-                            const startPos = model.getPositionAt(op.position);
-                            const endPos = model.getPositionAt(op.position + op.length);
-                            this.state.editor.executeEdits('remote', [{
-                                range: new monaco.Range(startPos.lineNumber, startPos.column, endPos.lineNumber, endPos.column),
-                                text: ''
-                            }]);
-                            if (op.position + op.length <= cursorOffset) {
-                                const newPos = model.getPositionAt(cursorOffset - op.length);
-                                this.state.editor.setPosition(newPos);
-                            } else if (op.position < cursorOffset) {
-                                const newPos = model.getPositionAt(op.position);
-                                this.state.editor.setPosition(newPos);
-                            }
-                        }
-                        this.state.docVersion = msg.version;
-                        this.state.docHash = msg.hash;
-                        this.state.applyingRemote = false;
-                    }
-                    break;
-
-                case 'ack':
-                    this.state.docVersion = msg.version;
-                    this.state.docHash = msg.hash;
-                    document.getElementById('save-status').textContent = 'Synced';
-                    setTimeout(() => document.getElementById('save-status').textContent = '', 1500);
-                    break;
-
-                case 'resync':
-                    console.log('[Sync] Resync received - applying authoritative content');
-                    if (this.state.editor) {
-                        this.state.applyingRemote = true;
-                        const pos = this.state.editor.getPosition();
-                        this.state.editor.setValue(msg.content);
-                        this.state.docVersion = msg.version;
-                        this.state.docHash = msg.hash;
-                        if (pos) {
-                            const model = this.state.editor.getModel();
-                            const maxLine = model.getLineCount();
-                            const newLine = Math.min(pos.lineNumber, maxLine);
-                            const newCol = Math.min(pos.column, model.getLineMaxColumn(newLine));
-                            this.state.editor.setPosition({ lineNumber: newLine, column: newCol });
-                        }
-                        this.state.applyingRemote = false;
-                    }
-                    break;
-
-                case 'cursor':
-                    // Cursor from a non-Yjs client (e.g., Emacs). Bridge to Awareness.
-                    this._bridgeExternalCursorToAwareness(msg);
-                    break;
-
-                case 'preview':
-                    this.updatePreview(msg.updates);
-                    break;
-
-                case 'diagnostics':
-                    this.applyDiagnostics(msg.diagnostics);
                     break;
 
                 case 'user_joined':
@@ -183,153 +103,101 @@
                     this.updateUserPresence(msg);
                     break;
 
+                // ---- Chat ----
                 case 'chat':
                     this.addChatMessage(msg);
                     break;
+
+                // ---- Preview / Diagnostics ----
+                case 'preview':
+                    this.updatePreview(msg.updates);
+                    break;
+
+                case 'diagnostics':
+                    this.applyDiagnostics(msg.diagnostics);
+                    break;
+
+                // ---- Remote cursors (custom, low-latency, via docSocket) ----
+                case 'cursor':
+                    this._applyRemoteCursor(msg);
+                    break;
+
+                // ---- Ignored (handled by Yjs) ----
+                case 'init':
+                case 'content':
+                case 'operation':
+                case 'ack':
+                case 'resync':
+                case 'users':
+                case 'delta':
+                    // Legacy Emacs-bridge or Yjs-layer packets — ignore here.
+                    break;
+
+                default:
+                    console.warn('[Doc] Unknown message type:', msg.type);
             }
         },
 
-        // --------------------------------------------------------
-        // Awareness-based cursor rendering (Yjs)
-        // Called whenever Awareness state changes.
-        // --------------------------------------------------------
-        renderCursorsFromAwareness: function () {
-            if (!this.state.yjsProvider || !this.state.editor) return;
-            // Guard against re-entrant calls (Monaco fires model events synchronously
-            // during deltaDecorations which can retrigger awareness changes).
-            if (this._renderingCursors) return;
-            this._renderingCursors = true;
-
-            const awareness = this.state.yjsProvider.awareness;
-            const states = awareness.getStates();
-            const decorations = [];
-
-            states.forEach((state, clientId) => {
-                if (clientId === awareness.clientID) return; // skip self
-
-                const cursor = state.cursor;
-                if (!cursor || !cursor.line) return;
-
-                const user = state.user || {};
-                const color = user.color || this.getUserColor(clientId);
-                const name = user.name || `User ${clientId}`;
-
-                // Inject per-user CSS if not already done
-                this._injectUserCss(String(clientId), color);
-
-                // Caret decoration
-                decorations.push({
-                    range: new monaco.Range(cursor.line, cursor.column, cursor.line, cursor.column),
-                    options: {
-                        className: `remote-cursor-${clientId}`,
-                        hoverMessage: { value: `**${name}**` },
-                        stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
-                    }
-                });
-
-                // Selection decoration
-                if (cursor.selection) {
-                    const sel = cursor.selection;
-                    decorations.push({
-                        range: new monaco.Range(sel.startLine, sel.startColumn, sel.endLine, sel.endColumn),
-                        options: {
-                            className: `remote-selection-${clientId}`,
-                            hoverMessage: { value: `${name}'s selection` },
-                            stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
-                        }
-                    });
-                }
+        _onlineUsersRenderPending: false,
+        _scheduleRenderOnlineUsers: function () {
+            if (this._onlineUsersRenderPending) return;
+            this._onlineUsersRenderPending = true;
+            requestAnimationFrame(() => {
+                this._onlineUsersRenderPending = false;
+                this.renderOnlineUsers();
             });
-
-            try {
-                this.state.remoteCursorDecorations = this.state.editor.deltaDecorations(
-                    this.state.remoteCursorDecorations || [],
-                    decorations
-                );
-            } finally {
-                this._renderingCursors = false;
-            }
         },
 
-        // --------------------------------------------------------
-        // Online users list (avatars above editor)
-        // --------------------------------------------------------
         renderOnlineUsers: function () {
             const container = document.getElementById('online-users');
             if (!container) return;
             container.innerHTML = '';
 
-            if (!this.state.yjsProvider) return;
+            // Avatar list driven entirely by docSocket presence (state.onlineUsers).
+            const users = this.state.onlineUsers || {};
+            const myId = this.state.userId;
+            console.log('[Collab] renderOnlineUsers: onlineUsers=', Object.keys(users), 'myId=', myId);
 
-            const awareness = this.state.yjsProvider.awareness;
-            const states = awareness.getStates();
+            Object.values(users).forEach(user => {
+                if (user.id === myId) return; // skip self
 
-            states.forEach((state, clientId) => {
-                if (clientId === awareness.clientID) return; // skip self
-
-                const user = state.user || {};
-                const cursor = state.cursor;
-                const name = user.name || `User ${clientId}`;
-                const color = user.color || this.getUserColor(clientId);
+                const name = user.name || 'Anonymous';
+                const color = user.color || '#888';
+                const currentFile = user.file || null;
+                const fileLabel = currentFile ? currentFile.split('/').pop() : '?';
 
                 const avatar = document.createElement('div');
                 avatar.className = 'user-avatar';
                 avatar.style.backgroundColor = color;
-                avatar.style.cursor = 'pointer';
-                avatar.title = `${name}\nClick to follow`;
+                avatar.title = `${name} \u2192 ${fileLabel}\nClick to follow`;
                 avatar.textContent = name.charAt(0).toUpperCase();
-
-                avatar.onclick = () => {
-                    if (cursor && cursor.line && this.state.editor) {
-                        this.state.editor.revealLineInCenter(cursor.line);
-                        this.state.editor.setPosition({ lineNumber: cursor.line, column: cursor.column || 1 });
-                        this.state.editor.focus();
-                    } else {
-                        console.warn('[Collab] User has no cursor info in awareness');
-                    }
-                };
-
+                avatar.onclick = () => this._followPeer(user.id, currentFile);
                 container.appendChild(avatar);
             });
+        },
 
-            // Also show users from DocumentHub that may not be in Yjs (e.g. Emacs clients)
-            const docHubUsers = Object.values(this.state.onlineUsers || {});
-            const awarenessNames = new Set();
-            states.forEach((state) => {
-                if (state.user?.name) awarenessNames.add(state.user.name);
-            });
+        // Follow a peer: if different file, open it; then jump to their last cursor pos.
+        _followPeer: function (peerId, peerFile) {
+            const follow = () => {
+                if (!this.state.editor) return;
+                const key = peerId == null ? null : String(peerId);
+                const cursor = key ? this._remoteCursors[key] : null;
+                if (!cursor) { console.warn('[Follow] No cursor data for peer'); return; }
+                const model = this.state.editor.getModel();
+                if (!model) return;
+                const maxLine = Math.max(1, model.getLineCount());
+                const line = Math.min(Math.max(1, cursor.line || 1), maxLine);
+                const col = Math.min(Math.max(1, cursor.col || 1), model.getLineMaxColumn(line));
+                this.state.editor.revealLineInCenter(line);
+                this.state.editor.setPosition({ lineNumber: line, column: col });
+                this.state.editor.focus();
+            };
 
-            docHubUsers.forEach(user => {
-                if (user.id === this.state.userId) return; // skip self
-                if (awarenessNames.has(user.name)) return; // already shown via Awareness
-
-                const avatar = document.createElement('div');
-                avatar.className = 'user-avatar';
-                avatar.style.backgroundColor = user.color || '#888';
-                avatar.style.cursor = 'pointer';
-                avatar.title = `${user.name} (Emacs)\nClick to follow`;
-                avatar.textContent = user.name.charAt(0).toUpperCase();
-
-                avatar.onclick = () => {
-                    if (user.file) {
-                        this.openFile(user.file);
-                        if (user.cursor_line) {
-                            setTimeout(() => {
-                                if (this.state.editor) {
-                                    this.state.editor.revealLineInCenter(user.cursor_line);
-                                    this.state.editor.setPosition({
-                                        lineNumber: user.cursor_line,
-                                        column: user.cursor_column || 1
-                                    });
-                                    this.state.editor.focus();
-                                }
-                            }, 200);
-                        }
-                    }
-                };
-
-                container.appendChild(avatar);
-            });
+            if (peerFile && peerFile !== this.state.activeFile) {
+                this.openFile(peerFile).then(follow);
+            } else {
+                follow();
+            }
         },
 
         // --------------------------------------------------------
@@ -338,101 +206,186 @@
         updateUserPresence: function (msg) {
             if (!this.state.onlineUsers) this.state.onlineUsers = {};
 
-            if (msg.type === 'user_joined') {
+            if (msg.type === 'user_joined' && msg.user) {
                 this.state.onlineUsers[msg.user.id] = msg.user;
             } else if (msg.type === 'user_left') {
+                const departingUser = this.state.onlineUsers[msg.userId];
                 delete this.state.onlineUsers[msg.userId];
-            } else if (msg.type === 'user_updated' && msg.user) {
-                this.state.onlineUsers[msg.user.id] = msg.user;
-            }
-
-            this.renderOnlineUsers();
-        },
-
-        // --------------------------------------------------------
-        // Bridge an external (Emacs) cursor update into Yjs Awareness
-        // so web clients can display it via the unified Awareness path.
-        // --------------------------------------------------------
-        _bridgeExternalCursorToAwareness: function (msg) {
-            // We track Emacs cursors in a synthetic awareness-like entry
-            // stored on state, then refresh the online users list.
-            // Since we can't write to awareness as another clientId,
-            // we store them in state.onlineUsers with cursor fields.
-            if (!this.state.onlineUsers) this.state.onlineUsers = {};
-            if (msg.userId && this.state.onlineUsers[msg.userId]) {
-                this.state.onlineUsers[msg.userId].cursor_line = msg.line;
-                this.state.onlineUsers[msg.userId].cursor_column = msg.column;
-            }
-            // Render the external cursor as a decoration
-            this._renderExternalCursor(msg);
-        },
-
-        _renderExternalCursor: function (msg) {
-            if (!this.state.editor || !msg.line) return;
-
-            if (!this.state.externalCursorDecorations) this.state.externalCursorDecorations = {};
-            const key = `external-${msg.userId}`;
-            const color = msg.color || '#888888';
-
-            this._injectUserCss(key, color);
-
-            const decorations = [{
-                range: new monaco.Range(msg.line, msg.column || 1, msg.line, (msg.column || 1) + 1),
-                options: {
-                    className: `remote-cursor-${key}`,
-                    hoverMessage: { value: `**${msg.name || 'Remote'}** (Emacs)` },
-                    stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+                // Clear by user ID (authoritative) and legacy token key if present.
+                this._clearRemoteCursor(msg.userId);
+                if (departingUser?.token && departingUser.token !== msg.userId) {
+                    this._clearRemoteCursor(departingUser.token);
                 }
-            }];
+            } else if (msg.type === 'user_updated' && msg.user) {
+                this.state.onlineUsers[msg.user.id] = {
+                    ...(this.state.onlineUsers[msg.user.id] || {}),
+                    ...msg.user
+                };
+            }
+            // Avatar list is now docSocket-driven — re-render on every presence event.
+            this._scheduleRenderOnlineUsers();
+        },
 
-            if (msg.selectionStartLine && msg.selectionEndLine) {
+        _initOnlineUsers: function (users) {
+            this.state.onlineUsers = {};
+            users.forEach(u => { this.state.onlineUsers[u.id] = u; });
+            this._scheduleRenderOnlineUsers();
+        },
+
+        // --------------------------------------------------------
+        // Remote cursor rendering (via docSocket, absolute line/col)
+        // --------------------------------------------------------
+        // Stores: { userId -> { decorationIds: [], color, name, file, line, col, token } }
+        _remoteCursors: {},
+
+        _cssSafeId: function (id) {
+            return String(id).replace(/[^a-zA-Z0-9_-]/g, '_');
+        },
+        _normalizeColor: function (value, fallback = '#888') {
+            if (typeof value !== 'string') return fallback;
+            const v = value.trim();
+            if (!v || v === 'undefined' || v === 'null') return fallback;
+            if (window.CSS && typeof window.CSS.supports === 'function') {
+                return window.CSS.supports('color', v) ? v : fallback;
+            }
+            return v;
+        },
+
+        _applyRemoteCursor: function (msg) {
+            const peerId = msg.userId || msg.token;
+            if (!peerId) return;
+            const key = String(peerId);
+            const toInt = (value, fallback) => {
+                const parsed = Number.parseInt(value, 10);
+                return Number.isFinite(parsed) ? parsed : fallback;
+            };
+            const color = this._normalizeColor(msg.color, '#888');
+
+            // Always persist the latest position metadata (for _followPeer lookup).
+            const prev = this._remoteCursors[key] || {};
+            this._remoteCursors[key] = {
+                ...prev,
+                token: msg.token || prev.token || null,
+                color,
+                name: msg.name,
+                file: msg.file,
+                line: toInt(msg.line, prev.line || 1),
+                col: toInt(msg.col, prev.col || 1),
+            };
+
+            // Only render decorations in the editor if peer is in the same file.
+            if (!this.state.editor || msg.file !== this.state.activeFile) {
+                // Clear stale decorations if peer moved to a different file.
+                if (prev.decorationIds?.length && this.state.editor) {
+                    this.state.editor.deltaDecorations(prev.decorationIds, []);
+                }
+                this._remoteCursors[key].decorationIds = [];
+                return;
+            }
+
+            const classSuffix = this._cssSafeId(key);
+            this._injectRemoteCursorCSS(classSuffix, color);
+
+            const model = this.state.editor.getModel();
+            if (!model) return;
+
+            const maxLine = Math.max(1, model.getLineCount());
+            const line = Math.min(Math.max(1, toInt(msg.line, 1)), maxLine);
+            const col = Math.min(Math.max(1, toInt(msg.col, 1)), model.getLineMaxColumn(line));
+
+            let selStartLine = Math.min(Math.max(1, toInt(msg.selStartLine, line)), maxLine);
+            let selEndLine = Math.min(Math.max(1, toInt(msg.selEndLine, line)), maxLine);
+            let selStartCol = Math.min(Math.max(1, toInt(msg.selStartCol, col)), model.getLineMaxColumn(selStartLine));
+            let selEndCol = Math.min(Math.max(1, toInt(msg.selEndCol, col)), model.getLineMaxColumn(selEndLine));
+
+            if (selEndLine < selStartLine || (selEndLine === selStartLine && selEndCol < selStartCol)) {
+                [selStartLine, selEndLine] = [selEndLine, selStartLine];
+                [selStartCol, selEndCol] = [selEndCol, selStartCol];
+            }
+
+            const hasSelection = selStartLine !== selEndLine || selStartCol !== selEndCol;
+
+            const decorations = [
+                {
+                    // Zero-width caret decoration keeps remote cursor visible
+                    // even at EOL/empty lines.
+                    range: new monaco.Range(line, col, line, col),
+                    options: {
+                        className: `remote-cursor-${classSuffix}`,
+                        showIfCollapsed: true,
+                        zIndex: 50,
+                        stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+                        hoverMessage: { value: msg.name || 'Peer' },
+                    }
+                }
+            ];
+
+            if (hasSelection) {
                 decorations.push({
                     range: new monaco.Range(
-                        msg.selectionStartLine, msg.selectionStartColumn || 1,
-                        msg.selectionEndLine, msg.selectionEndColumn || 1
+                        selStartLine, selStartCol,
+                        selEndLine, selEndCol
                     ),
                     options: {
-                        className: `remote-selection-${key}`,
-                        hoverMessage: { value: `${msg.name || 'Remote'}'s selection` },
+                        className: `remote-selection-${classSuffix}`,
                         stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
                     }
                 });
             }
 
-            this.state.externalCursorDecorations[key] = this.state.editor.deltaDecorations(
-                this.state.externalCursorDecorations[key] || [],
-                decorations
-            );
+            const prevIds = prev.decorationIds || [];
+            const nextIds = this.state.editor.deltaDecorations(prevIds, decorations);
+            this._remoteCursors[key] = {
+                ...this._remoteCursors[key],
+                line,
+                col,
+                decorationIds: nextIds
+            };
         },
 
-        // --------------------------------------------------------
-        // Sync awareness from server user list on initial 'joined'
-        // --------------------------------------------------------
-        _syncAwarenessFromServerUsers: function (users) {
-            this.state.onlineUsers = {};
-            users.forEach(u => {
-                this.state.onlineUsers[u.id] = u;
-            });
-            this.renderOnlineUsers();
+        _clearRemoteCursor: function (key) {
+            const cursorKey = String(key);
+            const cursor = this._remoteCursors[cursorKey];
+            if (!cursor) return;
+            if (this.state.editor && cursor.decorationIds?.length) {
+                this.state.editor.deltaDecorations(cursor.decorationIds, []);
+            }
+            delete this._remoteCursors[cursorKey];
         },
 
-        // --------------------------------------------------------
-        // CSS injection for dynamic user colors
-        // --------------------------------------------------------
-        _injectUserCss: function (id, color) {
-            const styleId = `user-style-${id}`;
-            if (document.getElementById(styleId)) return;
-            const style = document.createElement('style');
-            style.id = styleId;
-            style.textContent = `
-                .remote-cursor-${id} {
-                    border-left: 2px solid ${color};
-                    background-color: ${color}25;
+        // Clear all remote cursor decorations (call on file switch).
+        // Keep last known metadata for cross-document follow.
+        clearAllRemoteCursors: function () {
+            Object.keys(this._remoteCursors).forEach((key) => {
+                const cursor = this._remoteCursors[key];
+                if (this.state.editor && cursor.decorationIds?.length) {
+                    this.state.editor.deltaDecorations(cursor.decorationIds, []);
                 }
-                .remote-selection-${id} {
-                    background-color: ${color}30;
+                this._remoteCursors[key] = { ...cursor, decorationIds: [] };
+            });
+        },
+        _injectRemoteCursorCSS: function (classSuffix, color) {
+            const styleId = `remote-style-${classSuffix}`;
+            const css = `
+                .remote-cursor-${classSuffix} {
+                    border-left: 2px solid ${color};
+                    margin-left: -1px;
+                    box-sizing: border-box;
+                    pointer-events: none;
+                }
+                .remote-selection-${classSuffix} {
+                    background-color: ${color}40;
+                    pointer-events: none;
                 }
             `;
+            const existing = document.getElementById(styleId);
+            if (existing) {
+                if (existing.textContent !== css) existing.textContent = css;
+                return;
+            }
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = css;
             document.head.appendChild(style);
         },
 
