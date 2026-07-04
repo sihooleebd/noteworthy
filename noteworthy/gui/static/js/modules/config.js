@@ -502,7 +502,7 @@
                     <pre style="font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.2;color:var(--accent-primary);margin-bottom:16px;display:inline-block;">${this.ASCII_LOGO || ''}</pre>
                     <h1 style="font-family:var(--font-display);font-size:28px;font-weight:700;margin-bottom:4px;">Noteworthy</h1>
                     <p style="color:var(--text-muted);margin-bottom:16px;font-size:14px;">A modular Typst template system</p>
-                    <span style="background:var(--bg-secondary);border-radius:6px;padding:6px 16px;font-family:'JetBrains Mono',monospace;font-size:13px;">v0.2.0</span>
+                    <span style="background:var(--bg-secondary);border-radius:6px;padding:6px 16px;font-family:'JetBrains Mono',monospace;font-size:13px;">v0.3.0</span>
                 </div>
                 <div class="config-section" style="display:flex;justify-content:center;gap:24px;padding:16px 24px;flex-wrap:wrap;">
                     <a href="https://noteworthy.benjaminlee.kr/docs.html" target="_blank" class="info-link"><i data-lucide="book-open"></i> Docs</a>
