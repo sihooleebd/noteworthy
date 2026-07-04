@@ -51,6 +51,16 @@ Understanding the codebase:
 
 ---
 
+## GUI Parity
+
+The collaborative GUI and solo GUI intentionally mirror each other in a lot of places.
+
+- If you change shared editor or preview UI in **`noteworthy/gui/`**, check whether the same change is needed in **`noteworthy/gui_solo/`**.
+- For frontend behavior, layout, and controls, default to updating both modes together unless the feature is explicitly collaboration-only.
+- When submitting a PR that touches one GUI mode but not the other, call out the reason in the PR description.
+
+---
+
 ## Typst Conventions
 
 We strictly separate **structure** from **style**:

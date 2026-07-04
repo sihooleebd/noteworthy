@@ -90,20 +90,25 @@ class MainMenu:
     def draw(self):
         h, w = self.scr.getmaxyx()
         self.scr.clear()
-        
-        # Draw logo (left-aligned)
-        logo_y = TOP_PAD
-        for i, line in enumerate(LOGO):
-            TUI.safe_addstr(self.scr, logo_y + i, LEFT_PAD, line, curses.color_pair(1) | curses.A_BOLD)
-        
-        # Title below logo
-        title_y = logo_y + len(LOGO) + 1
+
+        # Responsive: full layout needs logo + title + spaced menu + footer.
+        # On short terminals drop the logo, then tighten menu spacing.
+        full_h = TOP_PAD + len(LOGO) + 1 + 1 + 3 + len(self.options) * 2 + 2
+        show_logo = h >= full_h
+        spacing = 2 if h >= TOP_PAD + 1 + 3 + len(self.options) * 2 + 2 else 1
+
+        title_y = TOP_PAD
+        if show_logo:
+            for i, line in enumerate(LOGO):
+                TUI.safe_addstr(self.scr, TOP_PAD + i, LEFT_PAD, line, curses.color_pair(1) | curses.A_BOLD)
+            title_y = TOP_PAD + len(LOGO) + 1
+
         TUI.safe_addstr(self.scr, title_y, LEFT_PAD, 'NOTEWORTHY', curses.color_pair(1) | curses.A_BOLD)
-        
+
         # Menu options
-        menu_y = title_y + 3
+        menu_y = title_y + (3 if spacing == 2 else 2)
         for i, (key, label, desc) in enumerate(self.options):
-            y = menu_y + i * 2
+            y = menu_y + i * spacing
             
             if i == self.selected:
                 TUI.safe_addstr(self.scr, y, LEFT_PAD, '▶', curses.color_pair(3) | curses.A_BOLD)

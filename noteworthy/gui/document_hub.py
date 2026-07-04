@@ -8,6 +8,7 @@ Strict packet separation:
 This hub does NOT touch document content, cursors, or Yjs.
 """
 import asyncio
+import logging
 import json
 import uuid
 import subprocess
@@ -19,6 +20,7 @@ from fastapi import WebSocket
 from pathlib import Path
 
 from ..config import BASE_DIR, RENDERER_FILE
+log = logging.getLogger("noteworthy.gui")
 
 
 # User colors for avatars
@@ -114,7 +116,7 @@ class DocumentHub:
             if user.current_file and user.current_file.endswith('.typ') and self.preview_manager:
                 self.preview_manager.stop_watch(user.current_file)
         except Exception as e:
-            print(f"[Hub] Error stopping watch during disconnect: {e}")
+            log.error(f"[Hub] Error stopping watch during disconnect: {e}")
 
         del self.users[user_id]
         await self._broadcast({"type": "user_left", "userId": user_id})
@@ -124,13 +126,14 @@ class DocumentHub:
         if user_id not in self.users:
             return
 
+        path = str(Path(path)) if path else ""
         user = self.users[user_id]
 
         try:
             if user.current_file and user.current_file.endswith('.typ') and self.preview_manager:
                 self.preview_manager.stop_watch(user.current_file)
         except Exception as e:
-            print(f"[Hub] Error stopping watch: {e}")
+            log.error(f"[Hub] Error stopping watch: {e}")
 
         user.current_file = path
 
@@ -138,8 +141,8 @@ class DocumentHub:
             try:
                 self.preview_manager.start_watch(path)
                 # Send current cached preview state to joining user
-                for _ in range(10):
-                    await asyncio.sleep(0.2)
+                for _ in range(20):
+                    await asyncio.sleep(0.15)
                     status = self.preview_manager.get_status(path)
                     if status['pages']:
                         updates = []
@@ -153,7 +156,7 @@ class DocumentHub:
                             }))
                             break
             except Exception as e:
-                print(f"[Hub] Error starting watch: {e}")
+                log.error(f"[Hub] Error starting watch: {e}")
 
         # Broadcast the file change to ALL connected clients so their avatar
         # lists update immediately (not just users already on this file).
@@ -168,6 +171,19 @@ class DocumentHub:
         await self._broadcast_to_file(source_path, {
             "type": "preview", "updates": updates
         })
+
+    async def on_preview_log(self, level: str, message: str, source_path: str = None):
+        """Broadcast preview log messages to clients."""
+        payload = {
+            "type": "preview_log",
+            "level": level,
+            "message": message,
+            "file": source_path,
+        }
+        if source_path:
+            await self._broadcast_to_file(source_path, payload)
+        else:
+            await self._broadcast(payload)
 
     async def send_chat(self, user_id: str, text: str, timestamp: int):
         """Broadcast chat message."""
@@ -220,7 +236,7 @@ class DocumentHub:
                 continue
             try:
                 await user.websocket.send_text(msg_json)
-            except:
+            except Exception:
                 pass
 
     async def _broadcast_to_file(self, path: str, message: dict, exclude: str = None):
@@ -230,7 +246,7 @@ class DocumentHub:
                 continue
             try:
                 await user.websocket.send_text(msg_json)
-            except:
+            except Exception:
                 pass
 
 

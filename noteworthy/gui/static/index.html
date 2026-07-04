@@ -92,26 +92,6 @@
                 <!-- Preview -->
                 <aside class="preview-panel glass">
                     <div class="preview-header">
-                        <div class="preview-toolbar">
-                            <!-- Preview Mode Toggle -->
-                            <label class="toggle-switch" title="Switch between Partial and Full preview">
-                                <input type="checkbox" id="preview-mode-toggle" onchange="app.togglePreviewMode()">
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label" id="preview-mode-label">Partial</span>
-                            </label>
-
-                            <!-- Sync Button -->
-                            <button class="icon-btn" id="preview-sync-btn" onclick="app.syncPreviewScroll()"
-                                title="Sync scroll to cursor (Alt+O)">
-                                <i data-lucide="locate"></i>
-                            </button>
-
-                            <!-- Log Panel Toggle -->
-                            <button class="icon-btn" id="preview-log-toggle" onclick="app.toggleLogPanel()"
-                                title="Toggle log panel">
-                                <i data-lucide="terminal"></i>
-                            </button>
-                        </div>
                         <h3>Preview</h3>
                     </div>
                     <div id="preview-container">
@@ -119,17 +99,6 @@
                             <i data-lucide="eye"></i>
                             <span>Select a .typ file</span>
                         </div>
-                    </div>
-
-                    <!-- Log Panel (collapsible) -->
-                    <div id="log-panel" class="log-panel hidden">
-                        <div class="log-header">
-                            <span>Logs</span>
-                            <button class="icon-btn-small" onclick="app.clearLogs()" title="Clear logs">
-                                <i data-lucide="trash-2"></i>
-                            </button>
-                        </div>
-                        <div id="log-messages" class="log-messages"></div>
                     </div>
                 </aside>
             </div>

@@ -10,8 +10,10 @@ from .keybinds import SaveBind, ExitBind, NavigationBind, KeyBind
 # Layout constants
 LEFT_PAD = 4
 TOP_PAD = 2
-MIN_HEIGHT = 30
-MIN_WIDTH = 100
+# Absolute floor below which nothing can render meaningfully.
+# Views are responsible for adapting their layout down to this size.
+MIN_HEIGHT = 10
+MIN_WIDTH = 40
 
 
 class TUI:
@@ -306,8 +308,8 @@ class ListEditor(BaseEditor):
         
         # Calculate visible area
         list_start_y = TOP_PAD + 3
-        visible_rows = h - list_start_y - 3
-        content_w = min(self.content_width, w - LEFT_PAD - 2)
+        visible_rows = max(1, h - list_start_y - 3)
+        content_w = max(10, min(self.content_width, w - LEFT_PAD - 2))
         
         # Scroll adjustment
         if self.cursor < self.scroll:

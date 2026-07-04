@@ -5,3 +5,4 @@ websockets>=11.0
 
 # Real-time collaboration (CRDT)
 pycrdt>=0.8.0
+pycrdt-websocket>=0.12.0

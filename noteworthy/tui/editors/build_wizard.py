@@ -401,23 +401,58 @@ class BuildWizard(BaseEditor):
 
     # --- Draw ---
 
+    # Below this width the sidebar panel relocates to a horizontal
+    # step bar at the top, giving the content pane the full width.
+    SIDEBAR_MIN_WIDTH = 90
+
     def refresh(self):
         h, w = self.scr.getmaxyx()
         self.scr.clear()
-        
+
         # Increase top pad slightly (User Request)
         header_pad = TOP_PAD + 1
 
-        # Draw Sidebar
-        self._draw_sidebar(h, w, header_pad)
-        
-        # Separator
-        for y in range(h):
-            TUI.safe_addstr(self.scr, y, self.sidebar_width, "│", curses.color_pair(4)|curses.A_DIM)
-            
+        # Dynamic panel layout
+        if w < self.SIDEBAR_MIN_WIDTH:
+            step_bar_h = self._draw_step_bar(h, w)
+            content_x = 0
+            content_y = step_bar_h + 1
+        else:
+            self.sidebar_width = min(25, max(18, w // 4))
+            self._draw_sidebar(h, w, header_pad)
+            for y in range(h):
+                TUI.safe_addstr(self.scr, y, self.sidebar_width, "│", curses.color_pair(4)|curses.A_DIM)
+            content_x = self.sidebar_width + 1
+            content_y = header_pad
+
         # Draw Content
-        self._draw_content(h, w, header_pad)
+        self._draw_content(h, w, content_y, content_x)
         self.scr.refresh()
+
+    def _draw_step_bar(self, h, w):
+        """Horizontal replacement for the sidebar on narrow terminals.
+
+        Returns the number of rows consumed.
+        """
+        labels = self.steps if w >= 64 else ["Config", "Build", "Result"]
+        x = LEFT_PAD
+        y = 1
+        for i, label in enumerate(labels):
+            if i == self.current_step_idx:
+                style = curses.color_pair(3)|curses.A_BOLD
+                seg = f"● {label}"
+            elif i < self.current_step_idx:
+                style = curses.color_pair(2)
+                seg = f"✓ {label}"
+            else:
+                style = curses.color_pair(4)|curses.A_DIM
+                seg = f"  {label}"
+            TUI.safe_addstr(self.scr, y, x, seg, style)
+            x += len(seg)
+            if i < len(labels) - 1:
+                TUI.safe_addstr(self.scr, y, x, " → ", curses.color_pair(4)|curses.A_DIM)
+                x += 3
+        return y + 1
 
     def _draw_sidebar(self, h, w, y_offset):
         TUI.safe_addstr(self.scr, y_offset, LEFT_PAD, "Build Wizard", curses.color_pair(1)|curses.A_BOLD)
@@ -435,12 +470,11 @@ class BuildWizard(BaseEditor):
              
              TUI.safe_addstr(self.scr, y, LEFT_PAD, prefix + label, style)
 
-    def _draw_content(self, h, w, y_offset):
-        content_x = self.sidebar_width + 1
+    def _draw_content(self, h, w, y_offset, content_x):
         content_w = w - content_x
         y = y_offset
         x = content_x + 2
-        
+
         if self.current_step_idx == 0:
             # Configuration Screen
             if self.mismatch_error:
@@ -448,9 +482,14 @@ class BuildWizard(BaseEditor):
                 return
 
             TUI.safe_addstr(self.scr, y, x, "Run Config", curses.color_pair(1)|curses.A_BOLD)
-            
-            # Options with improved margin (dfpt)
-            opts_y = y + 2
+
+            # Compact vertical layout on short terminals: fewer blank
+            # lines and no hover title, so the grid keeps some rows.
+            compact = h < 16
+
+            # Options with improved margin (dfpt) — wrap onto extra rows
+            # when the pane is too narrow to fit them on one line.
+            opts_y = y + (1 if compact else 2)
             opts = [
                 (f"Debug: {'ON' if self.debug else 'OFF'}", 'd', self.debug),
                 (f"Frontmatter: {'ON' if self.frontmatter else 'OFF'}", 'f', self.frontmatter),
@@ -459,10 +498,14 @@ class BuildWizard(BaseEditor):
             ]
             opt_x = x
             for label, key, val in opts:
+                seg = f"[{key}] {label}"
+                if opt_x > x and opt_x + len(seg) > w - 2:
+                    opts_y += 1
+                    opt_x = x
                 color = curses.color_pair(2 if val else 4)
-                TUI.safe_addstr(self.scr, opts_y, opt_x, f"[{key}] {label}", color)
+                TUI.safe_addstr(self.scr, opts_y, opt_x, seg, color)
                 opt_x += len(label) + 6 # Increased margin
-            
+
             # Grid
             # Calculate visible based on moving title to top
             current_hover_title = None
@@ -471,32 +514,57 @@ class BuildWizard(BaseEditor):
                 if 0 <= self.cursor_col < len(ch.get('pages', [])):
                      current_hover_title = ch['pages'][self.cursor_col].get('title', 'Untitled')
 
-            if current_hover_title:
-                 TUI.safe_addstr(self.scr, opts_y + 2, x, f"Selected: {current_hover_title}", curses.color_pair(3)|curses.A_BOLD)
+            if compact:
+                grid_y = opts_y + (1 if h <= 10 else 2)
             else:
-                 TUI.safe_addstr(self.scr, opts_y + 2, x, " ", curses.color_pair(4))
+                if current_hover_title:
+                    TUI.safe_addstr(self.scr, opts_y + 2, x, f"Selected: {current_hover_title}"[:content_w - 4], curses.color_pair(3)|curses.A_BOLD)
+                grid_y = opts_y + 4
 
-            grid_y = opts_y + 4
-            visible_rows = h - grid_y - 2
+            # Adaptive chapter-label column: shrink on narrow panes.
+            label_w = 22 if content_w >= 70 else max(10, content_w // 3)
+            cell_w = 4
+            grid_x = x + label_w
+
+            # Two-axis scrolling: keep the cursor cell visible.
+            visible_rows = max(1, h - grid_y - 2)
+            visible_cols = max(1, (w - grid_x - 4) // cell_w)
+            if self.cursor_row < self.scroll_row:
+                self.scroll_row = self.cursor_row
+            elif self.cursor_row >= self.scroll_row + visible_rows:
+                self.scroll_row = self.cursor_row - visible_rows + 1
+            if self.cursor_col < self.scroll_col:
+                self.scroll_col = self.cursor_col
+            elif self.cursor_col >= self.scroll_col + visible_cols:
+                self.scroll_col = self.cursor_col - visible_cols + 1
             start_row = self.scroll_row
-            
+            start_col = self.scroll_col
+
+            # Overflow indicators
+            if start_col > 0:
+                TUI.safe_addstr(self.scr, grid_y - 1, grid_x, "‹ more", curses.color_pair(4)|curses.A_DIM)
+            if start_col + visible_cols < self.max_pages:
+                TUI.safe_addstr(self.scr, grid_y - 1, max(grid_x, w - 11), "more ›", curses.color_pair(4)|curses.A_DIM)
+            if start_row + visible_rows < self.num_chapters:
+                TUI.safe_addstr(self.scr, h - 2, max(x, w - 11), "↓ more", curses.color_pair(4)|curses.A_DIM)
+
             for i in range(visible_rows):
                 ci = start_row + i
                 if ci >= self.num_chapters: break
-                
+
                 curr_y = grid_y + i
                 ch = self.hierarchy[ci]
                 pages = ch.get('pages', [])
-                
+
                 # Chapter Label
-                ch_title = ch.get('title', f'Ch{ci}')[:20]
+                ch_title = ch.get('title', f'Ch{ci}')[:label_w - 2]
                 TUI.safe_addstr(self.scr, curr_y, x, f"{ch_title}", curses.color_pair(4)|curses.A_BOLD)
-                
+
                 # Pages
-                pg_x = x + 22
-                for pi in range(self.max_pages):
+                pg_x = grid_x
+                for pi in range(start_col, self.max_pages):
                     if pg_x > w - 4: break
-                    
+
                     is_void = (pi >= len(pages))
                     selected = False if is_void else self.selected.get((ci, pi), False)
                     is_cursor = (ci == self.cursor_row and pi == self.cursor_col)

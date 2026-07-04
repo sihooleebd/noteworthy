@@ -34,6 +34,7 @@ const app = {
         onlineUsers: {},
         remoteCursorDecorations: [],
         externalCursorDecorations: {},
+        projectPath: null,
     },
 
     ASCII_LOGO: "         ,--. \n       ,--.'| \n   ,--,:  : | \n,`--.'`|  ' : \n|   :  :  | | \n:   |   \\ | : \n|   : '  '; | \n'   ' ;.    ; \n|   | | \\   | \n'   : |  ; .' \n|   | `--'   \n'   : |       \n;   |.'       \n'---'         ",
@@ -66,6 +67,12 @@ const app = {
         Object.assign(this, window._buildMixin || {});
         Object.assign(this, window._chatMixin || {});
         Object.assign(this, window._previewMixin || {});
+
+        // Settings sidebar tabs need explicit click handlers in the
+        // collaborative GUI, just like the solo GUI already has.
+        document.querySelectorAll('.config-tab').forEach(tab => {
+            tab.onclick = () => this.showConfigTab(tab.dataset.tab);
+        });
 
         // Debounced config saves
         this.debouncedUpdateMetadata = this.debounce(this.updateMetadata.bind(this), 500);
@@ -141,7 +148,7 @@ const app = {
 
     _initMonaco: async function () {
         return new Promise((resolve) => {
-            require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+            require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
             require(['vs/editor/editor.main'], () => {
                 this._defineEditorThemes();
                 monaco.editor.setTheme(this.state.editorTheme);
@@ -543,16 +550,9 @@ const app = {
     // EDITOR HELPERS
     // ============================================================
 
-    saveCurrentFile: async function () {
-        if (!this.state.activeFile) return;
-        await fetch('/api/file', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: this.state.activeFile, content: this.state.editor.getValue() })
-        });
-        document.getElementById('save-status').textContent = 'Saved';
-        setTimeout(() => document.getElementById('save-status').textContent = '', 2000);
-    },
+    // NOTE: no manual save — the Yjs room persists every edit to disk
+    // server-side. Posting raw editor text to /api/file here would let a
+    // stale tab overwrite collaborators' work.
 
     toggleErrorDetails: function () {
         const detailsEl = document.getElementById('error-details');
@@ -581,12 +581,6 @@ const app = {
 
     startSyncVerification: function () { /* placeholder for drift detection */ },
 
-    // Legacy stubs (buttons exist in HTML but features not yet implemented)
-    togglePreviewMode: function () { console.log('[Preview] togglePreviewMode: not implemented'); },
-    syncPreviewScroll: function () { console.log('[Preview] syncPreviewScroll: not implemented'); },
-    toggleLogPanel: function () { console.log('[Log] toggleLogPanel: not implemented'); },
-    clearLogs: function () { console.log('[Log] clearLogs: not implemented'); },
-
     // ============================================================
     // WELCOME OVERLAY
     // ============================================================
@@ -614,6 +608,7 @@ const app = {
         try {
             const res = await fetch('/api/status');
             const data = await res.json();
+            this.state.projectPath = data.path || null;
             const el = document.getElementById('project-name');
             if (el) el.textContent = data.project;
         } catch (e) {

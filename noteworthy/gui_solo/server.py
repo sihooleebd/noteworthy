@@ -27,6 +27,16 @@ from ..gui.preview import PreviewManager
 app = FastAPI(title="Noteworthy Solo GUI")
 preview_manager = PreviewManager()
 
+
+class SafeStaticFiles(StaticFiles):
+    """Static file mount that safely ignores websocket fallthrough."""
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "websocket":
+            await send({"type": "websocket.close", "code": 1000})
+            return
+        await super().__call__(scope, receive, send)
+
 # Store for WebSocket connections (simple single-user presence)
 _active_websocket: WebSocket = None
 _current_watched_file: str = None  # Track current file for cleanup on switch
@@ -187,6 +197,21 @@ async def doc_endpoint(websocket: WebSocket):
     except Exception as e:
         print(f"[Solo Doc] Error: {e}")
         _active_websocket = None
+
+
+@app.websocket("/ws/collab")
+async def legacy_collab(websocket: WebSocket):
+    await websocket.close()
+
+
+@app.websocket("/ws/sync")
+async def legacy_sync(websocket: WebSocket):
+    await websocket.close()
+
+
+@app.websocket("/ws")
+async def legacy_ws(websocket: WebSocket):
+    await websocket.close()
 
 
 async def send_diagnostics_async(websocket: WebSocket, path: str):
@@ -1058,4 +1083,4 @@ def get_status():
 # ============================================================
 
 if STATIC_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+    app.mount("/", SafeStaticFiles(directory=str(STATIC_DIR), html=True), name="static")

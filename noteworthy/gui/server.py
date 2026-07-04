@@ -5,9 +5,11 @@ Works directly on project files via noteworthy.config paths
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from contextlib import asynccontextmanager
 from pathlib import Path
 import json
 import asyncio
+import logging
 import subprocess
 import shutil
 import os
@@ -22,13 +24,81 @@ from ..config import (
 )
 from .preview import PreviewManager
 
-app = FastAPI(title="Noteworthy GUI")
+log = logging.getLogger("noteworthy.gui")
+
+# Track the WebSocket server background task
+_yjs_server_task: asyncio.Task = None
+
+
+class SafeStaticFiles(StaticFiles):
+    """Static file mount that safely ignores websocket fallthrough."""
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "websocket":
+            await send({"type": "websocket.close", "code": 1000})
+            return
+        await super().__call__(scope, receive, send)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: preview bridge + Yjs server. Shutdown: stop Yjs server."""
+    global _yjs_server_task
+
+    loop = asyncio.get_running_loop()
+
+    def on_preview_bridge(updates, source_path):
+        """Bridge thread callback to asyncio loop."""
+        asyncio.run_coroutine_threadsafe(
+            document_hub.on_preview_update(updates, source_path),
+            loop
+        )
+
+    def on_preview_log(level, message, source_path=None):
+        """Bridge preview logs from worker threads to connected clients."""
+        asyncio.run_coroutine_threadsafe(
+            document_hub.on_preview_log(level, message, source_path),
+            loop
+        )
+
+    preview_manager.stop_full_preview()
+    preview_manager.add_callback(on_preview_bridge)
+    preview_manager.add_log_callback(on_preview_log)
+
+    # Sanity check modules.json
+    validate_modules_json()
+
+    # Start Yjs WebSocket Server as a background task.
+    # In pycrdt-websocket 0.16+, the server must be explicitly started
+    # and we must wait for it to be ready before accepting connections.
+    if yjs_provider.server:
+        log.info("Starting Yjs WebSocket Server...")
+        _yjs_server_task = asyncio.create_task(yjs_provider.server.start())
+        await yjs_provider.server.started.wait()
+        log.info("Yjs WebSocket Server started and ready")
+
+    yield
+
+    if yjs_provider.server:
+        log.info("Stopping Yjs WebSocket Server...")
+        await yjs_provider.server.stop()
+
+    if _yjs_server_task and not _yjs_server_task.done():
+        _yjs_server_task.cancel()
+        try:
+            await _yjs_server_task
+        except asyncio.CancelledError:
+            pass
+
+    preview_manager.stop_full_preview()
+    log.info("Shutdown complete.")
+
+
+app = FastAPI(title="Noteworthy GUI", lifespan=lifespan)
 preview_manager = PreviewManager()
 
 # DocumentHub - Unified sync manager
 from .document_hub import document_hub
-
-import uuid
 
 # Connect preview manager to document hub
 document_hub.preview_manager = preview_manager
@@ -37,63 +107,11 @@ document_hub.preview_manager = preview_manager
 from .yjs_provider import get_yjs_asgi_app, yjs_provider
 app.mount("/yjs", get_yjs_asgi_app())
 
-# Track the WebSocket server background task
-_yjs_server_task: asyncio.Task = None
-
-@app.on_event("startup")
-async def startup_event():
-    """Register global preview callback on startup."""
-    global _yjs_server_task
-    
-    loop = asyncio.get_running_loop()
-    
-    def on_preview_bridge(updates, source_path):
-        """Bridge thread callback to asyncio loop."""
-        asyncio.run_coroutine_threadsafe(
-            document_hub.on_preview_update(updates, source_path),
-            loop
-        )
-            
-    preview_manager.add_callback(on_preview_bridge)
-    
-    # Sanity check modules.json
-    validate_modules_json()
-    
-    # Start Yjs WebSocket Server as a background task
-    # In pycrdt-websocket 0.16+, the server must be explicitly started
-    # and we must wait for it to be ready before accepting connections
-    if yjs_provider.server:
-        print("[Server] Starting Yjs WebSocket Server...")
-        _yjs_server_task = asyncio.create_task(yjs_provider.server.start())
-        # Wait for the server to be fully started before accepting connections
-        await yjs_provider.server.started.wait()
-        print("[Server] Yjs WebSocket Server started and ready")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown."""
-    global _yjs_server_task
-    
-    # Stop Yjs WebSocket Server
-    if yjs_provider.server:
-        print("[Server] Stopping Yjs WebSocket Server...")
-        await yjs_provider.server.stop()
-        
-    # Cancel the background task if still running
-    if _yjs_server_task and not _yjs_server_task.done():
-        _yjs_server_task.cancel()
-        try:
-            await _yjs_server_task
-        except asyncio.CancelledError:
-            pass
-    
-    print("[Server] Shutdown complete.")
-
 
 def validate_modules_json():
     """Validate and recover modules.json if corrupted."""
     if not MODULES_CONFIG_FILE.exists():
-        print("[Startup] modules.json not found, will be created on first use")
+        log.info("modules.json not found, will be created on first use")
         return
     
     try:
@@ -105,16 +123,16 @@ def validate_modules_json():
         if 'modules' not in data or not isinstance(data.get('modules'), dict):
             raise ValueError("modules.json must have 'modules' object")
         
-        print(f"[Startup] modules.json validated: {len(data['modules'])} modules")
+        log.info(f"modules.json validated: {len(data['modules'])} modules")
         
     except (json.JSONDecodeError, ValueError) as e:
-        print(f"[Startup] WARNING: modules.json is corrupted ({e}). Regenerating...")
+        log.warning(f"modules.json is corrupted ({e}). Regenerating...")
         
         # Backup corrupted file
         backup_path = MODULES_CONFIG_FILE.with_suffix('.json.bak')
         try:
             shutil.copy2(MODULES_CONFIG_FILE, backup_path)
-            print(f"[Startup] Backed up corrupted file to {backup_path.name}")
+            log.info(f"Backed up corrupted modules.json to {backup_path.name}")
         except Exception:
             pass
         
@@ -155,9 +173,9 @@ def regenerate_modules_json():
     try:
         MODULES_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         MODULES_CONFIG_FILE.write_text(json.dumps(new_data, indent=4))
-        print(f"[Startup] Regenerated modules.json with {len(modules)} modules + {len(core_modules)} core modules")
+        log.info(f"Regenerated modules.json with {len(modules)} modules + {len(core_modules)} core modules")
     except Exception as e:
-        print(f"[Startup] ERROR: Failed to regenerate modules.json: {e}")
+        log.error(f"Failed to regenerate modules.json: {e}")
 
 
 @app.websocket("/ws/doc")
@@ -189,7 +207,7 @@ async def doc_endpoint(websocket: WebSocket):
             try:
                 msg = json.loads(data)
             except json.JSONDecodeError:
-                print(f"[Doc] Ignoring malformed JSON from {user.id}")
+                log.warning(f"Ignoring malformed JSON from {user.id}")
                 continue
             msg_type = msg.get("type")
             
@@ -251,7 +269,7 @@ async def doc_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         await document_hub.disconnect(user.id, websocket)
     except Exception as e:
-        print(f"[Doc] Error: {e}")
+        log.error(f"Doc socket error: {e}")
         await document_hub.disconnect(user.id, websocket)
 
 
@@ -262,10 +280,24 @@ STATIC_DIR = Path(__file__).parent / "static"
 # FILE API - Generic file read/write
 # ============================================================
 
+def _resolve_in_project(path: str):
+    """Resolve a user-supplied path, rejecting anything outside BASE_DIR."""
+    if not path:
+        return None
+    target = BASE_DIR / path
+    try:
+        target.resolve().relative_to(BASE_DIR.resolve())
+    except ValueError:
+        return None
+    return target
+
+
 @app.get("/api/file")
 def get_file(path: str, raw: int = 0):
     """Read a file relative to project root. If raw=1, return file directly."""
-    target = BASE_DIR / path
+    target = _resolve_in_project(path)
+    if target is None:
+        return {"error": "Invalid path"}
     if target.exists() and target.is_file():
         if raw:
             # Return file directly for binary content (PDF, images)
@@ -274,7 +306,7 @@ def get_file(path: str, raw: int = 0):
             return FileResponse(target, media_type=mime_type or 'application/octet-stream')
         try:
             return {"content": target.read_text(encoding='utf-8')}
-        except:
+        except Exception:
             return {"content": "", "error": "Could not read file"}
     return {"error": "File not found"}
 
@@ -283,7 +315,9 @@ def save_file(data: dict = Body(...)):
     """Write a file relative to project root."""
     path = data.get("path")
     content = data.get("content", "")
-    target = BASE_DIR / path
+    target = _resolve_in_project(path)
+    if target is None:
+        return {"success": False, "error": "Invalid path"}
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding='utf-8')
     return {"success": True}
@@ -374,7 +408,7 @@ def get_metadata():
     """Get metadata.json content."""
     try:
         return json.loads(METADATA_FILE.read_text())
-    except:
+    except Exception:
         return {"title": "", "subtitle": "", "authors": [], "affiliation": "", "logo": ""}
 
 @app.post("/api/metadata")
@@ -388,7 +422,7 @@ def get_constants():
     """Get constants.json content."""
     try:
         return json.loads(CONSTANTS_FILE.read_text())
-    except:
+    except Exception:
         return {}
 
 @app.post("/api/constants")
@@ -402,7 +436,7 @@ def get_hierarchy():
     """Get hierarchy.json content."""
     try:
         return {"hierarchy": json.loads(HIERARCHY_FILE.read_text())}
-    except:
+    except Exception:
         return {"hierarchy": []}
 
 @app.post("/api/hierarchy")
@@ -417,7 +451,7 @@ def get_preface():
     """Get preface.typ content."""
     try:
         return {"content": PREFACE_FILE.read_text()}
-    except:
+    except Exception:
         return {"content": "= Preface\n\nEnter your preface here."}
 
 @app.post("/api/preface")
@@ -442,7 +476,7 @@ def get_snippets():
                     name = rest[:eq_pos].strip()
                     definition = rest[eq_pos + 1:].strip()
                     snippets.append({"name": name, "definition": definition})
-    except:
+    except Exception:
         pass
     return {"snippets": snippets}
 
@@ -461,7 +495,7 @@ def get_indexignore():
     try:
         content = INDEXIGNORE_FILE.read_text()
         patterns = [line.strip() for line in content.split('\n') if line.strip() and not line.startswith('#')]
-    except:
+    except Exception:
         pass
     return {"patterns": patterns}
 
@@ -494,14 +528,14 @@ def get_schemes():
                         data.get("text-accent", "#000000")
                     ]
                 })
-            except:
+            except Exception:
                 themes.append({"name": f.stem, "colors": []})
     
     active = "default"
     try:
         constants = json.loads(CONSTANTS_FILE.read_text())
         active = constants.get("display-mode", "default")
-    except:
+    except Exception:
         pass
     
     return {"themes": themes, "active": active}
@@ -528,7 +562,7 @@ def get_scheme(name: str):
     scheme_file = SCHEMES_DIR / "data" / f"{name}.json"
     try:
         return json.loads(scheme_file.read_text())
-    except:
+    except Exception:
         return {"error": "Scheme not found"}
 
 @app.post("/api/schemes/{name}")
@@ -590,7 +624,7 @@ def get_file_tree():
                 if entry.is_dir():
                     item["children"] = scan(entry, rel_base)
                 items.append(item)
-        except:
+        except Exception:
             pass
         return items
     
@@ -743,6 +777,44 @@ def start_watch(data: dict = Body(...)):
     preview_manager.start_watch(path)
     return {"success": True}
 
+
+# ============================================================
+# TINYMIST PREVIEW API
+# ============================================================
+
+@app.post("/api/tinymist/start")
+def start_tinymist_preview(data: dict = Body(default={})):
+    """Start tinymist preview server for source/preview synchronization."""
+    file_path = data.get("path")
+    preview_manager.stop_full_preview()
+    url = preview_manager.start_full_preview(file_path)
+    if url:
+        return {
+            "success": True,
+            "url": url,
+            "control_url": preview_manager.get_full_preview_control_url(),
+            "target": preview_manager.full_preview_target,
+        }
+    return {"success": False, "error": "Failed to start tinymist preview"}
+
+
+@app.post("/api/tinymist/stop")
+def stop_tinymist_preview():
+    """Stop tinymist preview server."""
+    preview_manager.stop_full_preview()
+    return {"success": True}
+
+
+@app.get("/api/tinymist/status")
+def get_tinymist_status():
+    """Get tinymist preview status."""
+    return {
+        "running": preview_manager.full_preview_running,
+        "url": preview_manager.get_full_preview_url() if preview_manager.full_preview_running else None,
+        "control_url": preview_manager.get_full_preview_control_url() if preview_manager.full_preview_running else None,
+        "target": preview_manager.full_preview_target,
+    }
+
 # ============================================================
 # MODULES API
 # ============================================================
@@ -791,7 +863,7 @@ def get_module_config(name: str):
 
     try:
         blueprint = json.loads(blueprint_path.read_text())
-    except:
+    except Exception:
         return {"settings": []}
 
     # Load existing config
@@ -800,7 +872,7 @@ def get_module_config(name: str):
     if config_path.exists():
         try:
             user_config = json.loads(config_path.read_text())
-        except:
+        except Exception:
             pass
 
     # Merge values
@@ -846,7 +918,7 @@ async def check_diagnostics(data: dict = Body(...)):
                 break
     
     if not typst_bin:
-        print("[LSP] typst binary not found!")
+        log.error("typst binary not found")
         return {"diagnostics": [], "error": "typst not found"}
     
     # Create temp file for output
@@ -886,8 +958,8 @@ async def check_diagnostics(data: dict = Body(...)):
             text=True
         )
         
-        print(f"[LSP] typst stderr: {result.stderr}")
-        print(f"[LSP] typst returncode: {result.returncode}")
+        log.debug(f"typst stderr: {result.stderr}")
+        log.debug(f"typst returncode: {result.returncode}")
         
         diagnostics = []
         lines = result.stderr.split('\n')
@@ -922,7 +994,7 @@ async def check_diagnostics(data: dict = Body(...)):
                         except ValueError:
                             pass
         
-        print(f"[LSP] Parsed diagnostics: {diagnostics}")
+        log.debug(f"Parsed diagnostics: {diagnostics}")
         return {"diagnostics": diagnostics}
     finally:
         if os.path.exists(tmp_path):
@@ -971,21 +1043,8 @@ def get_status():
     }
 
 # ============================================================
-# Mount Yjs CRDT WebSocket (for collaborative editing)
-# ============================================================
-
-try:
-    from .yjs_provider import get_yjs_asgi_app
-    app.mount("/yjs", get_yjs_asgi_app())
-    print("[Server] Yjs CRDT WebSocket mounted at /yjs")
-except ImportError as e:
-    print(f"[Server] Yjs CRDT not available (pycrdt-websocket not installed): {e}")
-    print("[Server] Collaborative editing will use fallback sync mechanism")
-
-# ============================================================
 # Mount Static Files (must be last!)
 # ============================================================
 
 if STATIC_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
-
+    app.mount("/", SafeStaticFiles(directory=str(STATIC_DIR), html=True), name="static")
