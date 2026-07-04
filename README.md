@@ -1,11 +1,3 @@
-> **CRITICAL SECURITY WARNING**
->
-> **This is the ONLY official repository for Noteworthy.**
-> We are aware of unauthorized clones being used to spread malware.
->
-> - **We NEVER distribute executable files (.exe, .msi, .dmg).**
-> - This project is **source code only**.
-> - Always verify: `https://github.com/sihooleebd/noteworthy`
 
 # Noteworthy
 
