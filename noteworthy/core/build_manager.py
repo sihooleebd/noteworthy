@@ -105,11 +105,7 @@ class BuildManager:
             if iteration > 3:
                 callbacks.get('on_log', lambda m, o: None)("Max retries reached. Pagination might be unstable.", False)
                 break
-                
-            # Recalculate offsets for next iteration
-            if iteration == 1:
-                projected_offsets = self._recalc_offsets(ordered_keys)
-                
+
         self.save_cache()
         self.page_map = projected_offsets
         return [task_map[k][3] for k in ordered_keys]
@@ -157,15 +153,6 @@ class BuildManager:
                                  self.build_dir / f'20_page_{ci}_{ai}.pdf', f"Section {pg_file}: {p['title']}"))
                 
         return tasks
-    
-    def _recalc_offsets(self, ordered_keys):
-        """Recalculate page offsets based on actual page counts."""
-        new_offsets = {}
-        curr = 1
-        for key in ordered_keys:
-            new_offsets[key] = curr
-            curr += self.get_predicted_count(key)
-        return new_offsets
     
     def _get_dirty_tasks(self, ordered_keys, projected_offsets, callbacks):
         """Find tasks that need recompilation due to offset changes."""
