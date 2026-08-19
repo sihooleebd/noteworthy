@@ -6,12 +6,6 @@ The Block module provides semantic content containers for educational documents.
 
 == What is a Block?
 
-sldkjfioewjfd
-sdfsdfsdfsdf
-sdfeesdfsdfsdfsdfsdf
-sdfsdsf
-sdf
-
 #definition("Block")[
   A styled container that gives semantic meaning to content. Blocks help readers identify the type of information they're reading.
 ]

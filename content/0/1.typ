@@ -9,7 +9,6 @@ Noteworthy is a powerful Typst framework for creating beautiful educational docu
   A modular Typst template system designed for creating professional educational materials, textbooks, and technical documentation.
 ]
 
-
 == Key Features
 
 #note("Modular Architecture")[
