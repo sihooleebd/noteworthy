@@ -28,7 +28,8 @@ def main():
     parser.add_argument('-nc', '--no-coop', action='store_true', help='[-g] Solo mode (no collaboration)')
     parser.add_argument('--packet-log', action='store_true', help='[-g] Enable low-level Yjs packet logging')
     parser.add_argument('--bind', default="127.0.0.1", help='[-g] Specify Listening Subnet (default: 127.0.0.1)')
-    
+    parser.add_argument('--headless', action='store_true', help='Do not launch browser after startup')
+
     # Update flags
     parser.add_argument('-u', '--update', action='store_true', help='Update noteworthy')
     parser.add_argument('-n', '--nightly', action='store_true', help='[-u] Use nightly branch')
@@ -125,7 +126,7 @@ def main():
             else:
                 # Full collaborative mode
                 from .gui.app import run_gui
-                run_gui(host=args.bind, port=args.port, packet_log=args.packet_log)
+                run_gui(host=args.bind, port=args.port, packet_log=args.packet_log, open_browser=(not args.headless))
         except ImportError as e:
             print("Error: GUI requires additional dependencies.")
             print("Install with: pip install fastapi uvicorn")
