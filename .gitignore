@@ -17,6 +17,10 @@ venv/
 # uv
 uv.lock
 
+# direnv
+.direnv/
+.envrc.local
+
 # Editor/IDE
 .vscode/
 .idea/
