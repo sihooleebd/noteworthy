@@ -15,6 +15,13 @@ def generate_imports_file():
     All installed modules use qualified imports (e.g., #import "path" as name).
     Core modules continue to use global imports.
     """
+    # Core modules are "always enabled" by design, so a missing core dir
+    # means modules were never installed in this checkout (fresh clone —
+    # they live in the separate noteworthy-modules repo). Regenerating now
+    # would strip every import and break the build; keep the existing file.
+    if not CORE_DIR.exists():
+        return False
+
     lines = []
     
     lines.append("// =====================================================")
@@ -67,6 +74,7 @@ def generate_imports_file():
     lines.append("")
     IMPORTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     IMPORTS_FILE.write_text("\n".join(lines) + "\n")
+    return True
 
 
 

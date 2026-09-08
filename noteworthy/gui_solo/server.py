@@ -651,13 +651,16 @@ def get_structure():
 @app.get("/api/tree")
 def get_file_tree():
     """Get complete file tree for editor."""
+    # Assets is a default root folder — create it so all four always show.
+    (BASE_DIR / 'assets').mkdir(exist_ok=True)
+
     def scan(path: Path, rel_base: Path):
         items = []
         try:
             for entry in sorted(path.iterdir(), key=lambda e: (not e.is_dir(), e.name)):
                 if entry.name.startswith('.') or entry.name in ['__pycache__', 'venv', 'build']:
                     continue
-                if path == BASE_DIR and entry.name not in ['config', 'content', 'templates']:
+                if path == BASE_DIR and entry.name not in ['assets', 'config', 'content', 'templates']:
                     continue
                 
                 rel_path = str(entry.relative_to(rel_base))

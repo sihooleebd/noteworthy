@@ -761,6 +761,16 @@ body {
     margin-left: 20px;
 }
 
+.tree-item.dragging {
+    opacity: 0.4;
+}
+
+.tree-item.drop-target {
+    background: var(--glass-bg-hover);
+    outline: 1px dashed var(--accent);
+    outline-offset: -1px;
+}
+
 /* ============================================
    macOS DOCK (Floating)
    ============================================ */

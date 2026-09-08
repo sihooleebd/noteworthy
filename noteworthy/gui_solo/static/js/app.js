@@ -1282,8 +1282,8 @@ const app = {
     renderTreeItems: function (items, depth) {
         const div = document.createElement('div');
 
-        // Sort items: content first, then other folders, then templates and config at bottom
-        const bottomFolders = ['templates', 'config'];
+        // Sort items: content first, then other folders, then assets/templates/config at bottom
+        const bottomFolders = ['assets', 'templates', 'config'];
         const sortedItems = [...items].sort((a, b) => {
             const aIsBottom = bottomFolders.includes(a.name);
             const bIsBottom = bottomFolders.includes(b.name);
@@ -1301,6 +1301,17 @@ const app = {
             el.style.paddingLeft = `${depth * 16 + 12}px`;
             el.dataset.path = item.path; // Add data-path for rename targeting
 
+            // Top-level roots (content/config/templates) are pinned by the
+            // server, so they can be drop targets but not drag sources.
+            if (depth > 0) {
+                el.draggable = true;
+                el.addEventListener('dragstart', (e) => this.onTreeDragStart(e, item));
+                el.addEventListener('dragend', () => this.onTreeDragEnd());
+            }
+            el.addEventListener('dragover', (e) => this.onTreeDragOver(e, item));
+            el.addEventListener('dragleave', (e) => this.onTreeDragLeave(e));
+            el.addEventListener('drop', (e) => this.onTreeDrop(e, item));
+
             if (item.is_dir) {
                 // Default templates and config to collapsed (false), others to expanded
                 const isBottomFolder = bottomFolders.includes(item.name);
@@ -1312,6 +1323,9 @@ const app = {
                     e.stopPropagation();
                     this.toggleFolder(item.path);
                 };
+                if (depth > 0) {
+                    el.oncontextmenu = (e) => this.showFileContextMenu(e, item.path, true);
+                }
                 div.appendChild(el);
 
                 if (item.children && isExpanded) {
@@ -1327,19 +1341,119 @@ const app = {
                     el.innerHTML = `<i data-lucide="${icon.value}" class="tree-file" style="fill: none; stroke-width: 2px;"></i> <span class="tree-file-name">${item.name}</span>`;
                 }
                 el.onclick = () => this.openFile(item.path, el);
-                el.oncontextmenu = (e) => this.showFileContextMenu(e, item.path);
+                el.oncontextmenu = (e) => this.showFileContextMenu(e, item.path, false);
                 div.appendChild(el);
             }
         });
         return div;
     },
 
+    // --- Drag & drop moves ---
+
+    _treeDropTargetDir: function (item) {
+        // A folder receives drops into itself; a file row stands in for
+        // its parent folder ("drop next to this file").
+        if (item.is_dir) return item.path;
+        const idx = item.path.lastIndexOf('/');
+        return idx === -1 ? null : item.path.substring(0, idx);
+    },
+
+    _canDropInto: function (destDir) {
+        const drag = this.state.treeDragItem;
+        if (!drag || !destDir || destDir === drag.path) return false;
+        // A folder can't move into its own subtree.
+        if (drag.isDir && (destDir + '/').startsWith(drag.path + '/')) return false;
+        // Dropping back into the current parent is a no-op.
+        if (destDir === drag.path.substring(0, drag.path.lastIndexOf('/'))) return false;
+        return true;
+    },
+
+    _canDropOn: function (item) {
+        return this._canDropInto(this._treeDropTargetDir(item));
+    },
+
+    onTreeDragStart: function (e, item) {
+        this.state.treeDragItem = { path: item.path, isDir: item.is_dir };
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', item.path);
+        e.currentTarget.classList.add('dragging');
+    },
+
+    onTreeDragEnd: function () {
+        this.state.treeDragItem = null;
+        document.querySelectorAll('.tree-item.dragging, .tree-item.drop-target')
+            .forEach(el => el.classList.remove('dragging', 'drop-target'));
+    },
+
+    onTreeDragOver: function (e, item) {
+        if (!this._canDropOn(item)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        e.currentTarget.classList.add('drop-target');
+    },
+
+    onTreeDragLeave: function (e) {
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+            e.currentTarget.classList.remove('drop-target');
+        }
+    },
+
+    onTreeDrop: async function (e, item) {
+        if (!this._canDropOn(item)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.currentTarget.classList.remove('drop-target');
+        const drag = this.state.treeDragItem;
+        this.state.treeDragItem = null;
+        const destDir = this._treeDropTargetDir(item);
+        if (!this.state.expandedFolders) this.state.expandedFolders = {};
+        this.state.expandedFolders[destDir] = true;
+        await this._moveTreeItem(drag.path, `${destDir}/${drag.path.split('/').pop()}`);
+    },
+
+    _moveTreeItem: async function (path, newPath) {
+        try {
+            const res = await fetch('/api/rename', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path, newName: newPath.split('/').pop(), newPath })
+            });
+            const result = await res.json();
+            if (result.success) {
+                this.showSaveStatus('Moved');
+                await this._handlePathMoved(path, result.newPath || newPath);
+            } else {
+                this.showSaveStatus(result.error || 'Move Failed');
+            }
+        } catch (e) {
+            console.error('Move error:', e);
+            this.showSaveStatus('Move Error');
+        }
+    },
+
+    _handlePathMoved: async function (oldPath, newPath) {
+        // Refresh the tree, and if the open file was the moved item (or lived
+        // inside a moved folder), re-open it at its new path so the editor
+        // tracks the file at its new location.
+        const active = this.state.activeFile;
+        let updated = null;
+        if (active === oldPath) updated = newPath;
+        else if (active && active.startsWith(oldPath + '/')) updated = newPath + active.substring(oldPath.length);
+        await this.refreshTree();
+        if (updated) {
+            this.state.activeFile = null;
+            const el = document.querySelector(`.tree-item[data-path="${updated}"]`);
+            this.openFile(updated, el || undefined);
+        }
+    },
+
     // File context menu
-    showFileContextMenu: function (e, path) {
+    showFileContextMenu: function (e, path, isDir) {
         e.preventDefault();
         e.stopPropagation();
 
         this.state.contextMenuFile = path;
+        this.state.contextMenuIsDir = !!isDir;
         const menu = document.getElementById('file-context-menu');
         menu.style.left = `${e.clientX}px`;
         menu.style.top = `${e.clientY}px`;
@@ -1529,6 +1643,9 @@ const app = {
 
         nameSpan.style.display = 'none';
         fileItem.appendChild(input);
+        // Keep clicks inside the input from bubbling to the row, which
+        // would toggle/open the item and re-render the tree mid-rename.
+        input.addEventListener('click', (e) => e.stopPropagation());
         input.focus();
         input.select();
 
@@ -1546,13 +1663,8 @@ const app = {
                     });
                     const result = await res.json();
                     if (result.success) {
-                        this.showSaveStatus('File Renamed');
-                        this.refreshTree();
-                        // Update active file if it was renamed
-                        if (this.state.activeFile === path) {
-                            this.state.activeFile = result.newPath;
-                            document.getElementById('active-filename').textContent = result.newPath;
-                        }
+                        this.showSaveStatus('Renamed');
+                        await this._handlePathMoved(path, result.newPath);
                     } else {
                         this.showSaveStatus(result.error || 'Rename Failed');
                     }
@@ -1586,40 +1698,17 @@ const app = {
         const newPath = prompt(`Move "${filename}" to new path:`, path);
 
         if (!newPath || newPath === path) return;
-
-        try {
-            const res = await fetch('/api/rename', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    path,
-                    newName: newPath.split('/').pop(),
-                    newPath: newPath
-                })
-            });
-            const result = await res.json();
-
-            if (result.success) {
-                this.showSaveStatus('File Moved');
-                this.refreshTree();
-                if (this.state.activeFile === path) {
-                    this.state.activeFile = result.newPath || newPath;
-                    document.getElementById('active-filename').textContent = result.newPath || newPath;
-                }
-            } else {
-                this.showSaveStatus(result.error || 'Move Failed');
-            }
-        } catch (e) {
-            console.error('Move error:', e);
-            this.showSaveStatus('Move Error');
-        }
+        await this._moveTreeItem(path, newPath);
     },
 
     deleteFile: async function () {
         const path = this.state.contextMenuFile;
         if (!path) return;
-
-        if (!confirm(`Delete "${path}"?`)) return;
+        const isDir = !!this.state.contextMenuIsDir;
+        const message = isDir
+            ? `Delete folder "${path}" and everything inside it?`
+            : `Delete "${path}"?`;
+        if (!confirm(message)) return;
 
         try {
             const res = await fetch('/api/delete', {
@@ -1627,17 +1716,20 @@ const app = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path })
             });
-            if (res.ok) {
-                this.showSaveStatus('File Deleted');
+            const result = await res.json();
+            if (res.ok && result.success !== false) {
+                this.showSaveStatus(isDir ? 'Folder Deleted' : 'File Deleted');
                 this.refreshTree();
-                // Clear editor if deleted file was active
-                if (this.state.activeFile === path) {
+                // Clear editor if the active file was deleted (or lived
+                // inside a deleted folder)
+                const active = this.state.activeFile;
+                if (active && (active === path || active.startsWith(path + '/'))) {
                     this.state.activeFile = null;
                     document.getElementById('active-filename').textContent = 'Select a file';
                     if (this.state.editor) this.state.editor.setValue('');
                 }
             } else {
-                this.showSaveStatus('Delete Failed');
+                this.showSaveStatus(result.error || 'Delete Failed');
             }
         } catch (e) {
             console.error('Delete error:', e);

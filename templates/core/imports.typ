@@ -15,5 +15,6 @@
 #import "../module/dsa/mod.typ" as dsa
 #import "../module/graph/mod.typ" as graph
 #import "../module/shape/mod.typ" as shape
+#import "../module/timeline/mod.typ" as timeline
 #import "../module/trees/mod.typ" as trees
 
