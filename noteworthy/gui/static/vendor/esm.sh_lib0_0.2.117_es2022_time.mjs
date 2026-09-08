@@ -1,0 +1,3 @@
+/* esm.sh - lib0@0.2.117/time */
+import*as i from"./esm.sh_lib0_0.2.117_es2022_metric.mjs";import*as o from"./esm.sh_lib0_0.2.117_es2022_math.mjs";var a=()=>new Date,c=Date.now,f=t=>{if(t<6e4){let s=i.prefix(t,-1);return o.round(s.n*100)/100+s.prefix+"s"}t=o.floor(t/1e3);let e=t%60,r=o.floor(t/60)%60,n=o.floor(t/3600)%24,m=o.floor(t/86400);return m>0?m+"d"+(n>0||r>30?" "+(r>30?n+1:n)+"h":""):n>0?n+"h"+(r>0||e>30?" "+(e>30?r+1:r)+"min":""):r+"min"+(e>0?" "+e+"s":"")};export{a as getDate,c as getUnixTime,f as humanizeDuration};
+//# sourceMappingURL=time.mjs.map

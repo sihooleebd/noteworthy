@@ -14,9 +14,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
     <!-- Yjs CRDT for collaborative editing -->
     <script type="module">
-        import * as Y from 'https://esm.sh/yjs@13.6.14';
-        import { WebsocketProvider } from 'https://esm.sh/y-websocket@1.5.4?deps=yjs@13.6.14';
-        import { MonacoBinding } from 'https://esm.sh/y-monaco@0.1.6?deps=yjs@13.6.14';
+        // Served from vendor/ rather than a CDN: a browser that blocks
+        // third-party modules (extension, tracking protection, a school
+        // proxy) left Y undefined and the editor dead. Keeping the module
+        // graph intact matters -- yjs must stay a single shared instance.
+        import * as Y from './vendor/yjs.mjs';
+        import { WebsocketProvider } from './vendor/y-websocket.mjs';
+        import { MonacoBinding } from './vendor/y-monaco.mjs';
 
         window.Y = Y;
         window.WebsocketProvider = WebsocketProvider;

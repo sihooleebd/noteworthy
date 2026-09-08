@@ -1,0 +1,3 @@
+/* esm.sh - y-protocols@1.0.7/auth */
+import"./esm.sh_yjs_13.6.14_es2022_yjs.mjs";import*as e from"./esm.sh_lib0__0.2.85_encoding_target_es2022.mjs";import*as r from"./esm.sh_lib0__0.2.85_decoding_target_es2022.mjs";var o=0,a=(i,n)=>{e.writeVarUint(i,o),e.writeVarString(i,n)},d=(i,n,t)=>{switch(r.readVarUint(i)){case o:t(n,r.readVarString(i))}};export{o as messagePermissionDenied,d as readAuthMessage,a as writePermissionDenied};
+//# sourceMappingURL=auth.mjs.map

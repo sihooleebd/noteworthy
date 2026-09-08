@@ -1,0 +1,3 @@
+/* esm.sh - lib0@0.2.117/url */
+import*as s from"./esm.sh_lib0_0.2.117_es2022_object.mjs";var i=t=>{let e={},o=t.split("?"),r=o[o.length-1].split("&");for(let n=0;n<r.length;n++){let c=r[n];if(c.length>0){let p=c.split("=");e[decodeURIComponent(p[0])]=decodeURIComponent(p[1]||"")}}return e},m=t=>s.map(t,(e,o)=>`${encodeURIComponent(o)}=${encodeURIComponent(e)}`).join("&");export{i as decodeQueryParams,m as encodeQueryParams};
+//# sourceMappingURL=url.mjs.map

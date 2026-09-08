@@ -1,0 +1,3 @@
+/* esm.sh - lib0@0.2.117/storage */
+var o=class{constructor(){this.map=new Map}setItem(t,s){this.map.set(t,s)}getItem(t){return this.map.get(t)}},r=new o,a=!0;try{typeof localStorage<"u"&&localStorage&&(r=localStorage,a=!1)}catch{}var n=r,c=e=>a||addEventListener("storage",e),l=e=>a||removeEventListener("storage",e);export{l as offChange,c as onChange,n as varStorage};
+//# sourceMappingURL=storage.mjs.map

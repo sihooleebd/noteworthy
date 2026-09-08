@@ -1,0 +1,3 @@
+/* esm.sh - lib0@0.2.117/iterator */
+var a=(t,r)=>({[Symbol.iterator](){return this},next(){let e=t.next();return{value:e.done?void 0:r(e.value),done:e.done}}}),n=t=>({[Symbol.iterator](){return this},next:t}),u=(t,r)=>n(()=>{let e;do e=t.next();while(!e.done&&!r(e.value));return e}),d=(t,r)=>n(()=>{let{done:e,value:o}=t.next();return{done:e,value:e?void 0:r(o)}});export{n as createIterator,u as iteratorFilter,d as iteratorMap,a as mapIterator};
+//# sourceMappingURL=iterator.mjs.map

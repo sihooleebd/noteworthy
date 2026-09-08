@@ -1,0 +1,3 @@
+/* esm.sh - lib0@0.2.117/map */
+var s=()=>new Map,f=r=>{let e=s();return r.forEach((o,t)=>{e.set(t,o)}),e},c=(r,e,o)=>{let t=r.get(e);return t===void 0&&r.set(e,t=o()),t},u=(r,e)=>{let o=[];for(let[t,n]of r)o.push(e(n,t));return o},a=(r,e)=>{for(let[o,t]of r)if(e(t,o))return!0;return!1},p=(r,e)=>{for(let[o,t]of r)if(!e(t,o))return!1;return!0};export{p as all,a as any,f as copy,s as create,u as map,c as setIfUndefined};
+//# sourceMappingURL=map.mjs.map

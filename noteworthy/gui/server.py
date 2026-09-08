@@ -2,7 +2,7 @@
 Noteworthy GUI Server - FastAPI backend
 Works directly on project files via noteworthy.config paths
 """
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body, File, Form, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
@@ -26,8 +26,23 @@ from .preview import PreviewManager
 
 log = logging.getLogger("noteworthy.gui")
 
+# FastAPI's File()/Form() params need python-multipart to parse multipart
+# bodies — and it inspects this at route-registration time, so a missing
+# dependency would otherwise take down the whole module import, not just
+# the upload endpoint. See /api/upload below.
+try:
+    from python_multipart import __version__ as _  # noqa: F401
+    _MULTIPART_AVAILABLE = True
+except ImportError:
+    _MULTIPART_AVAILABLE = False
+
 # Track the WebSocket server background task
-_yjs_server_task: asyncio.Task = None
+_yjs_server_task: asyncio.Task | None = None
+
+# The asyncio loop owning the websockets, captured at startup so sync
+# handlers running in FastAPI's threadpool (e.g. run_build) can hand
+# broadcasts back to it via run_coroutine_threadsafe.
+_main_loop: asyncio.AbstractEventLoop | None = None
 
 
 class SafeStaticFiles(StaticFiles):
@@ -43,9 +58,10 @@ class SafeStaticFiles(StaticFiles):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: preview bridge + Yjs server. Shutdown: stop Yjs server."""
-    global _yjs_server_task
+    global _yjs_server_task, _main_loop
 
     loop = asyncio.get_running_loop()
+    _main_loop = loop
 
     def on_preview_bridge(updates, source_path):
         """Bridge thread callback to asyncio loop."""
@@ -322,23 +338,66 @@ def save_file(data: dict = Body(...)):
     target.write_text(content, encoding='utf-8')
     return {"success": True}
 
+if _MULTIPART_AVAILABLE:
+    @app.post("/api/upload")
+    async def upload_files(files: list[UploadFile] = File(...), directory: str = Form("")):
+        """Upload one or more files into a project-relative directory."""
+        saved = []
+        errors = []
+        for f in files:
+            # Only trust the basename — a crafted filename like "../../x" must
+            # not be able to walk out of `directory`.
+            filename = os.path.basename(f.filename or "")
+            if not filename:
+                errors.append("Skipped a file with no name")
+                continue
+            rel_path = f"{directory}/{filename}" if directory else filename
+            dest = _resolve_in_project(rel_path)
+            if dest is None:
+                errors.append(f"Rejected unsafe path: {f.filename}")
+                continue
+            try:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                content = await f.read()
+                dest.write_bytes(content)
+                saved.append(str(dest.relative_to(BASE_DIR)))
+            except Exception as e:
+                errors.append(f"{filename}: {e}")
+
+        return {"success": bool(saved) and not errors, "saved": saved, "errors": errors}
+else:
+    # FastAPI's File()/Form() params require python-multipart to even be
+    # *registered* (it inspects the signature at route-decoration time), so
+    # we can't define the real route unless the dependency is present. Fall
+    # back to a route that fails cleanly instead of the module failing to
+    # import.
+    @app.post("/api/upload")
+    async def upload_files():
+        return {"success": False, "error": "Server is missing the python-multipart dependency for uploads"}
+
 @app.post("/api/delete")
-def delete_file(data: dict = Body(...)):
+async def delete_file(data: dict = Body(...)):
     """Delete a file relative to project root."""
     path = data.get("path")
     if not path:
         return {"success": False, "error": "No path provided"}
-    
+
     target = BASE_DIR / path
     if not target.exists():
         return {"success": False, "error": "File not found"}
-    
+
     # Security check - ensure path is within project
     try:
         target.resolve().relative_to(BASE_DIR.resolve())
     except ValueError:
         return {"success": False, "error": "Invalid path"}
-    
+
+    # Close any live Yjs room(s) for this path (or nested under it, for a
+    # directory delete) BEFORE touching disk. Otherwise a client that still
+    # has the file open keeps its debounced save timer running and
+    # resurrects the file on its next keystroke.
+    await yjs_provider.close_rooms_under(path)
+
     try:
         if target.is_file():
             target.unlink()
@@ -349,7 +408,7 @@ def delete_file(data: dict = Body(...)):
         return {"success": False, "error": str(e)}
 
 @app.post("/api/rename")
-def rename_file(data: dict = Body(...)):
+async def rename_file(data: dict = Body(...)):
     """Rename or move a file relative to project root."""
     path = data.get("path")
     new_name = data.get("newName")
@@ -395,6 +454,11 @@ def rename_file(data: dict = Body(...)):
         dest.parent.mkdir(parents=True, exist_ok=True)
         source.rename(dest)
         result_path = str(dest.relative_to(BASE_DIR))
+        # Rebind any live Yjs room(s) (or nested under it, for a directory
+        # move) to the new path. Otherwise the old path's room keeps saving
+        # to a location that no longer exists — and a fresh room opened at
+        # the new path would start split-brained against it.
+        await yjs_provider.rename_rooms_under(path, result_path)
         return {"success": True, "newPath": result_path}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -634,6 +698,22 @@ def get_file_tree():
 # BUILD API
 # ============================================================
 
+def _broadcast_build_event(payload: dict):
+    """Push a build-progress message to all doc-socket clients.
+
+    run_build (and the BuildManager callbacks it passes down) execute in
+    FastAPI's sync threadpool, not the asyncio loop that owns the
+    websockets, so the broadcast has to be handed off via
+    run_coroutine_threadsafe rather than awaited directly.
+    """
+    if _main_loop is None:
+        return
+    try:
+        asyncio.run_coroutine_threadsafe(document_hub._broadcast(payload), _main_loop)
+    except Exception as e:
+        log.error(f"[Build] Failed to broadcast progress: {e}")
+
+
 @app.post("/api/build")
 def run_build(data: dict = Body(...)):
     """Execute build process."""
@@ -642,7 +722,7 @@ def run_build(data: dict = Body(...)):
         from ..core.build_manager import BuildManager
         from ..core.build import merge_pdfs, create_pdf_metadata, apply_pdf_metadata, get_pdf_page_count
         from ..utils import scan_content, load_config_safe
-        
+
         targets = data.get("targets", [])
         options = data.get("options", {})
         
@@ -701,8 +781,41 @@ def run_build(data: dict = Body(...)):
 
         # Initialize BuildManager
         bm = BuildManager(BUILD_DIR)
-        callbacks = {} 
-        
+
+        # Real progress, driven by BuildManager's own callbacks (no fake
+        # timer). `total` is learned from the "Generated N tasks" log line —
+        # BuildManager doesn't expose the task count directly — and
+        # `completed` is incremented once per successfully compiled task.
+        # Pagination-correction passes can push `completed` past `total`;
+        # the client clamps the percentage rather than trust it blindly.
+        progress = {"completed": 0, "total": 0}
+        task_count_re = re.compile(r"Generated (\d+) tasks")
+
+        def on_log(message, ok):
+            m = task_count_re.match(message)
+            if m:
+                progress["total"] = int(m.group(1))
+            _broadcast_build_event({
+                "type": "build_progress",
+                "phase": "log",
+                "message": message,
+                "ok": bool(ok),
+                "completed": progress["completed"],
+                "total": progress["total"],
+            })
+
+        def on_progress():
+            progress["completed"] += 1
+            _broadcast_build_event({
+                "type": "build_progress",
+                "phase": "progress",
+                "completed": progress["completed"],
+                "total": progress["total"],
+            })
+            return True
+
+        callbacks = {"on_log": on_log, "on_progress": on_progress}
+
         # Run Build
         pdfs = bm.build_parallel(filtered_chapters, config, opts, callbacks)
         
@@ -731,18 +844,25 @@ def run_build(data: dict = Body(...)):
             bm_file = BUILD_DIR / 'bookmarks.txt'
             # We pass filtered_chapters here so bookmarks match what was built
             bookmarks_list = create_pdf_metadata(filtered_chapters, page_map, bm_file)
-            apply_pdf_metadata(OUTPUT_FILE, bm_file, 
-                             data.get('meta_title', 'Noteworthy'), 
-                             data.get('meta_author', ''), 
+            apply_pdf_metadata(OUTPUT_FILE, bm_file,
+                             data.get('meta_title', 'Noteworthy'),
+                             data.get('meta_author', ''),
                              bookmarks_list)
-            
+
+            _broadcast_build_event({
+                "type": "build_progress", "phase": "done",
+                "completed": progress["completed"],
+                "total": progress["total"] or progress["completed"],
+            })
             return {"success": True, "output": f"Build complete! ({current_page_count-1} pages)"}
         else:
+            _broadcast_build_event({"type": "build_progress", "phase": "error", "message": "Merge failed"})
             return {"success": False, "output": "Merge failed"}
 
     except Exception as e:
         import traceback
         traceback.print_exc()
+        _broadcast_build_event({"type": "build_progress", "phase": "error", "message": str(e)})
         return {"success": False, "output": str(e)}
 
 @app.get("/api/download/output.pdf")
@@ -782,11 +902,37 @@ def start_watch(data: dict = Body(...)):
 # TINYMIST PREVIEW API
 # ============================================================
 
+def _tinymist_status() -> dict:
+    """Build the tinymist status block shared by /api/status and /api/tinymist/status."""
+    running = preview_manager.full_preview_running
+    return {
+        "running": running,
+        "url": preview_manager.get_full_preview_url() if running else None,
+        "control_url": preview_manager.get_full_preview_control_url() if running else None,
+        "target": preview_manager.full_preview_target,
+    }
+
+
 @app.post("/api/tinymist/start")
 def start_tinymist_preview(data: dict = Body(default={})):
-    """Start tinymist preview server for source/preview synchronization."""
+    """Start tinymist preview server for source/preview synchronization.
+
+    Idempotent by default — a preview session is shared by every connected
+    client, so if one is already running we just hand back its details
+    instead of killing and retargeting it out from under whoever is using
+    it. Pass `restart: true` to explicitly retarget/restart it.
+    """
     file_path = data.get("path")
-    preview_manager.stop_full_preview()
+    restart = bool(data.get("restart"))
+
+    if preview_manager.full_preview_running and not restart:
+        status = _tinymist_status()
+        status["success"] = True
+        return status
+
+    if restart:
+        preview_manager.stop_full_preview()
+
     url = preview_manager.start_full_preview(file_path)
     if url:
         return {
@@ -808,12 +954,7 @@ def stop_tinymist_preview():
 @app.get("/api/tinymist/status")
 def get_tinymist_status():
     """Get tinymist preview status."""
-    return {
-        "running": preview_manager.full_preview_running,
-        "url": preview_manager.get_full_preview_url() if preview_manager.full_preview_running else None,
-        "control_url": preview_manager.get_full_preview_control_url() if preview_manager.full_preview_running else None,
-        "target": preview_manager.full_preview_target,
-    }
+    return _tinymist_status()
 
 # ============================================================
 # MODULES API
@@ -1039,7 +1180,9 @@ def get_status():
     return {
         "project": BASE_DIR.name,
         "path": str(BASE_DIR),
-        "preview": preview_manager.get_status()
+        "preview": preview_manager.get_status(),
+        # Clients probe status.tinymist.{running,url} for preview discovery.
+        "tinymist": _tinymist_status(),
     }
 
 # ============================================================

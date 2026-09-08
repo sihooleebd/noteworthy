@@ -27,6 +27,25 @@ def set_packet_logging(enabled: bool):
     _packet_logging_enabled = bool(enabled)
 
 
+def _resolve_room_path(room_name: str) -> Path | None:
+    """Resolve a websocket room name to a path inside BASE_DIR.
+
+    Room names come straight from the /yjs websocket URL (untrusted client
+    input) — mirrors the containment check server.py's HTTP API already
+    does in `_resolve_in_project`. Returns None if the name would resolve
+    outside the project root, so callers can refuse to create/serve a room
+    for it instead of writing outside the project.
+    """
+    if not room_name:
+        return None
+    target = BASE_DIR / room_name
+    try:
+        target.resolve().relative_to(BASE_DIR.resolve())
+    except ValueError:
+        return None
+    return target
+
+
 class NoteworthyRoom(YRoom):
     """
     Custom room that syncs with disk.
@@ -36,15 +55,23 @@ class NoteworthyRoom(YRoom):
     def __init__(self, room_name: str, *args, **kwargs):
         super().__init__(ready=True, *args, **kwargs)  # Start ready since we load sync
         self.room_name = room_name
-        self._file_path = BASE_DIR / room_name
+        # Room names come straight off the websocket URL — refuse to build a
+        # room that would read/write outside BASE_DIR (path traversal via
+        # e.g. room_name="../../etc/passwd"). Raising here means the caller
+        # never inserts this room into the registry, so it can't be created
+        # or served.
+        file_path = _resolve_room_path(room_name)
+        if file_path is None:
+            raise ValueError(f"Room name escapes project root: {room_name!r}")
+        self._file_path = file_path
         self._initialized = False
         # CRITICAL: the Text wrapper and its Subscription must be kept alive
         # on the room. pycrdt subscriptions are RAII guards — if the wrapper
         # returned by ydoc.get() is garbage-collected, the observer is
         # silently dropped and changes are never persisted to disk.
-        self._text: Optional[Text] = None
+        self._text: Text | None = None
         self._save_subscription = None
-        self._save_handle: Optional[asyncio.TimerHandle] = None
+        self._save_handle: asyncio.TimerHandle | None = None
         self._save_delay = 0.25  # debounce window (seconds)
         
     async def initialize(self):
@@ -102,6 +129,39 @@ class NoteworthyRoom(YRoom):
             self._save_delay, lambda: asyncio.ensure_future(self.save())
         )
 
+    def rebind(self, new_room_name: str, new_file_path: Path):
+        """Point this room at a new on-disk location after a rename/move.
+
+        Clients keep talking to the same live CRDT document (no reconnect
+        needed) — only the save target and lookup name change.
+        """
+        self.room_name = new_room_name
+        self._file_path = new_file_path
+
+    async def close(self):
+        """Tear down this room: stop persisting and disconnect its clients.
+
+        Called when the file behind this room is deleted, or moved out from
+        under it without being rebound. Without this, the debounced save
+        timer (or a future edit from a still-open client) would fire and
+        write the in-memory content straight back to the old path —
+        resurrecting a file the user just deleted.
+        """
+        if self._save_handle is not None:
+            self._save_handle.cancel()
+            self._save_handle = None
+        if self._text is not None and self._save_subscription is not None:
+            try:
+                self._text.unobserve(self._save_subscription)
+            except Exception as e:
+                log.debug(f"[YjsRoom] unobserve failed for {self.room_name} (already gone?): {e}")
+            self._save_subscription = None
+        try:
+            if self._task_group is not None:
+                await self.stop()
+        except Exception as e:
+            log.error(f"[YjsRoom] Error stopping room {self.room_name}: {e}")
+
 
 class NoteworthyWebsocketServer(WebsocketServer):
     """Custom WebsocketServer that delegates room creation to YjsProvider."""
@@ -126,6 +186,7 @@ class YjsProvider:
         self.rooms: Dict[str, NoteworthyRoom] = {}
         self.server: Optional[NoteworthyWebsocketServer] = None
         self._callbacks = []
+        self._room_locks: Dict[str, asyncio.Lock] = {}
     
     async def get_room(self, file_path: str) -> NoteworthyRoom:
         """Get or create a room for a file (async for pycrdt-websocket compatibility)."""
@@ -139,6 +200,16 @@ class YjsProvider:
             
         log.debug(f"[YjsProvider] Normalized path: {original_path} -> {file_path}")
 
+        # Serialize per-room setup. Two clients opening the same *cold* room at
+        # once would otherwise race through create/initialize/start_room, and the
+        # loser's websocket ends up on a room that never syncs it — the tab looks
+        # connected (presence and chat work) but never receives document content.
+        lock = self._room_locks.setdefault(file_path, asyncio.Lock())
+        async with lock:
+            return await self._get_room_locked(file_path)
+
+    async def _get_room_locked(self, file_path: str) -> NoteworthyRoom:
+        """Create/initialize/start the room. Callers must hold the room lock."""
         if file_path not in self.rooms:
             log.debug(f"[YjsProvider] Creating new NoteworthyRoom for {file_path}")
             room = NoteworthyRoom(room_name=file_path)
@@ -165,6 +236,72 @@ class YjsProvider:
         
         return room
     
+    async def close_room(self, file_path: str):
+        """Close and forget the room at `file_path` (e.g. its file was deleted).
+
+        No-op if no room is live for that path. Serialized on the same
+        per-room lock as get_room to avoid racing a concurrent open.
+        """
+        lock = self._room_locks.setdefault(file_path, asyncio.Lock())
+        async with lock:
+            room = self.rooms.pop(file_path, None)
+            if room is None:
+                return
+            if self.server is not None:
+                self.server.rooms.pop(file_path, None)
+            log.info(f"[YjsProvider] Closing room {file_path}")
+            await room.close()
+
+    async def rename_room(self, old_path: str, new_path: str):
+        """Rebind the room at `old_path` to `new_path` after a filesystem rename.
+
+        No-op if no room is live for old_path — the rename happened purely
+        on disk and there's nothing to resurrect. If a (stale) room already
+        occupies new_path, it's closed rather than silently overwritten, so
+        its save timer/clients don't leak.
+        """
+        new_file_path = _resolve_room_path(new_path)
+        if new_file_path is None:
+            log.error(f"[YjsProvider] Refusing to rebind room to unsafe path: {new_path!r}")
+            await self.close_room(old_path)
+            return
+
+        lock = self._room_locks.setdefault(old_path, asyncio.Lock())
+        async with lock:
+            room = self.rooms.pop(old_path, None)
+            if room is None:
+                return
+            if self.server is not None:
+                self.server.rooms.pop(old_path, None)
+
+            existing = self.rooms.pop(new_path, None)
+            if existing is not None:
+                if self.server is not None:
+                    self.server.rooms.pop(new_path, None)
+                await existing.close()
+
+            room.rebind(new_path, new_file_path)
+            self.rooms[new_path] = room
+            if self.server is not None:
+                self.server.rooms[new_path] = room
+            log.info(f"[YjsProvider] Rebound room {old_path} -> {new_path}")
+
+    def _rooms_under(self, path: str) -> list:
+        """Room keys equal to `path`, or nested under it (directory ops)."""
+        prefix = path.rstrip("/") + "/"
+        return [name for name in self.rooms if name == path or name.startswith(prefix)]
+
+    async def close_rooms_under(self, path: str):
+        """Close every live room at or under `path` (file or directory delete)."""
+        for name in self._rooms_under(path):
+            await self.close_room(name)
+
+    async def rename_rooms_under(self, old_path: str, new_path: str):
+        """Rebind every live room at or under `old_path` (file or directory rename)."""
+        for name in self._rooms_under(old_path):
+            suffix = name[len(old_path):]  # '' for exact match, '/...' for nested
+            await self.rename_room(name, new_path + suffix)
+
     def add_change_callback(self, callback):
         """Register callback for content changes (for diagnostics/preview triggers)."""
         self._callbacks.append(callback)

@@ -1,0 +1,3 @@
+/* esm.sh - lib0@0.2.117/math */
+var s=Math.floor,r=Math.ceil,e=Math.abs,p=Math.imul,n=Math.round,c=Math.log10,x=Math.log2,a=Math.log,h=Math.sqrt,l=(o,t)=>o+t,M=(o,t)=>o<t?o:t,i=(o,t)=>o>t?o:t,g=Number.isNaN,N=Math.pow,m=o=>Math.pow(10,o),u=Math.sign,d=o=>o!==0?o<0:1/o<0;export{e as abs,l as add,r as ceil,m as exp10,s as floor,p as imul,g as isNaN,d as isNegativeZero,a as log,c as log10,x as log2,i as max,M as min,N as pow,n as round,u as sign,h as sqrt};
+//# sourceMappingURL=math.mjs.map

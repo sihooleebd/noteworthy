@@ -117,6 +117,11 @@
                     this.applyDiagnostics(msg.diagnostics);
                     break;
 
+                // ---- Build progress (real numbers from BuildManager) ----
+                case 'build_progress':
+                    if (this.updateBuildProgress) this.updateBuildProgress(msg);
+                    break;
+
                 // ---- Remote cursors (custom, low-latency, via docSocket) ----
                 case 'cursor':
                     this._applyRemoteCursor(msg);
@@ -397,7 +402,10 @@
             monaco.editor.setModelMarkers(this.state.editor.getModel(), 'owner', []);
 
             const errorCountEl = document.getElementById('error-count');
-            if (diagnostics && diagnostics.length > 0) {
+            const errorCountTextEl = document.getElementById('error-count-text');
+            const hasErrors = !!(diagnostics && diagnostics.length > 0);
+
+            if (hasErrors) {
                 const markers = diagnostics.map(d => ({
                     severity: monaco.MarkerSeverity.Error,
                     startLineNumber: d.line,
@@ -407,10 +415,14 @@
                     message: d.message
                 }));
                 monaco.editor.setModelMarkers(this.state.editor.getModel(), 'owner', markers);
-                if (errorCountEl) errorCountEl.style.display = 'none';
-            } else {
-                if (errorCountEl) errorCountEl.style.display = 'none';
+                if (errorCountTextEl) {
+                    errorCountTextEl.textContent = `${diagnostics.length} error${diagnostics.length === 1 ? '' : 's'}`;
+                }
             }
+            // CSS drives visibility off the `visible` class (display:none by
+            // default) — toggling style.display directly here previously
+            // hid the badge in both branches, so it could never appear.
+            if (errorCountEl) errorCountEl.classList.toggle('visible', hasErrors);
         },
     };
 

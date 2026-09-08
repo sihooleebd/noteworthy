@@ -34,6 +34,7 @@ Technical reference for all features:
 | [Config Files](reference/config-files.md) | JSON configuration schemas      |
 | [Typst API](reference/typst-api.md)       | Exported Typst functions        |
 | [Templates](reference/templates.md)       | Template system internals       |
+| [Emacs Protocol](reference/emacs-protocol.md) | Wire protocol for the Emacs bridge |
 
 ## Modules
 

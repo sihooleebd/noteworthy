@@ -22,6 +22,7 @@
           # (noteworthy/core/deps.py, core/build.py, gui/preview.py).
           typstTools = [
             pkgs.typst # document compiler
+            pkgs.tinymist # live preview + LSP (noteworthy/gui/preview.py spawns it)
             pkgs."poppler-utils" # pdfinfo, pdfunite
             pkgs.ghostscript # gs — pdfunite fallback + pdfmark metadata
           ];
@@ -38,6 +39,7 @@
               pycrdt
               pycrdt-websocket
               pypdf
+              python-multipart # multipart/form-data for /api/upload
             ];
 
           devDeps =

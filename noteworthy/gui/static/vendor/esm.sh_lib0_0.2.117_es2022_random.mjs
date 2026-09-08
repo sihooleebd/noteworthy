@@ -1,0 +1,3 @@
+/* esm.sh - lib0@0.2.117/random */
+import*as o from"./esm.sh_lib0_0.2.117_es2022_math.mjs";import*as r from"./esm.sh_lib0_0.2.117_es2022_binary.mjs";import{getRandomValues as n}from"./esm.sh_lib0_0.2.117_es2022_webcrypto.mjs";var e=Math.random,a=()=>n(new Uint32Array(1))[0],p=()=>{let t=n(new Uint32Array(8));return(t[0]&r.BITS21)*(r.BITS32+1)+(t[1]>>>0)},s=t=>t[o.floor(e()*t.length)],i="10000000-1000-4000-8000"+-1e11,u=()=>i.replace(/[018]/g,t=>(t^a()&15>>t/4).toString(16));export{s as oneOf,e as rand,a as uint32,p as uint53,u as uuidv4};
+//# sourceMappingURL=random.mjs.map

@@ -210,6 +210,19 @@ const app = {
                     }, 50);
                 });
 
+                // Diagnostics: re-check after edits settle, not on every
+                // keystroke — /api/check shells out to `typst compile`, so
+                // firing it per-keystroke would spam the process.
+                let _diagnosticsDebounceTimer = null;
+                this.state.editor.onDidChangeModelContent(() => {
+                    if (!this.state.activeFile || !this.state.activeFile.endsWith('.typ')) return;
+                    if (_diagnosticsDebounceTimer) clearTimeout(_diagnosticsDebounceTimer);
+                    _diagnosticsDebounceTimer = setTimeout(() => {
+                        _diagnosticsDebounceTimer = null;
+                        this.checkDiagnostics();
+                    }, 2000);
+                });
+
                 this._setupSmartEditing();
                 resolve();
             });

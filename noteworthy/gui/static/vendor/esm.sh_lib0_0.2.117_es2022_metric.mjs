@@ -1,0 +1,3 @@
+/* esm.sh - lib0@0.2.117/metric */
+import*as e from"./esm.sh_lib0_0.2.117_es2022_math.mjs";var s=1e24,m=1e21,a=1e18,h=1e15,f=1e12,g=1e9,w=1e6,d=1e3,i=100,y=10,z=.1,k=.01,P=.001,D=1e-6,E=1e-9,G=1e-12,T=1e-15,U=1e-18,Y=1e-21,Z=1e-24,p=["","k","M","G","T","P","E","Z","Y"],r=["","m","\u03BC","n","p","f","a","z","y"],j=(c,o=0)=>{let n=c===0?0:e.log10(c),t=0;for(;n<t*3&&o>-8;)o--,t--;for(;n>=3+t*3&&o<8;)o++,t++;let x=o<0?r[-o]:p[o];return{n:e.round((t>0?c/e.exp10(t*3):c*e.exp10(t*-3))*1e12)/1e12,prefix:x}};export{U as atto,k as centi,y as deca,z as deci,a as exa,T as femto,g as giga,i as hecto,d as kilo,w as mega,D as micro,P as milli,E as nano,h as peta,G as pico,j as prefix,f as tera,Z as yocto,s as yotta,Y as zepto,m as zetta};
+//# sourceMappingURL=metric.mjs.map

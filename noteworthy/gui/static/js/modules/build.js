@@ -165,6 +165,35 @@
 
         updateBuildToggles: function () { /* placeholder for intermediate checkbox states */ },
 
+        // Real build progress, pushed over the doc-socket ('build_progress'
+        // messages, see collab.js) from server.py's on_log/on_progress
+        // callbacks into BuildManager.build_parallel — no more faked timer.
+        updateBuildProgress: function (msg) {
+            const progressFill = document.getElementById('progress-fill-new') || document.getElementById('progress-fill');
+            const progressPage = document.getElementById('progress-page-new') || document.getElementById('progress-page');
+            const progressPercent = document.getElementById('progress-percent-new') || document.getElementById('progress-percent');
+
+            if (msg.phase === 'error') {
+                if (progressPage) progressPage.textContent = msg.message || 'Build error';
+                return;
+            }
+
+            const total = msg.total || 0;
+            const completed = msg.completed || 0;
+            // BuildManager's pagination-correction passes can re-run tasks,
+            // pushing `completed` past the `total` learned from its first
+            // "Generated N tasks" log — clamp instead of overshooting 100%
+            // before the request has actually resolved.
+            const pct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
+
+            if (progressFill) progressFill.style.width = `${pct}%`;
+            if (progressPercent) progressPercent.textContent = total > 0 ? `${pct}%` : '…';
+            if (progressPage) {
+                if (total > 0) progressPage.textContent = `Compiled ${completed}/${total}`;
+                else if (msg.message) progressPage.textContent = msg.message;
+            }
+        },
+
         runBuild: async function () {
             const targets = [];
             document.querySelectorAll('.build-cell.selected').forEach(cell => {
@@ -190,27 +219,9 @@
             if (progressPercent) progressPercent.textContent = '0%';
             if (progressFill) progressFill.style.width = '0%';
 
-            let currentProgress = 0;
-            const targetProgress = 90;
-            const progressInterval = setInterval(() => {
-                if (currentProgress < targetProgress) {
-                    currentProgress += Math.random() * 5 + 1;
-                    if (currentProgress > targetProgress) currentProgress = targetProgress;
-                    if (progressFill) progressFill.style.width = `${currentProgress}%`;
-                    if (progressPercent) progressPercent.textContent = `${Math.round(currentProgress)}%`;
-                    if (progressPage) {
-                        if (currentProgress < 20) progressPage.textContent = 'Compiling frontmatter...';
-                        else if (currentProgress < 50) progressPage.textContent = 'Building chapters...';
-                        else if (currentProgress < 80) progressPage.textContent = 'Compiling pages...';
-                        else progressPage.textContent = 'Merging PDF...';
-                    }
-                }
-            }, 200);
-
             try {
                 const res = await fetch('/api/build', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targets, options }) });
                 const result = await res.json();
-                clearInterval(progressInterval);
                 if (progressFill) progressFill.style.width = '100%';
                 if (progressPercent) progressPercent.textContent = '100%';
                 if (buildBtn) { buildBtn.disabled = false; buildBtn.innerHTML = '<i data-lucide="zap"></i> Build PDF'; }
@@ -226,8 +237,10 @@
                     if (progressPage) progressPage.textContent = 'Build failed';
                     if (log) { log.style.display = 'block'; log.textContent = result.output || 'Unknown error'; log.style.color = 'var(--danger)'; }
                 }
+                // Re-check diagnostics after a build attempt — a build failure
+                // is often exactly the kind of error /api/check would surface.
+                if (this.checkDiagnostics) this.checkDiagnostics();
             } catch (err) {
-                clearInterval(progressInterval);
                 if (progressPage) progressPage.textContent = 'Build failed';
                 if (log) { log.style.display = 'block'; log.textContent = err.message || 'Network error'; log.style.color = 'var(--danger)'; }
                 if (buildBtn) { buildBtn.disabled = false; buildBtn.innerHTML = '<i data-lucide="zap"></i> Build PDF'; }

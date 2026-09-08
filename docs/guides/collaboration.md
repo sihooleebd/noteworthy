@@ -141,6 +141,36 @@ Noteworthy uses a hybrid synchronization system:
 
 ---
 
+## Editing from Emacs
+
+Emacs clients ([noteworthy-collab.el](https://github.com/R0K0R/noteworthy-collab.el))
+do not speak the binary Yjs protocol. They connect to the bridge, which
+translates a JSON delta protocol to and from the CRDT layer:
+
+```text
+Emacs --JSON /ws/emacs--> bridge (8001) --binary /yjs--> Studio (8000)
+                                        \--JSON /ws/doc-->
+```
+
+Start the Studio server as usual, then run the bridge alongside it:
+
+```bash
+noteworthy -g                                              # Studio on :8000
+uvicorn noteworthy.bridge.server:app --port 8001           # bridge on :8001
+```
+
+Point Emacs at the bridge, not the Studio port:
+
+```elisp
+(setq noteworthy-collab-server-url "ws://localhost:8001/ws/emacs")
+```
+
+Emacs peers appear in the web UI like any other collaborator — shared cursors,
+selections and chat all cross the bridge. See the
+[Emacs Protocol reference](../reference/emacs-protocol.md) for the wire format.
+
+---
+
 ## Best Practices
 
 1. **Communicate**: Use chat to coordinate edits
