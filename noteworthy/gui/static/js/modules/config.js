@@ -361,7 +361,7 @@
                 el.innerHTML = `
                     <div class="module-info">
                         <div class="module-name">${cleanName}</div>
-                        <div class="module-meta"><span class="module-source">${info.source}</span><span class="module-status">${info.status.toUpperCase()}</span></div>
+                        <div class="module-meta"><span class="module-source">${info.source}</span><span class="module-status">${(info.status || (info.installed ? 'installed' : 'available')).toUpperCase()}</span></div>
                     </div>
                     ${actionHtml}
                 `;

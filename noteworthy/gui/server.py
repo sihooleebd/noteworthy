@@ -503,12 +503,53 @@ def get_hierarchy():
     except Exception:
         return {"hierarchy": []}
 
+def _materialize_hierarchy(hierarchy):
+    """Create the content files a hierarchy describes, if they are missing.
+
+    The structure editor used to write hierarchy.json alone, leaving chapters
+    and pages with no file behind them -- the document then failed to compile
+    with "file not found". Chapter folders are numbered by position and pages
+    1..n inside them, matching what `noteworthy.py --print-inputs` scans for.
+
+    Only ever creates: removing an entry leaves its file alone, so nobody
+    loses writing by editing the outline.
+    """
+    created = []
+    content_dir = BASE_DIR / "content"
+    for ch_idx, chapter in enumerate(hierarchy):
+        if not isinstance(chapter, dict):
+            continue
+        ch_dir = content_dir / str(ch_idx)
+        try:
+            ch_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            log.error(f"Could not create chapter directory {ch_dir}: {e}")
+            continue
+        for pg_idx, page in enumerate(chapter.get("pages", []) or []):
+            page_file = ch_dir / f"{pg_idx + 1}.typ"
+            if page_file.exists():
+                continue
+            title = (page or {}).get("title", "") if isinstance(page, dict) else ""
+            try:
+                page_file.write_text(
+                    '#import "../../templates/templater.typ": *\n\n'
+                    + (f"= {title}\n" if title else ""),
+                    encoding="utf-8")
+                created.append(str(page_file.relative_to(BASE_DIR)))
+            except OSError as e:
+                log.error(f"Could not create page {page_file}: {e}")
+    return created
+
+
 @app.post("/api/hierarchy")
 def save_hierarchy(data: dict = Body(...)):
-    """Save hierarchy.json."""
+    """Save hierarchy.json and create any content files it introduces."""
     hierarchy = data.get("hierarchy", [])
     HIERARCHY_FILE.write_text(json.dumps(hierarchy, indent=2))
-    return {"success": True}
+    created = _materialize_hierarchy(hierarchy)
+    if created:
+        log.info(f"Created content files for new hierarchy entries: {created}")
+    return {"success": True, "created": created}
 
 @app.get("/api/preface")
 def get_preface():
