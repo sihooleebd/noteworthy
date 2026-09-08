@@ -101,6 +101,14 @@ class EmacsSession:
         self._pending_updates: list = []
         self._applying_remote = False
 
+        # Set once the freshly attached doc holds the server's state.  Until
+        # then its text is empty, and an edit applied against an empty mirror
+        # has every retain clamped to 0 and every delete dropped -- which put
+        # the text at position 0 instead of the cursor, or silently lost it.
+        # That is why corruption always followed the *first* edit after a
+        # buffer appeared: attaching is async, applying was not.
+        self._yjs_synced = asyncio.Event()
+
         # Two receive loops share the Emacs socket; Starlette WebSockets are
         # not safe for concurrent sends.
         self._send_lock = asyncio.Lock()
@@ -243,6 +251,7 @@ class EmacsSession:
     async def _attach_yjs(self, path: str):
         """Open a WebSocket to /yjs/<path> and mirror the Y.Doc locally."""
         await self._detach_yjs()
+        self._yjs_synced.clear()
 
         # pycrdt-websocket uses the room name in the URL path
         import urllib.parse
@@ -385,6 +394,11 @@ class EmacsSession:
                     reply = handle_sync_message(data[1:], self._ydoc)
                 finally:
                     self._applying_remote = False
+                # SyncStep2 (1) answers our step-1 and carries the room's
+                # state; Update (2) means the room was already live.  Either
+                # way the mirror is now real and deltas may be applied.
+                if len(data) > 1 and data[1] in (1, 2):
+                    self._yjs_synced.set()
                 if reply is not None and self._yjs_ws and self._ws_is_open(self._yjs_ws):
                     await self._yjs_ws.send(reply)
             elif message_type == YMessageType.AWARENESS:
@@ -453,6 +467,19 @@ class EmacsSession:
             if not self._yjs_ws or not self._ydoc or not self._ws_is_open(self._yjs_ws):
                 return
 
+        # Do not touch the doc until it holds the room's state.
+        if not self._yjs_synced.is_set():
+            try:
+                await asyncio.wait_for(self._yjs_synced.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
+                LOG.error("Delta for %s dropped: Yjs sync did not complete", path)
+                await self._send_emacs({
+                    "type": "log", "level": "error",
+                    "message": ("Bridge is not synced yet; that edit was NOT sent. "
+                                "Reopen the file to resync."),
+                })
+                return
+
         ops = _validate_ops(msg.get("ops"))
         if ops is None:
             LOG.warning("Malformed ops from Emacs for %s: %r", path, msg.get("ops"))
@@ -473,6 +500,23 @@ class EmacsSession:
             # lands at the wrong offset -- silently dropped, misplaced, or (for
             # a delete) wiping the document for everyone in the room.
             mirror = str(text)
+
+            # If the ops reach past the end of the mirror, this session and the
+            # room disagree about the document.  Clamping here is what turned a
+            # disagreement into data loss, so refuse the edit and hand Emacs the
+            # authoritative text to re-align on.
+            span = sum(op.get("retain", 0) + op.get("delete", 0) for op in ops)
+            if span > len(mirror):
+                LOG.error("Delta for %s spans %d chars but the doc holds %d; refusing",
+                          path, span, len(mirror))
+                await self._send_emacs({
+                    "type": "sync",
+                    "file": path,
+                    "content": mirror,
+                    "version": len(mirror),
+                })
+                return
+
             char_pos = 0
 
             with self._ydoc.transaction():
