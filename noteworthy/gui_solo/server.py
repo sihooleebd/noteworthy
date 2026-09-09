@@ -275,13 +275,15 @@ async def run_diagnostics_check(target_file: str = None):
                     [d for d in content_dir.iterdir() if d.is_dir() and d.name.replace('.', '', 1).lstrip('-').isdigit()],
                     key=lambda d: float(d.name) if d.name.replace('.', '', 1).lstrip('-').isdigit() else 999
                 )
-                for idx, ch_dir in enumerate(ch_dirs):
+                for ch_dir in ch_dirs:
                     chapter_folders.append(ch_dir.name)
                     pg_files = sorted(
                         [f.stem for f in ch_dir.glob("*.typ") if f.stem.replace('.', '', 1).lstrip('-').isdigit()],
                         key=lambda s: float(s) if s.replace('.', '', 1).lstrip('-').isdigit() else 999
                     )
-                    page_folders[str(idx)] = pg_files
+                    # Keyed by folder NAME (see utils.scan_content); keying by
+                    # index only matched while chapters ran 0,1,2,... .
+                    page_folders[ch_dir.name] = pg_files
             
             result = await asyncio.to_thread(
                 subprocess.run,

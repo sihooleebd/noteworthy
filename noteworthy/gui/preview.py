@@ -110,13 +110,18 @@ class PreviewManager:
                 [d for d in content_dir.iterdir() if d.is_dir() and d.name.replace('.', '', 1).lstrip('-').isdigit()],
                 key=lambda d: float(d.name) if d.name.replace('.', '', 1).lstrip('-').isdigit() else 999
             )
-            for idx, ch_dir in enumerate(ch_dirs):
+            for ch_dir in ch_dirs:
                 chapter_folders.append(ch_dir.name)
                 pg_files = sorted(
                     [f.stem for f in ch_dir.glob("*.typ") if f.stem.replace('.', '', 1).lstrip('-').isdigit()],
                     key=lambda s: float(s) if s.replace('.', '', 1).lstrip('-').isdigit() else 999
                 )
-                page_folders[str(idx)] = pg_files
+                # Keyed by folder NAME, matching utils.scan_content and the
+                # lookup in parser.typ.  Keying by index only agreed with the
+                # folder name while chapters were 0,1,2,... -- with a gap
+                # (content/0 and content/4) the lookup missed and every page
+                # fell back to a 0-based range, renumbering the whole chapter.
+                page_folders[ch_dir.name] = pg_files
         
         # Parse target
         target = None
@@ -399,13 +404,18 @@ class PreviewManager:
                 [d for d in content_dir.iterdir() if d.is_dir() and d.name.replace('.', '', 1).lstrip('-').isdigit()],
                 key=lambda d: float(d.name) if d.name.replace('.', '', 1).lstrip('-').isdigit() else 999
             )
-            for idx, ch_dir in enumerate(ch_dirs):
+            for ch_dir in ch_dirs:
                 chapter_folders.append(ch_dir.name)
                 pg_files = sorted(
                     [f.stem for f in ch_dir.glob("*.typ") if f.stem.replace('.', '', 1).lstrip('-').isdigit()],
                     key=lambda s: float(s) if s.replace('.', '', 1).lstrip('-').isdigit() else 999
                 )
-                page_folders[str(idx)] = pg_files
+                # Keyed by folder NAME, matching utils.scan_content and the
+                # lookup in parser.typ.  Keying by index only agreed with the
+                # folder name while chapters were 0,1,2,... -- with a gap
+                # (content/0 and content/4) the lookup missed and every page
+                # fell back to a 0-based range, renumbering the whole chapter.
+                page_folders[ch_dir.name] = pg_files
         
         # Parse target from file_path (e.g., "content/2/5.typ" -> "2/4")
         target = None

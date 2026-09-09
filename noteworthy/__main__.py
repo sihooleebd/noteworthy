@@ -55,14 +55,18 @@ def main():
                 [d for d in content_dir.iterdir() if d.is_dir() and d.name.isdigit()],
                 key=lambda d: int(d.name)
             )
-            for idx, ch_dir in enumerate(ch_dirs):
+            for ch_dir in ch_dirs:
                 pg_files = sorted(
                     [f.stem for f in ch_dir.glob('*.typ') if f.stem.isdigit()],
                     key=lambda s: int(s)
                 )
                 if pg_files:
                     ch_folders.append(ch_dir.name)
-                    pg_folders[str(idx)] = pg_files
+                    # Keyed by folder NAME, as utils.scan_content documents and
+                    # parser.typ expects.  `idx' also counted chapters that were
+                    # skipped for having no pages, so it drifted out of step
+                    # with ch_folders.
+                    pg_folders[ch_dir.name] = pg_files
         
         print(f"--input chapter-folders='{json.dumps(ch_folders)}' --input page-folders='{json.dumps(pg_folders)}'")
         sys.exit(0)
