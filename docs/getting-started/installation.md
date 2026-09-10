@@ -33,7 +33,6 @@ then on `PATH`.
 | ----------- | ------------------------- | --------------------------- | ---------------------------------------------------------------------- |
 | **Poppler** | `brew install poppler`    | `apt install poppler-utils` | [Download](https://github.com/oschwartz10612/poppler-windows/releases) |
 | **pdftk**   | `brew install pdftk-java` | `apt install pdftk`         | [Download](https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/)       |
-
 | **pypdf**   | `pip install pypdf`       | `pip install pypdf`         | `pip install pypdf`                                                    |
 
 > [!NOTE]
