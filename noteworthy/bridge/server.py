@@ -139,18 +139,40 @@ class EmacsSession:
         while not self._closing:
             doc_url = f"{DOC_URL}?name={self.user_name}&id={self.user_id}"
             try:
-                self._doc_ws = await websockets.connect(doc_url)
+                # max_size: the hub broadcasts `preview' frames carrying whole
+                # rendered SVG pages, which run past the 1 MiB default.  The
+                # limit is enforced on the frame, before the handler that means
+                # to discard them, so the client killed its own socket with
+                # 1009 and reconnected -- once a second, re-joining every file
+                # and restarting the preview watch (which wipes its SVG cache)
+                # on each pass.  That was the flicker.
+                self._doc_ws = await websockets.connect(doc_url, max_size=None)
                 LOG.info("Bridge doc-socket connected for %s", self.user_name)
-                delay = 1.0
+                connected_at = asyncio.get_event_loop().time()
                 # Re-announce the file we are on, so presence survives a reconnect.
                 if self.current_file:
                     await self._doc_send({"type": "join", "path": self.current_file})
                 await self._doc_receive_loop()
+                # Reset the backoff only for a connection that actually held.
+                # Resetting on connect alone meant a socket that died at once
+                # retried every second forever, and the churn re-joined every
+                # file each time -- which is what restarted the preview watch
+                # (and so wiped its SVG cache) about once a second.
+                if asyncio.get_event_loop().time() - connected_at > 30:
+                    delay = 1.0
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                LOG.error("Doc socket connect failed: %s", e)
+                LOG.error("Doc socket connect failed: %s: %s", type(e).__name__, e)
             finally:
+                # Close it.  Dropping the reference left the socket ESTABLISHED
+                # on both ends with nothing owning it -- one per reconnect, and
+                # a loop then walks the process into its fd limit.
+                if self._doc_ws is not None:
+                    try:
+                        await self._doc_ws.close()
+                    except Exception:
+                        pass
                 self._doc_ws = None
 
             if self._closing:
@@ -263,7 +285,9 @@ class EmacsSession:
         url = f"{YJS_URL}/{room}"
 
         try:
-            self._yjs_ws = await websockets.connect(url)
+            # Same limit, same reason: a Yjs update for a large document (or
+            # a sync carrying the whole room) is not bounded by 1 MiB either.
+            self._yjs_ws = await websockets.connect(url, max_size=None)
             self._yjs_path = path
             self._ydoc = Doc()
             # Keep the subscription alive on the session: pycrdt subscriptions
@@ -665,10 +689,13 @@ class EmacsSession:
 
         except asyncio.CancelledError:
             pass
-        except websockets.ConnectionClosed:
-            LOG.info("Doc tunnel closed")
+        except websockets.ConnectionClosed as e:
+            # Say who hung up and why.  "Doc tunnel closed" on its own turned
+            # a reconnect loop into a guessing game.
+            LOG.info("Doc tunnel closed: code=%s reason=%r rcvd=%s sent=%s",
+                     e.code, e.reason, e.rcvd, e.sent)
         except Exception as e:
-            LOG.error("Doc receive error: %s", e)
+            LOG.error("Doc receive error: %s: %s", type(e).__name__, e)
 
     # ------------------------------------------------------------------
     # Helpers
