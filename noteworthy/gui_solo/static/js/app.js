@@ -1649,9 +1649,18 @@ const app = {
         input.focus();
         input.select();
 
+        // Enter/Escape and blur can each fire for a single rename, and a tree
+        // re-render can detach the input under us. Without this guard the
+        // second pass double-POSTs /api/rename with the now-stale path and
+        // throws NotFoundError out of an unawaited async fn.
+        let renameSettled = false;
         const finishRename = async (save) => {
+            if (renameSettled) return;
+            renameSettled = true;
+
             const newName = input.value.trim();
-            input.remove();
+            const inputParent = input.parentNode;
+            if (inputParent && inputParent.contains(input)) inputParent.removeChild(input);
             nameSpan.style.display = '';
 
             if (save && newName && newName !== filename) {
