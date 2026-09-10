@@ -14,6 +14,7 @@ import subprocess
 import shutil
 import os
 import re
+from ..utils import scan_content
 import tempfile
 
 from ..config import (
@@ -510,25 +511,52 @@ def _materialize_hierarchy(hierarchy):
 
     The structure editor used to write hierarchy.json alone, leaving chapters
     and pages with no file behind them -- the document then failed to compile
-    with "file not found". Chapter folders are numbered by position and pages
-    1..n inside them, matching what `noteworthy.py --print-inputs` scans for.
+    with "file not found".
+
+    A hierarchy entry is matched to a chapter folder by POSITION, not by name:
+    hierarchy.json carries only titles, and the folder name is the chapter
+    number. Naming the folder after the position instead was right only while
+    chapters ran 0,1,2,...; with content/8 and content/9 it invented content/0
+    and content/1 beside them, so editing the outline silently grew a second,
+    empty copy of the book -- and since parser.typ walks the folders in sorted
+    order, the stubs displaced the real chapters in the preview.
 
     Only ever creates: removing an entry leaves its file alone, so nobody
     loses writing by editing the outline.
     """
     created = []
     content_dir = BASE_DIR / "content"
+    ch_folders, pg_folders = scan_content(content_dir)
+
+    def _next_name(existing):
+        """Continue the existing numbering rather than restarting it."""
+        nums = [int(n) for n in existing if str(n).isdigit()]
+        return str(max(nums) + 1) if nums else "1"
+
     for ch_idx, chapter in enumerate(hierarchy):
         if not isinstance(chapter, dict):
             continue
-        ch_dir = content_dir / str(ch_idx)
+        # The folder this position already means, or the next free number.
+        if ch_idx < len(ch_folders):
+            ch_name = ch_folders[ch_idx]
+        else:
+            ch_name = _next_name(ch_folders)
+            ch_folders.append(ch_name)
+        ch_dir = content_dir / ch_name
         try:
             ch_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             log.error(f"Could not create chapter directory {ch_dir}: {e}")
             continue
+        pages = list(pg_folders.get(ch_name, []))
         for pg_idx, page in enumerate(chapter.get("pages", []) or []):
-            page_file = ch_dir / f"{pg_idx + 1}.typ"
+            # Same rule one level down: a position that already has a file
+            # keeps it, whatever it is called.
+            if pg_idx < len(pages):
+                continue
+            pg_name = _next_name(pages)
+            pages.append(pg_name)
+            page_file = ch_dir / f"{pg_name}.typ"
             if page_file.exists():
                 continue
             title = (page or {}).get("title", "") if isinstance(page, dict) else ""
