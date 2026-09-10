@@ -545,6 +545,24 @@ class EmacsSession:
             # a delete) wiping the document for everyone in the room.
             mirror = str(text)
 
+            # Emacs says how long its buffer was before the edit.  Positions
+            # in a delta only mean what they say if both sides held the same
+            # text, and the span check below cannot see a disagreement that an
+            # insert-only delta hides -- `retain 0, insert <whole buffer>' has
+            # a span of 0 and fits any document, which is how a reconnecting
+            # client with a stale buffer appended its copy to the room's.
+            base = msg.get("base")
+            if isinstance(base, int) and base != len(mirror):
+                LOG.error("Delta for %s was written against %d chars but the "
+                          "doc holds %d; refusing", path, base, len(mirror))
+                await self._send_emacs({
+                    "type": "sync",
+                    "file": path,
+                    "content": mirror,
+                    "version": len(mirror),
+                })
+                return
+
             # If the ops reach past the end of the mirror, this session and the
             # room disagree about the document.  Clamping here is what turned a
             # disagreement into data loss, so refuse the edit and hand Emacs the
