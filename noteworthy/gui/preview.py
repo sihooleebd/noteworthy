@@ -132,7 +132,13 @@ class PreviewManager:
                 pg_name = parts[1]
                 if ch_name in chapter_folders:
                     ch_idx = chapter_folders.index(ch_name)
-                    pg_files = page_folders.get(str(ch_idx), [])
+                    # Keyed by folder NAME, like the map above and the lookup
+                    # in parser.typ.  `str(ch_idx)` only agreed with the folder
+                    # name while chapters ran 0,1,2,...; with content/8 and
+                    # content/9 it misses, target stays None, and the page is
+                    # compiled raw -- no template, so no theme and no chapter
+                    # heading.
+                    pg_files = page_folders.get(ch_name, [])
                     if pg_name in pg_files:
                         pg_idx = pg_files.index(pg_name)
                         target = f"{ch_idx}/{pg_idx}"
@@ -426,7 +432,13 @@ class PreviewManager:
                 pg_name = parts[1]
                 if ch_name in chapter_folders:
                     ch_idx = chapter_folders.index(ch_name)
-                    pg_files = page_folders.get(str(ch_idx), [])
+                    # Keyed by folder NAME, like the map above and the lookup
+                    # in parser.typ.  `str(ch_idx)` only agreed with the folder
+                    # name while chapters ran 0,1,2,...; with content/8 and
+                    # content/9 it misses, target stays None, and the page is
+                    # compiled raw -- no template, so no theme and no chapter
+                    # heading.
+                    pg_files = page_folders.get(ch_name, [])
                     if pg_name in pg_files:
                         pg_idx = pg_files.index(pg_name)
                         target = f"{ch_idx}/{pg_idx}"

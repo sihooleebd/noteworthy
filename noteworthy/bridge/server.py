@@ -100,6 +100,10 @@ class EmacsSession:
         self._update_sub = None
         self._pending_updates: list = []
         self._applying_remote = False
+        # The file the Yjs tunnel is attached to.  Distinct from
+        # `current_file', which follows the buffer Emacs is typing in and can
+        # move on while a frame from the previous room is still in flight.
+        self._yjs_path: str | None = None
 
         # Set once the freshly attached doc holds the server's state.  Until
         # then its text is empty, and an edit applied against an empty mirror
@@ -260,6 +264,7 @@ class EmacsSession:
 
         try:
             self._yjs_ws = await websockets.connect(url)
+            self._yjs_path = path
             self._ydoc = Doc()
             # Keep the subscription alive on the session: pycrdt subscriptions
             # are RAII guards, and a dropped one stops observing silently.
@@ -315,6 +320,7 @@ class EmacsSession:
             except Exception:
                 pass
             self._yjs_ws = None
+        self._yjs_path = None
         self._update_sub = None
         self._pending_updates.clear()
         self._ydoc = None
@@ -382,6 +388,14 @@ class EmacsSession:
 
         try:
             old_text = self._get_ytext()
+            # Was the mirror already holding the room's state when this frame
+            # arrived?  A frame that is still *filling* the mirror is not an
+            # edit anybody made, and must not be forwarded as one.
+            was_synced = self._yjs_synced.is_set()
+            # The file this tunnel is attached to.  `current_file' can already
+            # have moved on to another buffer, and tagging a frame with it
+            # delivers one file's text into another file's buffer.
+            frame_file = self._yjs_path or self.current_file
 
             if not data:
                 return
@@ -412,23 +426,29 @@ class EmacsSession:
             new_text = self._get_ytext()
 
             if old_text != new_text:
-                # Compute minimal delta
-                delta = _compute_delta(old_text, new_text)
-                if delta:
+                if not was_synced:
+                    # Still filling the mirror after an attach: "" -> partial ->
+                    # full.  Diffing those steps and shipping them to Emacs sent
+                    # `retain <n>, insert <rest of the document>' for text the
+                    # buffer already had, which duplicated it -- a whole doc when
+                    # the mirror started empty, its tail when a frame landed
+                    # mid-fill.  Reconnecting is exactly when that happens, so
+                    # every reconnect corrupted every open buffer.  State the
+                    # room's text instead of narrating how we came to hold it.
                     await self._send_emacs({
-                        "type": "delta",
-                        "file": self.current_file,
-                        "ops": delta,
-                        "userId": "__server__",
+                        "type": "sync",
+                        "file": frame_file,
+                        "content": new_text,
+                        "version": len(new_text),
                     })
-
-                    # Also send a sync on first load (old_text was empty)
-                    if not old_text:
+                else:
+                    delta = _compute_delta(old_text, new_text)
+                    if delta:
                         await self._send_emacs({
-                            "type": "sync",
-                            "file": self.current_file,
-                            "content": new_text,
-                            "version": len(new_text),
+                            "type": "delta",
+                            "file": frame_file,
+                            "ops": delta,
+                            "userId": "__server__",
                         })
 
         except Exception as e:
