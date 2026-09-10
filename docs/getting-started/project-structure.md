@@ -17,7 +17,9 @@ myproject/
 │   ├── utils.py           # Utility functions
 │   ├── core/              # Build engine
 │   ├── tui/               # Terminal UI
-│   └── gui/               # Web GUI
+│   ├── gui/               # Web GUI (collaborative)
+│   ├── gui_solo/          # Web GUI (solo mode, -nc)
+│   └── bridge/            # Emacs sync bridge
 │
 ├── templates/             # Typst templates
 │   ├── core/              # Core rendering (parser, setup)
@@ -38,6 +40,7 @@ myproject/
 │   ├── hierarchy.json     # Chapter/page titles
 │   ├── preface.typ        # Preface content
 │   ├── snippets.typ       # Custom snippets
+│   ├── schemes/           # Color scheme definitions
 │   └── modules/           # Per-module configs
 │
 ├── build/                 # Temporary build artifacts

@@ -14,7 +14,7 @@ Noteworthy Studio supports real-time collaboration, allowing multiple users to e
 | **Selection Highlighting** | **Google Docs-style** text selection |
 | **Preview Navigation**     | Click preview to jump to source      |
 | **Global Chat**            | Built-in messaging                   |
-| **Conflict-Free**          | Optional Yjs CRDT integration        |
+| **Conflict-Free**          | Yjs CRDT — concurrent edits merge    |
 
 
 ---
@@ -26,7 +26,7 @@ For users who prefer working alone or offline, Noteworthy offers a dedicated **S
 ### Why use Solo Mode?
 - **Privacy**: No external connections, no chat, no online user visibility.
 - **Simplicity**: Direct file editing without synchronization overhead.
-- **Fast Live Preview**: Powered by [Tinymist](https://github.com/Myriad-Dreamin/tinymist) for instant rendering.
+- **Fast Live Preview**: [Tinymist](https://github.com/Myriad-Dreamin/tinymist) is the sole preview path, with no SVG watcher running alongside it.
 
 ### Usage
 Launch with the `-nc` flag:
@@ -39,10 +39,15 @@ In Solo Mode, the "Solo" badge appears in the header, and collaboration features
 
 ### Fast Preview
 
-Solo Mode uses Tinymist for live preview instead of standard `typst watch`:
+Solo mode disables the per-page SVG preview watcher and renders exclusively
+through Tinymist:
 - **Instant updates**: Sub-100ms render times
-- **Efficient**: Incremental SVG updates via WebSocket
-- **Embedded**: Preview runs directly in the browser
+- **Embedded**: Preview runs directly in the browser via an iframe
+
+> [!NOTE]
+> Tinymist is not solo-only. Collaborative mode exposes the same
+> `/api/tinymist/*` endpoints for full-document preview; the difference is that
+> it also runs the incremental SVG preview, which solo mode turns off.
 
 ---
 
@@ -53,11 +58,16 @@ Solo Mode uses Tinymist for live preview instead of standard `typst watch`:
 For users on the same network:
 
 ```bash
-# Start the server (accessible on LAN)
-noteworthy -g
+# Start the server, listening on every interface
+noteworthy -g --bind 0.0.0.0
 ```
 
 Share `http://<your-ip>:8000` with collaborators.
+
+> [!IMPORTANT]
+> `--bind` is required here. Studio defaults to `127.0.0.1`, which accepts
+> connections only from the machine it runs on, so plain `noteworthy -g` is
+> unreachable from anywhere else on the network.
 
 ### Remote via ngrok
 
@@ -65,7 +75,8 @@ For internet collaboration:
 
 1. **Install ngrok**: https://ngrok.com/download
 
-2. **Start Noteworthy**:
+2. **Start Noteworthy** (the default loopback bind is fine — ngrok connects
+   from the same machine):
    ```bash
    noteworthy -g
    ```
@@ -127,16 +138,21 @@ An unread indicator appears when new messages arrive.
 
 ### How It Works
 
-Noteworthy uses a hybrid synchronization system:
+Document content is synchronized entirely by Yjs CRDT. `pycrdt` and
+`pycrdt-websocket` are required dependencies, so there is no fallback path and
+no last-write-wins mode:
 
-1. **CRDT Backend (Optional)**: If available, uses `Yjs` for conflict-free real-time editing
-2. **Standard Sync**: Falls back to last-write-wins if CRDT modules (`pycrdt`) are missing
+1. **Content** travels over the binary `/yjs` WebSocket, one room per file. Each
+   client holds a `Y.Doc` bound to its Monaco model.
+2. **Everything else** — presence, chat, cursors, preview and build events —
+   travels over the separate JSON `/ws/doc` socket, managed by `DocumentHub`.
 
 ### Conflict Prevention
 
-- **Single-file scope**: Only one user can save a file at a time
-- **Server authority**: Server version is always canonical
-- **Optimistic UI**: Edits appear instantly, confirm on save
+- **Conflict-free merges**: Concurrent edits to the same file converge by
+  construction; there is no save lock and no canonical server version to lose to
+- **Per-file rooms**: Each open file syncs independently
+- **Instant local echo**: Edits apply locally and propagate as CRDT updates
 - **Selection Awareness**: Use selection highlighting to avoid stepping on teammates' toes
 
 ---

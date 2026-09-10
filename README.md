@@ -48,8 +48,8 @@ python3 noteworthy.py
 | :-------------- | :---------------------------------------------------------------- |
 | **15+ Themes**  | Pre-built color schemes, easy customization                       |
 | **Modules**     | Math, plotting, geometry, data structures                         |
-| **Web Studio**  | Google Docs-style editing, Monaco editor, real-time collaboration |
-| **Solo Mode**   | Single-user mode with tinymist-powered fast live preview          |
+| **Web Studio**  | Google Docs-style editing, Monaco editor, Yjs CRDT collaboration  |
+| **Solo Mode**   | Single-user mode, previewing exclusively through tinymist         |
 | **Fast Builds** | Parallel compilation, incremental updates                         |
 | **PDF Output**  | Merged PDFs with bookmarks and metadata                           |
 
@@ -60,7 +60,7 @@ python3 noteworthy.py
 | Command                               | Description                                                          |
 | :------------------------------------ | :------------------------------------------------------------------- |
 | `python3 noteworthy.py`               | Launch Terminal UI                                                   |
-| `python3 noteworthy.py -g (-p) (-nc)` | Launch Web GUI<br>`-p xxxx` for specific port<br>`-nc` for solo mode |
+| `python3 noteworthy.py -g (-p) (-nc)` | Launch Web GUI<br>`-p xxxx` for specific port<br>`-nc` for solo mode<br>`--bind 0.0.0.0` to accept non-local connections |
 | `python3 noteworthy.py -u (-n) (-f)`  | Update from GitHub<br>`-n` for nightly<br>`-f` for force             |
 | `python3 noteworthy_cli.py`           | Non-interactive CLI build                                            |
 

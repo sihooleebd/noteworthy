@@ -14,6 +14,19 @@ Before installing Noteworthy, ensure you have:
 | **Typst**  | 0.12+   | Document compiler      |
 | **uv**     | Latest  | Python package manager |
 
+### Recommended
+
+| Dependency   | Purpose                                                     |
+| ------------ | ----------------------------------------------------------- |
+| **tinymist** | Live preview in Studio. Solo mode has no other preview path |
+
+```bash
+cargo install --locked tinymist-cli
+```
+
+Noteworthy looks for the binary in `~/.cargo/bin/tinymist`, `/usr/local/bin/tinymist`,
+then on `PATH`.
+
 ### PDF Tools (for merging & metadata)
 
 | Tool        | macOS                     | Linux                       | Windows                                                                |
@@ -21,8 +34,14 @@ Before installing Noteworthy, ensure you have:
 | **Poppler** | `brew install poppler`    | `apt install poppler-utils` | [Download](https://github.com/oschwartz10612/poppler-windows/releases) |
 | **pdftk**   | `brew install pdftk-java` | `apt install pdftk`         | [Download](https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/)       |
 
+| **pypdf**   | `pip install pypdf`       | `pip install pypdf`         | `pip install pypdf`                                                    |
+
 > [!NOTE]
-> `pdftk` is required for PDF bookmarks and metadata. Ghostscript is used as a fallback for merging only.
+> None of these are strictly required, but at least one merge path must exist.
+> Noteworthy merges with **pdfunite** (Poppler), falling back to **Ghostscript**
+> and then **pypdf**. For bookmarks and metadata it tries **pypdf** first, then
+> **pdftk**, then **Ghostscript** — so a working `pypdf` alone is enough to
+> build a bookmarked PDF with no external tools installed.
 
 ---
 

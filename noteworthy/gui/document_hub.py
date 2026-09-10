@@ -42,8 +42,8 @@ class User:
 
 class DocumentHub:
     """
-    Hub for Chat / Preview / File Presence.
-    Does NOT manage document content or cursors (those are Yjs concerns).
+    Hub for Chat / Preview / File Presence, and the relay for cursor packets.
+    Does NOT manage document content (that is the Yjs layer's concern).
     """
 
     def __init__(self):

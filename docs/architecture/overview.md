@@ -83,7 +83,8 @@ The `noteworthy/` package handles:
 | `core/deps.py`          | Dependency checking          |
 | `core/pm.py`            | Package manager for modules  |
 | `gui/server.py`         | FastAPI backend              |
-| `gui/document_hub.py`   | Real-time OT Sync            |
+| `gui/document_hub.py`   | Presence, chat, preview relay |
+| `gui/yjs_provider.py`   | Yjs CRDT content transport    |
 
 ---
 

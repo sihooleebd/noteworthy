@@ -6,7 +6,7 @@ Noteworthy's functionality is extended through **modules** — reusable Typst li
 
 | Type       | Location                 | Description                                                                           |
 | ---------- | ------------------------ | ------------------------------------------------------------------------------------- |
-| **Core**   | `templates/module/core/` | Required system modules (block, cover)                                                |
+| **Core**   | `templates/module/core/` | Required system modules (block, cover, layout)                                                |
 | **Remote** | `templates/module/`      | Installed from [noteworthy-modules](https://github.com/sihooleebd/noteworthy-modules) |
 | **Local**  | `templates/module/`      | User-created custom modules                                                           |
 
@@ -20,6 +20,7 @@ Noteworthy's functionality is extended through **modules** — reusable Typst li
 | --------- | ---------------------------------------------------------------- |
 | **block** | Semantic content blocks: definitions, theorems, proofs, examples |
 | **cover** | Document covers and title pages                                  |
+| **layout** | Page layouts, outline and document configuration                |
 
 ### Extension Modules
 
@@ -33,7 +34,6 @@ Noteworthy's functionality is extended through **modules** — reusable Typst li
 | **combi**    | Combinatorics: permutations, combinations             | —            |
 | **timeline** | Vertical and horizontal timelines                     | —            |
 | **data**     | Data visualization: tables, series, curves            | —            |
-| **layout**   | Page layouts and document configuration               | —            |
 
 ---
 

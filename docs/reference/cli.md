@@ -35,6 +35,9 @@ noteworthy [OPTIONS]
 | `-g`      | `--gui`          | Launch Noteworthy Studio            |
 | `-p PORT` | `--port PORT`    | `[-g]` Specify port (default: 8000) |
 | `-nc`     | `--no-coop`      | `[-g]` Solo mode (no collaboration) |
+|           | `--bind ADDR`    | `[-g]` Listening address (default: `127.0.0.1`) |
+|           | `--headless`     | `[-g]` Do not open a browser on startup |
+|           | `--packet-log`   | `[-g]` Log low-level Yjs packets (debugging) |
 | `-u`      | `--update`       | Update from GitHub                  |
 | `-n`      | `--nightly`      | `[-u]` Use nightly branch           |
 | `-f`      | `--force`        | `[-u]` Force clean install          |
@@ -54,6 +57,9 @@ noteworthy -g -nc
 # Studio on custom port
 noteworthy -g -p 3000
 
+# Studio reachable from other machines (LAN, Tailscale, tunnels)
+noteworthy -g --bind 0.0.0.0
+
 # Update to latest
 noteworthy -u
 
@@ -63,6 +69,11 @@ noteworthy -u -n -f
 # Print Typst input flags
 noteworthy --print-inputs
 ```
+
+> [!IMPORTANT]
+> Studio binds to `127.0.0.1` by default, which accepts connections only from
+> the same machine. Serving collaborators on a LAN or through a tunnel requires
+> `--bind 0.0.0.0` (see the [Collaboration Guide](../guides/collaboration.md)).
 
 ---
 
@@ -83,9 +94,12 @@ python noteworthy_cli.py [OPTIONS]
 | `-c` | `--chapters`       | Chapter indices to build (space-separated) |
 |      | `--no-frontmatter` | Skip cover, preface, TOC                   |
 |      | `--leave-pdfs`     | Keep individual chapter PDFs               |
-| `-d` | `--debug`          | Enable verbose logging                     |
+|      | `--debug`          | Enable verbose logging                     |
 | `-t` | `--threads`        | Parallel compilation threads               |
 |      | `--flags`          | Additional Typst CLI flags                 |
+| `-u` | `--update`         | Update from GitHub                         |
+| `-n` | `--nightly`        | `[-u]` Use nightly branch                  |
+| `-f` | `--force`          | `[-u]` Force clean install                 |
 
 ### Examples
 

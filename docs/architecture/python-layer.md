@@ -31,13 +31,21 @@ noteworthy/
 │   ├── editors/
 │   └── wizards/
 │
-└── gui/              # Web GUI
-    ├── app.py
-    ├── server.py
-    ├── document_hub.py
-    ├── yjs_provider.py
-    ├── preview.py
-    └── static/
+├── gui/              # Web GUI (collaborative)
+│   ├── app.py
+│   ├── server.py
+│   ├── document_hub.py   # Presence, chat, preview relay
+│   ├── yjs_provider.py   # Binary CRDT transport (/yjs)
+│   ├── preview.py
+│   └── static/
+│
+├── gui_solo/         # Web GUI (solo mode, -nc)
+│   ├── app.py
+│   ├── server.py
+│   └── static/
+│
+└── bridge/           # Emacs <-> Yjs translation bridge
+    └── server.py
 ```
 
 ---

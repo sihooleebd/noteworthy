@@ -284,10 +284,15 @@ Per-module configuration files created when you customize module settings.
 
 ```
 config/modules/
-├── canvas.json
-├── graph.json
-└── blocks.json
+├── canvas.json          # extension module
+├── graph.json           # extension module
+└── core/
+    └── block.json       # core modules nest under core/
 ```
+
+The filename mirrors the module's path under `templates/module/`, so an
+extension module `canvas` is configured at `config/modules/canvas.json` while
+the core module `core/block` is configured at `config/modules/core/block.json`.
 
 ### Schema
 
@@ -310,7 +315,7 @@ Defined by each module's `blueprint.json`:
 }
 ```
 
-### Example: blocks.json
+### Example: core/block.json
 
 ```json
 {
@@ -336,7 +341,8 @@ Noteworthy Studio validates settings against module blueprints. Invalid values a
 | hierarchy.json | `config/hierarchy.json`      |
 | snippets.typ   | `config/snippets.typ`        |
 | preface.typ    | `config/preface.typ`         |
-| Module configs | `config/modules/<name>.json` |
+| Module configs | `config/modules/<module-path>.json` |
+| Color schemes  | `config/schemes/data/<name>.json`   |
 
 ---
 

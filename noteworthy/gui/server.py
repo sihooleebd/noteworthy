@@ -199,8 +199,10 @@ async def doc_endpoint(websocket: WebSocket):
     """
     Doc-socket: Chat, Preview, File Presence, Identity.
 
-    Strict packet separation — does NOT handle content sync or cursors.
-    Those are exclusively handled by the Yjs WebSocket (/yjs).
+    Strict packet separation — does NOT handle content sync, which is
+    exclusively handled by the Yjs WebSocket (/yjs). Cursors DO ride this
+    socket: they were moved off Yjs awareness so that identity fields stay
+    server-owned.
     """
     user_name = websocket.query_params.get("name", "Anonymous")
     user_id = websocket.query_params.get("id", None)
