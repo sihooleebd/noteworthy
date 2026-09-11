@@ -49,7 +49,12 @@ class ConfigEditor(ListEditor):
             "render-implicit-count": ("Implicit Samples", "int"),
             "pad-chapter-id": ("Pad Chapter ID", "bool"),
             "pad-page-id": ("Pad Page ID", "bool"),
-            "heading-numbering": ("Heading Numbering", "choice", ["1.1", "1.", "I.1", "A.1"])
+            "heading-numbering": ("Heading Numbering", "choice", ["1.1", "1.", "I.1", "A.1"]),
+            "number-blocks": ("Number Blocks", "bool"),
+            "block-numbering": ("Block Numbering Restarts", "choice",
+                                ["page", "chapter", "document"]),
+            "ref-format": ("Reference Reads", "choice",
+                           ["number", "title-number", "title-number-page"]),
         }
 
         self.fields = []

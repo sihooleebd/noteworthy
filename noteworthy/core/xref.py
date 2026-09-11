@@ -64,11 +64,29 @@ def _query_marks(typst_path: str, extra_flags: list[str]) -> list[dict]:
         return []
 
 
+def _qualified(number, scope: str, ch: str, pg: str) -> str:
+    """The number as the page prints it.
+
+    A bare count only identifies a block if it is unique in the book, which it
+    is not under `page' or `chapter' numbering -- every page has a Theorem 1.
+    Qualifying it is what makes "see Theorem 8.1.3" mean one thing, and it has
+    to agree with what the block itself shows, so this mirrors `_qualified' in
+    xref.typ.
+    """
+    if number is None:
+        return ""
+    if scope == "document":
+        return str(number)
+    if scope == "chapter":
+        return f"{ch}.{number}"
+    return f"{ch}.{pg}.{number}"
+
+
 def _caption(kind: str, title: str, number, ref_format: str,
-             chapter_name: str, ch: str, pg: str) -> str:
+             chapter_name: str, ch: str, pg: str, scope: str = "page") -> str:
     """What a reference to this block should read."""
     name = kind[:1].upper() + kind[1:]
-    num = "" if number is None else str(number)
+    num = _qualified(number, scope, ch, pg)
     if ref_format == "title-number" and title:
         return f'{name} "{title}" {num}'.strip()
     if ref_format == "title-number-page" and title:
@@ -116,7 +134,7 @@ def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
             number = counts[kind] if number_blocks else None
             label_map[label] = _caption(kind, str(m.get("title", "") or ""),
                                         number, ref_format, chapter_name,
-                                        ch or "", pg or "")
+                                        ch or "", pg or "", scope)
 
     if scope == "page":
         # Every page starts from nothing, so there is nothing to inject.

@@ -78,6 +78,21 @@
 
 #let _block-counter(kind) = counter("nw-block-" + kind)
 
+// Which page is being rendered.  Blocks cannot work it out themselves -- a
+// page is included, it does not know where from -- and the number has to say,
+// or every page's "Theorem 1" refers to a different theorem.
+#let nw-location = state("nw-location", (ch: "", pg: ""))
+#let nw-set-location(ch, pg) = nw-location.update((ch: ch, pg: pg))
+
+// A number is only useful to a reader if it identifies one block in the whole
+// book.  Under `page' numbering that takes chapter and page as well, under
+// `chapter' the chapter, and under `document' the count already does.
+#let _qualified(n, loc) = {
+  if block-numbering == "document" { str(n) }
+  else if block-numbering == "chapter" { loc.ch + "." + str(n) }
+  else { loc.ch + "." + loc.pg + "." + str(n) }
+}
+
 // Called once per compiled target, before any content.
 #let nw-init-block-counters() = {
   for (kind, start) in block-offsets.pairs() {
@@ -89,7 +104,7 @@
 #let nw-block-number(kind) = {
   if not number-blocks { return none }
   _block-counter(kind).step()
-  context _block-counter(kind).display()
+  context _qualified(_block-counter(kind).get().at(0), nw-location.get())
 }
 
 // What a reference to this block should read: "Theorem 8.3".

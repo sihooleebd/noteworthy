@@ -1,6 +1,6 @@
 #import "../templater.typ": *
 #import "scanner.typ": load-content-info
-#import "xref.typ": xref-rule, nw-init-block-counters, nw-anchor
+#import "xref.typ": xref-rule, nw-init-block-counters, nw-anchor, nw-set-location
 
 // `@label' resolves normally when the target is in this compilation and
 // falls back to the injected map when it is not -- which, compiling one page
@@ -88,6 +88,7 @@
       // returns everything in order but says nothing about source files, and
       // attributing a block to its page is the whole job of the first pass.
       [#std.metadata((t: "page", ch: ch-folder, pg: pg-file)) <nw-mark>]
+      nw-set-location(ch-folder, pg-file)
       // A destination has to be somewhere, so the anchor is real content at
       // the top of the page rather than metadata, which has no position.
       [#nw-anchor("page-" + ch-folder + "-" + pg-file, box(width: 1pt, height: 1pt))]
