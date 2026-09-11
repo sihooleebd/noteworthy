@@ -27,6 +27,14 @@ def set_packet_logging(enabled: bool):
     _packet_logging_enabled = bool(enabled)
 
 
+CRDT_STATE_DIR = BASE_DIR / ".noteworthy-crdt"
+
+
+def _state_path(room_name: str) -> Path:
+    """Where this room's CRDT state blob lives, mirroring the content path."""
+    return CRDT_STATE_DIR / (room_name + ".bin")
+
+
 def _resolve_room_path(room_name: str) -> Path | None:
     """Resolve a websocket room name to a path inside BASE_DIR.
 
@@ -74,6 +82,13 @@ class NoteworthyRoom(YRoom):
         self._save_handle: asyncio.TimerHandle | None = None
         self._save_delay = 0.25  # debounce window (seconds)
         
+    def _file_is_newer(self, state: Path) -> bool:
+        """True when the text file was written after the CRDT state was."""
+        try:
+            return self._file_path.stat().st_mtime > state.stat().st_mtime + 1
+        except OSError:
+            return False
+
     async def initialize(self):
         """Load initial content from disk into the CRDT document.
 
@@ -87,17 +102,46 @@ class NoteworthyRoom(YRoom):
         """
         self._text = self.ydoc.get("content", type=Text)
 
+        # Restore the document itself, not merely its text.
+        #
+        # Rebuilding a Doc by reading the file produces something that *looks*
+        # identical to what connected clients hold but has a different identity
+        # -- different client id, different insertion history.  Yjs merges by
+        # identity, so on reconnect each side kept both copies and the file
+        # doubled.  Once per restart, which is exactly how content/8/1.typ went
+        # 7249 -> 14498 -> 21747 -> 28996 bytes.
+        state = _state_path(self.room_name)
+        restored = False
+        if not self._initialized and state.exists():
+            try:
+                self.ydoc.apply_update(state.read_bytes())
+                restored = True
+                log.info(f"[YjsRoom] Restored {self.room_name} from CRDT state "
+                         f"({len(self._text)} chars)")
+            except Exception as e:
+                log.error(f"[YjsRoom] Could not restore {self.room_name}: {e}")
+
         if self._file_path.exists():
             try:
                 content = self._file_path.read_text(encoding='utf-8')
-                # Only set if empty -- first load, or a room that opened
-                # before the file had anything in it.
                 if content and len(self._text) == 0:
+                    # First load, or a room that opened before the file had
+                    # anything in it.
                     self._text += content
                     log.info(f"[YjsRoom] Loaded {self.room_name}: {len(content)} chars")
+                elif restored and content != str(self._text) and self._file_is_newer(state):
+                    # The file was edited while we were not running -- a repair,
+                    # a git checkout.  Let it win, but by rewriting this
+                    # document's text rather than starting a new one, so the
+                    # identity survives and clients converge instead of
+                    # duplicating.
+                    log.warning(f"[YjsRoom] {self.room_name} changed on disk while "
+                                f"stopped; taking the file ({len(content)} chars)")
+                    del self._text[:]
+                    self._text += content
             except Exception as e:
                 log.error(f"[YjsRoom] Error loading {self.room_name}: {e}")
-        elif not self._initialized:
+        elif not self._initialized and not restored:
             log.info(f"[YjsRoom] File not found, starting empty: {self.room_name}")
 
         if self._initialized:
@@ -127,6 +171,19 @@ class NoteworthyRoom(YRoom):
             log.debug(f"[YjsRoom] Saved {self.room_name} ({len(content)} chars)")
         except Exception as e:
             log.error(f"[YjsRoom] Error saving {self.room_name}: {e}")
+
+        # The text file is an export; this is the document.  Without it a
+        # restart has to rebuild the Doc from the text, which gives a new
+        # identity and makes every still-connected client duplicate its copy on
+        # reconnect.  Written atomically for the same reason as the text.
+        try:
+            state = _state_path(self.room_name)
+            state.parent.mkdir(parents=True, exist_ok=True)
+            tmp_state = state.with_name(f".{state.name}.nw-tmp")
+            tmp_state.write_bytes(self.ydoc.get_update())
+            os.replace(tmp_state, state)
+        except Exception as e:
+            log.error(f"[YjsRoom] Error saving CRDT state for {self.room_name}: {e}")
 
     def _on_change(self, event):
         """Schedule a debounced save after document changes."""
@@ -262,6 +319,13 @@ class YjsProvider:
                 self.server.rooms.pop(file_path, None)
             log.info(f"[YjsProvider] Closing room {file_path}")
             await room.close()
+            # The file is going; its CRDT state would otherwise be restored
+            # onto a path that no longer has one, and a file later recreated
+            # there would come back with the old document's contents.
+            try:
+                _state_path(file_path).unlink(missing_ok=True)
+            except OSError as e:
+                log.error(f"[YjsProvider] Could not drop CRDT state for {file_path}: {e}")
 
     async def rename_room(self, old_path: str, new_path: str):
         """Rebind the room at `old_path` to `new_path` after a filesystem rename.
