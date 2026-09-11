@@ -75,26 +75,37 @@ class NoteworthyRoom(YRoom):
         self._save_delay = 0.25  # debounce window (seconds)
         
     async def initialize(self):
-        """Load initial content from disk into the CRDT document."""
-        if self._initialized:
-            return
-        
+        """Load initial content from disk into the CRDT document.
+
+        Deliberately not short-circuited on `_initialized`.  A room opened
+        before its file existed -- the structure editor creates the entry, the
+        file arrives a moment later -- started empty and stayed empty, and
+        being the authority it would then write that emptiness over the file
+        the first time anyone touched it.  Filling an *empty* document is safe
+        whenever it happens; one that already holds text is never touched, so
+        this cannot clobber live content.
+        """
         self._text = self.ydoc.get("content", type=Text)
 
         if self._file_path.exists():
             try:
                 content = self._file_path.read_text(encoding='utf-8')
-                # Only set if empty (first load)
-                if len(self._text) == 0:
+                # Only set if empty -- first load, or a room that opened
+                # before the file had anything in it.
+                if content and len(self._text) == 0:
                     self._text += content
-                log.info(f"[YjsRoom] Loaded {self.room_name}: {len(content)} chars")
+                    log.info(f"[YjsRoom] Loaded {self.room_name}: {len(content)} chars")
             except Exception as e:
                 log.error(f"[YjsRoom] Error loading {self.room_name}: {e}")
-        else:
+        elif not self._initialized:
             log.info(f"[YjsRoom] File not found, starting empty: {self.room_name}")
 
+        if self._initialized:
+            return
+
         # Set up change callback for persistence (subscription kept on self —
-        # see __init__ note; dropping it would unobserve).
+        # see __init__ note; dropping it would unobserve).  Once only: a second
+        # observer would save twice for every edit.
         self._save_subscription = self._text.observe(self._on_change)
 
         self._initialized = True
