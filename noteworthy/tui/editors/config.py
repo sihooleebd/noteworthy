@@ -51,7 +51,7 @@ class ConfigEditor(ListEditor):
             "pad-page-id": ("Pad Page ID", "bool"),
             "heading-numbering": ("Heading Numbering", "choice", ["1.1", "1.", "I.1", "A.1"]),
             "number-blocks": ("Number Blocks", "bool"),
-            "block-numbering": ("Block Numbering Restarts", "choice",
+            "block-numbering": ("Number Blocks As", "choice",
                                 ["page", "chapter", "document"]),
             "ref-format": ("Reference Reads", "choice",
                            ["number", "title-number", "number-only"]),

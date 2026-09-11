@@ -85,7 +85,7 @@ class BuildManager:
             scope=config.get('block-numbering', 'page'),
             ref_format=config.get('ref-format', 'number'),
             chapter_name=config.get('chapter-name', 'Chapter'),
-            number_blocks=config.get('number-blocks', True),
+            number_blocks=config.get('number-blocks', False),
         )
         if label_map:
             folder_flags.extend(['--input', f'label-map={json.dumps(label_map)}'])

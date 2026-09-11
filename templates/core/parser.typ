@@ -6,6 +6,10 @@
 // falls back to the injected map when it is not -- which, compiling one page
 // at a time, is every reference to another page.
 #show ref: xref-rule
+
+// Counter starts for this page, when the numbering scope runs past it.  A
+// page compiled on its own begins at nothing otherwise, so `chapter' and
+// `document' numbering would silently restart on every page.
 #nw-init-block-counters()
 
 #let target = sys.inputs.at("target", default: none)

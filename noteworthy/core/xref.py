@@ -64,15 +64,19 @@ def _query_marks(typst_path: str, extra_flags: list[str]) -> list[dict]:
         return []
 
 
-def _scoped_number(number, scope: str, ch: str, pg: str) -> str:
+def _scoped_number(number, scope: str, ch: str, pg: str, scoped: bool) -> str:
     """The number as the block itself prints it.
 
     Mirrors `_scoped-number' in xref.typ, and must: a page showing "Theorem 1"
     while a reference to it says "Theorem 8.1.1" is worse than either being
-    wrong on its own.
+    wrong on its own.  A block that numbers itself locally -- a solution,
+    counted within the theorem it belongs to -- gets no scope prefix here
+    either, for the same reason.
     """
     if number is None:
         return ""
+    if not scoped:
+        return str(number)
     if scope == "document":
         return f"{ch}.{pg}.{number}"
     if scope == "chapter":
@@ -82,7 +86,7 @@ def _scoped_number(number, scope: str, ch: str, pg: str) -> str:
 
 def _caption(kind: str, title: str, number, ref_format: str,
              chapter_name: str, ch: str, pg: str, cid: str, pid: str,
-             scope: str) -> dict:
+             scope: str, scoped: bool = True) -> dict:
     """Both readings of a reference to this block.
 
     `same` is what to show when the reference sits on the same page as its
@@ -92,7 +96,7 @@ def _caption(kind: str, title: str, number, ref_format: str,
     the two strings and the location to compare against.
     """
     name = kind[:1].upper() + kind[1:]
-    num = _scoped_number(number, scope, ch, pg)
+    num = _scoped_number(number, scope, ch, pg, scoped)
 
     head = name
     if num:
@@ -103,7 +107,11 @@ def _caption(kind: str, title: str, number, ref_format: str,
         # No number to identify it by, so the title is doing that job.
         head = f'{name} "{title}"'
 
-    if scope == "document" and num:
+    if not scoped:
+        # A local number says nothing about where to look, so the address is
+        # the whole of the answer -- exactly as under `page' scope.
+        where = f" in {chapter_name} {pid}" if pid else ""
+    elif scope == "document" and num:
         # The number is already the full address.
         where = ""
     elif scope == "chapter":
@@ -134,6 +142,7 @@ def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
     label_map: dict[str, str] = {}
     offsets: dict[str, dict[str, int]] = {}
     counts: dict[str, int] = {}        # kind -> count so far, within the scope
+    local: dict[str, int] = {}         # kind -> count within the current block
     ch = pg = None
     cid = pid = ""
     prev_ch = None
@@ -154,13 +163,32 @@ def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
         if m.get("t") != "block":
             continue
         kind = str(m.get("kind", "block"))
-        counts[kind] = counts.get(kind, 0) + 1
+        style = str(m.get("style", "scoped"))
+        given = str(m.get("num", "") or "")
+        # The counter advances even for a hand-numbered block, exactly as the
+        # template does it, so the next automatic one does not repeat.
+        if style == "scoped":
+            counts[kind] = counts.get(kind, 0) + 1
+            # A solution is numbered within the block it sits in, so opening a
+            # new block is what starts that count over.
+            local = {}
+            count = counts[kind]
+        elif style == "local":
+            local[kind] = local.get(kind, 0) + 1
+            count = local[kind]
+        else:
+            count = None
         label = str(m.get("label", "") or "")
         if label:
-            number = counts[kind] if number_blocks else None
+            # A solution prints its count whether or not block numbering is
+            # on: that number is part of how a solution reads, not part of
+            # the document-wide scheme the setting governs.
+            numbered = count is not None and (number_blocks or style == "local")
+            number = (given or count) if numbered else None
             label_map[label] = _caption(kind, str(m.get("title", "") or ""),
                                         number, ref_format, chapter_name,
-                                        ch or "", pg or "", cid, pid, scope)
+                                        ch or "", pg or "", cid, pid, scope,
+                                        style == "scoped")
 
     if scope == "page":
         # Every page starts from nothing, so there is nothing to inject.

@@ -108,11 +108,11 @@
                     <label class="toggle-option"><input type="checkbox" id="const-show-solution" ${data['show-solution'] ? 'checked' : ''} onchange="app.updateConstants()"><span>Show Solutions</span></label>
                     <h4 style="margin-top:32px;margin-bottom:16px;font-family:var(--font-display);font-weight:500;">References</h4>
                     <label class="toggle-option"><input type="checkbox" id="const-number-blocks" ${data['number-blocks'] ? 'checked' : ''} onchange="app.updateConstants()"><span>Number blocks (theorems, notes, proofs&hellip;)</span></label>
-                    <div class="form-group"><label>Restart numbering every</label>
+                    <div class="form-group"><label>Number blocks as</label>
                         <select id="const-block-numbering" onchange="app.updateConstants()">
-                            <option value="page" ${(data['block-numbering'] || 'page') === 'page' ? 'selected' : ''}>Page (each .typ file)</option>
-                            <option value="chapter" ${data['block-numbering'] === 'chapter' ? 'selected' : ''}>Chapter</option>
-                            <option value="document" ${data['block-numbering'] === 'document' ? 'selected' : ''}>Never (whole document)</option>
+                            <option value="page" ${(data['block-numbering'] || 'page') === 'page' ? 'selected' : ''}>1, 2, 3 (within the page)</option>
+                            <option value="chapter" ${data['block-numbering'] === 'chapter' ? 'selected' : ''}>1.1, 1.2 (page and count)</option>
+                            <option value="document" ${data['block-numbering'] === 'document' ? 'selected' : ''}>8.1.1 (chapter, page and count)</option>
                         </select></div>
                     <div class="form-group"><label>A reference reads</label>
                         <select id="const-ref-format" onchange="app.updateConstants()">

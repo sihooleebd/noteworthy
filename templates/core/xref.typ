@@ -117,10 +117,15 @@
 }
 
 // The number this block should print, or none when numbering is off.
-#let nw-block-number(kind) = {
+// GIVEN replaces the counted part; the counter still advances, so a block
+// numbered by hand occupies its slot rather than making the next one repeat.
+#let nw-block-number(kind, given: auto) = {
   if not number-blocks { return none }
   _block-counter(kind).step()
-  context _scoped-number(_block-counter(kind).get().at(0), nw-location.get())
+  context {
+    let n = if given == auto { _block-counter(kind).get().at(0) } else { given }
+    _scoped-number(n, nw-location.get())
+  }
 }
 
 // What a reference to this block should read: "Theorem 8.3".
