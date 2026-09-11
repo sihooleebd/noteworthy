@@ -113,7 +113,26 @@ def merge_pdfs(pdf_files, output):
     if not files:
         return False
     
-    # Try pdfunite first
+    # pypdf first.  `pdfunite' orphans the destination of every internal link
+    # it copies -- a same-page `@label' or `@equation' renders correctly and
+    # then goes nowhere when clicked -- and ghostscript rewrites the content
+    # streams wholesale.  pypdf carries the annotations across intact, which
+    # is the whole point of merging a book rather than reading it in pieces.
+    try:
+        from pypdf import PdfReader, PdfWriter
+        logging.info('Using pypdf')
+        writer = PdfWriter()
+        for f in files:
+            writer.append(f)
+        with open(str(output), 'wb') as out_file:
+            writer.write(out_file)
+        return 'pypdf'
+    except ImportError:
+        logging.info('pypdf not installed, falling back to external tools')
+    except Exception as e:
+        logging.error(f'pypdf merge failed: {e}')
+
+    # Try pdfunite
     if shutil.which('pdfunite'):
         logging.info('Using pdfunite')
         try:
@@ -131,23 +150,7 @@ def merge_pdfs(pdf_files, output):
         except Exception as e:
             logging.error(f'ghostscript failed: {e}')
     
-    # Fallback: pypdf (pure Python - no external tools needed)
-    try:
-        from pypdf import PdfReader, PdfWriter
-        logging.info('Using pypdf')
-        writer = PdfWriter()
-        for f in files:
-            reader = PdfReader(f)
-            for page in reader.pages:
-                writer.add_page(page)
-        with open(str(output), 'wb') as out_file:
-            writer.write(out_file)
-        return 'pypdf'
-    except ImportError:
-        logging.error("No PDF merge tool available. Install pypdf: pip install pypdf")
-    except Exception as e:
-        logging.error(f'pypdf merge failed: {e}')
-    
+    logging.error("No PDF merge tool available. Install pypdf: pip install pypdf")
     return None
 
 # Re-export BuildManager for backwards compatibility
