@@ -152,6 +152,14 @@ class NoteworthyRoom(YRoom):
         # observer would save twice for every edit.
         self._save_subscription = self._text.observe(self._on_change)
 
+        # Persist immediately, rather than waiting for a first edit.  A room
+        # that is opened and only read had no state at all, so a restart
+        # rebuilt it from the text and anyone still holding the old document
+        # duplicated it on reconnect -- which is how a file went 7249 -> 14498
+        # bytes with nobody having typed a character.
+        if not state.exists():
+            self._save_state()
+
         self._initialized = True
     
     async def save(self):
@@ -172,10 +180,16 @@ class NoteworthyRoom(YRoom):
         except Exception as e:
             log.error(f"[YjsRoom] Error saving {self.room_name}: {e}")
 
-        # The text file is an export; this is the document.  Without it a
-        # restart has to rebuild the Doc from the text, which gives a new
-        # identity and makes every still-connected client duplicate its copy on
-        # reconnect.  Written atomically for the same reason as the text.
+        self._save_state()
+
+    def _save_state(self):
+        """Persist the document itself, not merely its text.
+
+        Without it a restart has to rebuild the Doc from the text, which gives
+        a new identity, and every client still holding the old one merges its
+        copy in on reconnect: the file doubles.  Written atomically for the
+        same reason as the text.
+        """
         try:
             state = _state_path(self.room_name)
             state.parent.mkdir(parents=True, exist_ok=True)
