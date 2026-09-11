@@ -80,12 +80,28 @@ class BuildManager:
         # block counters must start, have to come from a pass that sees it all.
         from .build import TYPST_PATH
         from . import xref as _xref
+        scope = config.get('block-numbering', 'page')
+        ref_format = config.get('ref-format', 'number')
+        number_blocks = config.get('number-blocks', False)
+
+        # The template reads these from constants.json, which a build may have
+        # been told to override for this run alone (`--block-numbering ...').
+        # Passing them as inputs is what makes the page and the reference to it
+        # agree: both now come from these same three variables, rather than the
+        # page reading the file while the reference text is computed from the
+        # override.
+        folder_flags.extend([
+            '--input', f'number-blocks={"true" if number_blocks else "false"}',
+            '--input', f'block-numbering={scope}',
+            '--input', f'ref-format={ref_format}',
+        ])
+
         label_map, block_offsets = _xref.collect(
             TYPST_PATH, folder_flags,
-            scope=config.get('block-numbering', 'page'),
-            ref_format=config.get('ref-format', 'number'),
+            scope=scope,
+            ref_format=ref_format,
             chapter_name=config.get('chapter-name', 'Chapter'),
-            number_blocks=config.get('number-blocks', False),
+            number_blocks=number_blocks,
         )
         if label_map:
             folder_flags.extend(['--input', f'label-map={json.dumps(label_map)}'])

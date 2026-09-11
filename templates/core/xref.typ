@@ -46,7 +46,11 @@
 // on the page, because that position is the link destination.
 
 #let nw-anchor(name, body) = if name == none { body } else {
-  link("nw-anchor:" + name, body)
+  // The real Typst label is what the language server sees: tinymist builds
+  // its label index from the compiled document, not from `<...>' spelled out
+  // in the source, so one attached here gives the block completion and
+  // go-to-definition exactly as a hand-written label would.
+  [#link("nw-anchor:" + name, body)#label(name)]
 }
 
 #let nw-ref(name, body) = link("nw-ref:" + name, body)
@@ -68,12 +72,15 @@
 // -----------------------------------------------------
 
 #let xref-rule = it => {
-  let found = query(it.target)
-  if found.len() > 0 {
-    // In this compilation: let Typst number and link it as it always has.
-    it
+  let key = str(it.target)
+  let mine = query(<nw-caption>).filter(m => m.value.label == key)
+  if mine.len() > 0 {
+    // A block in this very compilation, which is to say on this page.  It
+    // reads itself, so this is right without a first pass having run -- which
+    // is what makes a reference resolve in the live preview, where there is
+    // no first pass and never will be.
+    nw-ref(key, mine.first().value.caption)
   } else {
-    let key = str(it.target)
     if key in label-map {
       let entry = label-map.at(key)
       context {
@@ -84,6 +91,10 @@
         let same-page = entry.ch == here-now.ch and entry.pg == here-now.pg
         nw-ref(key, if same-page { entry.same } else { entry.full })
       }
+    } else if query(it.target).len() > 0 {
+      // Not one of ours: an equation, a heading, a figure.  Typst numbers and
+      // links those perfectly well on its own.
+      it
     } else {
       // Neither here nor in the map.  Show it rather than failing the build:
       // a typo should be findable in the PDF, not fatal three pages earlier.
@@ -150,11 +161,21 @@
 
 // The number a solution prints: its position within the block it is in, or
 // within the page when it is in no block at all.
-#let nw-solution-number() = context {
+#let nw-solution-number(name: none, given: auto) = context {
   let stack = nw-block-stack.get()
   let parent = if stack.len() > 0 { str(stack.last()) } else { "page" }
-  counter("nw-sol-" + parent).step()
-  context counter("nw-sol-" + parent).get().at(0)
+  let c = counter("nw-sol-" + parent)
+  // Steps even for a hand-numbered solution, exactly as a block's counter
+  // does: the number takes a slot rather than stepping aside from one, so
+  // the next automatic solution does not repeat what was just written.
+  c.step()
+  context {
+    let n = if given == auto { c.get().at(0) } else { given }
+    if name != none {
+      [#std.metadata((label: name, caption: "Solution " + str(n))) <nw-caption>]
+    }
+    [#n]
+  }
 }
 
 // The number this block should print, or none when numbering is off.
@@ -166,6 +187,32 @@
   context {
     let n = if given == auto { _block-counter(kind).get().at(0) } else { given }
     _scoped-number(n, nw-location.get())
+  }
+}
+
+// What a reference to this block reads when the reference sits in the same
+// compilation -- which, building a page at a time, means the same page.
+//
+// The block publishes this itself rather than the build computing it, so it
+// is available with no first pass: the live preview compiles one page and
+// nothing else, and a reference to a block on that page used to fall through
+// to the injected map, find nothing, and print `?label' in red while the
+// block it named sat three lines above.
+//
+// Reads the counter rather than stepping it -- `nw-block-number' has already
+// stepped it for this block, and the value stands until the next one steps.
+#let nw-caption(name, kind, title, given, numbered: true) = {
+  if name == none { return none }
+  context {
+    let num = if not numbered or not number-blocks { none } else {
+      let n = if given == auto { _block-counter(kind).get().at(0) } else { given }
+      _scoped-number(n, nw-location.get())
+    }
+    let head = upper(kind.at(0)) + kind.slice(1)
+    let caption = if num != none { head + " " + num } else if title != "" {
+      head + " \"" + title + "\""
+    } else { head }
+    [#std.metadata((label: name, caption: caption)) <nw-caption>]
   }
 }
 
