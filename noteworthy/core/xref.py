@@ -155,6 +155,9 @@ def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
             cid, pid = str(m.get("cid", "") or ""), str(m.get("pid", "") or "")
             if scope == "page" or (scope == "chapter" and ch != prev_ch):
                 counts = {}
+            # A page is compiled on its own, so a block-local counter cannot
+            # see the page before it however wide the numbering scope is.
+            local = {}
             prev_ch = ch
             # What this page's counters must start from.  Recorded before the
             # page's own blocks are counted, which is what makes it a start.
