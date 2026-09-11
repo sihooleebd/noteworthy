@@ -46,7 +46,11 @@
   let total-pages = chapter.pages.len()
 
   // Get page files for this chapter (using folder name, not index)
-  let pg-files = page-folders.at(ch-folder, default: range(total-pages).map(j => str(j)))
+  // Page files are numbered from 1, so the fallback has to be too.  Numbering
+  // it from 0 did not merely miss -- `str(j)' for the third page is "2", the
+  // name the second page really has, so a page map that had not caught up with
+  // a new file silently rendered the wrong page's content instead of failing.
+  let pg-files = page-folders.at(ch-folder, default: range(total-pages).map(j => str(j + 1)))
 
   if target == none or target == "chapter-" + str(i) {
     if display-chap-cover or target != none {
@@ -60,7 +64,7 @@
 
   for (j, page) in chapter.pages.enumerate() {
     // Get file name from sorted list
-    let pg-file = if j < pg-files.len() { pg-files.at(j) } else { str(j) }
+    let pg-file = if j < pg-files.len() { pg-files.at(j) } else { str(j + 1) }
     let page-target = str(i) + "/" + str(j)
     let page-display-id = format-page-id(ch-folder + "." + pg-file, total-pages, total-chapters)
 
