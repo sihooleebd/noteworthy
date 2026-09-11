@@ -29,6 +29,9 @@ uv.lock
 
 # Project Specific
 build/
+
+# CRDT document state -- per-checkout, and the text files are the export
+.noteworthy-crdt/
 templates/build/
 templates/systemconfig/
 #templates/module/
