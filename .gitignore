@@ -54,4 +54,4 @@ tests/
 templates/core/imports.typ
 config/modules.json
 
-templates/module/
+# templates/module/ is the noteworthy-modules repo, wired in as a submodule
