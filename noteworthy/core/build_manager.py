@@ -73,6 +73,22 @@ class BuildManager:
         folder_flags = flags.copy()
         folder_flags.extend(['--input', f'chapter-folders={json.dumps(ch_folders)}'])
         folder_flags.extend(['--input', f'page-folders={json.dumps(pg_folders)}'])
+
+        # Ask the whole document what it contains before compiling any of it in
+        # pieces.  Compiled a page at a time, nothing can see a label on another
+        # page -- so the text a reference should show, and where each page's
+        # block counters must start, have to come from a pass that sees it all.
+        from .build import TYPST_PATH
+        from . import xref as _xref
+        label_map, block_offsets = _xref.collect(
+            TYPST_PATH, folder_flags,
+            scope=config.get('block-numbering', 'page'),
+            ref_format=config.get('ref-format', 'number'),
+            chapter_name=config.get('chapter-name', 'Chapter'),
+            number_blocks=config.get('number-blocks', True),
+        )
+        if label_map:
+            folder_flags.extend(['--input', f'label-map={json.dumps(label_map)}'])
         
         # Build task list
         callbacks.get('on_log', lambda m, o: None)(f"Building {len(chapters)} chapters (parallel)", True)
@@ -100,7 +116,7 @@ class BuildManager:
             if not to_run and iteration > 1:
                 break
                 
-            self._execute_parallel(to_run, task_map, projected_offsets, folder_flags, max_workers, callbacks)
+            self._execute_parallel(to_run, task_map, projected_offsets, folder_flags, max_workers, callbacks, block_offsets, ch_folders, pg_folders)
             
             if iteration > 3:
                 callbacks.get('on_log', lambda m, o: None)("Max retries reached. Pagination might be unstable.", False)
@@ -134,7 +150,9 @@ class BuildManager:
             
             # Filter pages based on selection
             pages_to_build = []
-            pg_files = pg_folders.get(str(ci), [])
+            # By folder name, like everywhere else -- `str(ci)' agreed only
+            # while chapters were numbered from zero.
+            pg_files = pg_folders.get(ch_folder, [])
             
             for ai, p in enumerate(ch['pages']):
                 if use_selection and (ci, ai) not in selected_set:
@@ -180,7 +198,30 @@ class BuildManager:
         )
         return to_run
     
-    def _execute_parallel(self, to_run, task_map, projected_offsets, folder_flags, max_workers, callbacks):
+    @staticmethod
+    def _offsets_for(key, block_offsets, ch_folders, pg_folders):
+        """Counter starts for the task named by KEY.
+
+        Tasks are keyed by position (`ci/ai`) while the offsets are keyed by
+        folder name (`8/1`), because that is what the document markers report.
+        Only pages have blocks; covers and front matter have none.
+        """
+        if not ch_folders or "/" not in str(key):
+            return None
+        try:
+            ci, ai = (int(part) for part in str(key).split("/", 1))
+        except ValueError:
+            return None
+        if ci >= len(ch_folders):
+            return None
+        ch_name = ch_folders[ci]
+        # Keyed by folder NAME: `str(ci)' only agrees while chapters run
+        # 0,1,2,... and silently misses once they do not.
+        pages = (pg_folders or {}).get(ch_name, [])
+        pg_name = pages[ai] if ai < len(pages) else str(ai + 1)
+        return block_offsets.get(f"{ch_name}/{pg_name}")
+
+    def _execute_parallel(self, to_run, task_map, projected_offsets, folder_flags, max_workers, callbacks, block_offsets=None, ch_folders=None, pg_folders=None):
         """Execute compilation tasks in parallel."""
         from .build import compile_target, get_pdf_page_count
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -189,12 +230,20 @@ class BuildManager:
                 t_data = task_map[key]
                 offset = projected_offsets[key]
                 
+                # Counter starts are per page, so they cannot ride along in
+                # the flags every target shares.
+                task_flags = folder_flags
+                if block_offsets:
+                    start = self._offsets_for(key, block_offsets, ch_folders, pg_folders)
+                    if start:
+                        task_flags = folder_flags + ['--input', f'block-offsets={json.dumps(start)}']
+
                 f = executor.submit(
                     compile_target, 
                     t_data[2],
                     t_data[3],
                     page_offset=offset,
-                    extra_flags=folder_flags,
+                    extra_flags=task_flags,
                     log_callback=lambda m: None 
                 )
                 future_to_key[f] = key

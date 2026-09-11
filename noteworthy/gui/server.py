@@ -919,6 +919,13 @@ def run_build(data: dict = Body(...)):
             
         # Final Merge
         if merge_pdfs(pdfs, OUTPUT_FILE):
+            # Now, and only now, is "which page did that land on" answerable:
+            # turn the reference markers into real internal links.
+            try:
+                from ..core.xref import rewrite_links
+                rewrite_links(OUTPUT_FILE)
+            except Exception as e:
+                log.error(f"Could not link cross-references: {e}")
             # Metadata
             bm_file = BUILD_DIR / 'bookmarks.txt'
             # We pass filtered_chapters here so bookmarks match what was built

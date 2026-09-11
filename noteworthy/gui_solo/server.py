@@ -744,6 +744,12 @@ def run_build(data: dict = Body(...)):
             )
             
         if merge_pdfs(pdfs, OUTPUT_FILE):
+            # Markers become real links only once the pages are in one file.
+            try:
+                from ..core.xref import rewrite_links
+                rewrite_links(OUTPUT_FILE)
+            except Exception:
+                pass
             bm_file = BUILD_DIR / 'bookmarks.txt'
             bookmarks_list = create_pdf_metadata(filtered_chapters, page_map, bm_file)
             apply_pdf_metadata(OUTPUT_FILE, bm_file, 

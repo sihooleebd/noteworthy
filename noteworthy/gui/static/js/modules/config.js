@@ -106,6 +106,20 @@
                     <label class="toggle-option"><input type="checkbox" id="const-display-outline" ${data['display-outline'] ? 'checked' : ''} onchange="app.updateConstants()"><span>Show Table of Contents</span></label>
                     <label class="toggle-option"><input type="checkbox" id="const-display-chap-cover" ${data['display-chap-cover'] ? 'checked' : ''} onchange="app.updateConstants()"><span>Show Chapter Covers</span></label>
                     <label class="toggle-option"><input type="checkbox" id="const-show-solution" ${data['show-solution'] ? 'checked' : ''} onchange="app.updateConstants()"><span>Show Solutions</span></label>
+                    <h4 style="margin-top:32px;margin-bottom:16px;font-family:var(--font-display);font-weight:500;">References</h4>
+                    <label class="toggle-option"><input type="checkbox" id="const-number-blocks" ${data['number-blocks'] !== false ? 'checked' : ''} onchange="app.updateConstants()"><span>Number blocks (theorems, notes, proofs&hellip;)</span></label>
+                    <div class="form-group"><label>Restart numbering every</label>
+                        <select id="const-block-numbering" onchange="app.updateConstants()">
+                            <option value="page" ${(data['block-numbering'] || 'page') === 'page' ? 'selected' : ''}>Page (each .typ file)</option>
+                            <option value="chapter" ${data['block-numbering'] === 'chapter' ? 'selected' : ''}>Chapter</option>
+                            <option value="document" ${data['block-numbering'] === 'document' ? 'selected' : ''}>Never (whole document)</option>
+                        </select></div>
+                    <div class="form-group"><label>A reference reads</label>
+                        <select id="const-ref-format" onchange="app.updateConstants()">
+                            <option value="number" ${(data['ref-format'] || 'number') === 'number' ? 'selected' : ''}>Theorem 3</option>
+                            <option value="title-number" ${data['ref-format'] === 'title-number' ? 'selected' : ''}>Theorem "Pythagoras" 3</option>
+                            <option value="title-number-page" ${data['ref-format'] === 'title-number-page' ? 'selected' : ''}>Theorem "Pythagoras" on Chapter 8.1</option>
+                        </select></div>
                 </div>
             `;
         },
@@ -120,7 +134,10 @@
                 'display-cover': document.getElementById('const-display-cover').checked,
                 'display-outline': document.getElementById('const-display-outline').checked,
                 'display-chap-cover': document.getElementById('const-display-chap-cover').checked,
-                'show-solution': document.getElementById('const-show-solution').checked
+                'show-solution': document.getElementById('const-show-solution').checked,
+                'number-blocks': document.getElementById('const-number-blocks').checked,
+                'block-numbering': document.getElementById('const-block-numbering').value,
+                'ref-format': document.getElementById('const-ref-format').value
             };
             await fetch('/api/constants', {
                 method: 'POST',

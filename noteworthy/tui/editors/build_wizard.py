@@ -370,6 +370,12 @@ class BuildWizard(BaseEditor):
              
              self.phase = 'Merging PDFs'
              method = merge_pdfs(pdfs, OUTPUT_FILE)
+             # Markers become real links only once the pages are in one file.
+             try:
+                 from ....core.xref import rewrite_links
+                 rewrite_links(OUTPUT_FILE)
+             except Exception:
+                 pass
              progress_counter += 1
              self.set_progress(progress_counter, total, 100 * progress_counter // total)
              
