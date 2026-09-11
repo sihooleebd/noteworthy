@@ -168,7 +168,13 @@
 
                 const name = user.name || 'Anonymous';
                 const color = user.color || '#888';
-                const currentFile = user.file || null;
+                // Prefer the file the peer's last cursor came from.  The
+                // presence record only moves when a client announces a join,
+                // which Emacs does at connect and not on every buffer switch,
+                // so it names whichever buffer was joined last rather than the
+                // one being edited.  Cursor packets carry their own file.
+                const tracked = this._remoteCursors[String(user.id)];
+                const currentFile = (tracked && tracked.file) || user.file || null;
                 const fileLabel = currentFile ? currentFile.split('/').pop() : '?';
 
                 const avatar = document.createElement('div');
@@ -183,10 +189,18 @@
 
         // Follow a peer: if different file, open it; then jump to their last cursor pos.
         _followPeer: function (peerId, peerFile) {
+            const key = peerId == null ? null : String(peerId);
+            const known = key ? this._remoteCursors[key] : null;
+            if (!known) { console.warn('[Follow] No cursor data for peer'); return; }
+            // Same reason as above: go where the cursor says, not where presence
+            // last claimed.  Following used to open whichever file the peer
+            // joined last, which for an Emacs client is rarely the one their
+            // cursor is in -- so the cursor drew in the right place and the jump
+            // landed in a different file.
+            const target = known.file || peerFile;
             const follow = () => {
                 if (!this.state.editor) return;
-                const key = peerId == null ? null : String(peerId);
-                const cursor = key ? this._remoteCursors[key] : null;
+                const cursor = this._remoteCursors[key];
                 if (!cursor) { console.warn('[Follow] No cursor data for peer'); return; }
                 const model = this.state.editor.getModel();
                 if (!model) return;
@@ -198,8 +212,8 @@
                 this.state.editor.focus();
             };
 
-            if (peerFile && peerFile !== this.state.activeFile) {
-                this.openFile(peerFile).then(follow);
+            if (target && target !== this.state.activeFile) {
+                this.openFile(target).then(follow);
             } else {
                 follow();
             }
