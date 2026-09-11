@@ -64,42 +64,52 @@
 // both the numbering and the reference rule read it -- the rule to tell
 // whether a reference is being read on the page its target sits on.
 
-#let nw-location = state("nw-location", (ch: "", pg: ""))
-#let nw-set-location(ch, pg) = nw-location.update((ch: ch, pg: pg))
+// The formatted ids travel too, because a reference read from another page
+// has to name this one -- "in Chapter 08.01" -- and the padding that produces
+// is the template's business.
+#let nw-location = state("nw-location", (ch: "", pg: "", cid: "", pid: ""))
+#let nw-set-location(ch, pg, cid, pid) = nw-location.update(
+  (ch: ch, pg: pg, cid: cid, pid: pid))
 
 // -----------------------------------------------------
 // The reference rule
 // -----------------------------------------------------
 
-#let xref-rule = it => {
+// One context for the whole rule, opened once at the top.  Reading the page
+// from a context nested deeper inside made `nw-location' see the document's
+// last page for several introspection runs before settling, which in a
+// whole-document compile -- the live preview -- is a different page from the
+// one the reference is on, and the document stopped converging.
+#let xref-rule = it => context {
   let key = str(it.target)
+  let here-now = nw-location.get()
+  let reads(entry) = {
+    // On the page its target is on, naming that page again adds nothing:
+    // "Theorem 1" reads better than "Theorem 1 in Chapter 08.01" three lines
+    // below the theorem itself.
+    let same-page = entry.ch == here-now.ch and entry.pg == here-now.pg
+    nw-ref(key, if same-page { entry.same } else { entry.full })
+  }
   let mine = query(<nw-caption>).filter(m => m.value.label == key)
   if mine.len() > 0 {
-    // A block in this very compilation, which is to say on this page.  It
-    // reads itself, so this is right without a first pass having run -- which
-    // is what makes a reference resolve in the live preview, where there is
-    // no first pass and never will be.
-    nw-ref(key, mine.first().value.caption)
+    // A block in this very compilation.  It reads itself, so this is right
+    // with no first pass having run -- which is what makes a reference
+    // resolve in the live preview, where there is no first pass and never
+    // will be.  The preview compiles the whole book at once, so this covers
+    // references to other pages there too, and has to choose between the two
+    // readings the way the injected map does, or the preview and the built
+    // PDF would word the same reference differently.
+    reads(mine.first().value)
+  } else if key in label-map {
+    reads(label-map.at(key))
+  } else if query(it.target).len() > 0 {
+    // Not one of ours: an equation, a heading, a figure.  Typst numbers and
+    // links those perfectly well on its own.
+    it
   } else {
-    if key in label-map {
-      let entry = label-map.at(key)
-      context {
-        let here-now = nw-location.get()
-        // On the page the block is on, saying which page it is on adds
-        // nothing -- "Theorem 1" reads better than "Theorem 1 in Chapter
-        // 08.01" three lines below the theorem itself.
-        let same-page = entry.ch == here-now.ch and entry.pg == here-now.pg
-        nw-ref(key, if same-page { entry.same } else { entry.full })
-      }
-    } else if query(it.target).len() > 0 {
-      // Not one of ours: an equation, a heading, a figure.  Typst numbers and
-      // links those perfectly well on its own.
-      it
-    } else {
-      // Neither here nor in the map.  Show it rather than failing the build:
-      // a typo should be findable in the PDF, not fatal three pages earlier.
-      text(fill: red)[?#key]
-    }
+    // Neither here nor in the map.  Show it rather than failing the build: a
+    // typo should be findable in the PDF, not fatal three pages earlier.
+    text(fill: red)[?#key]
   }
 }
 
@@ -118,6 +128,53 @@
   if block-numbering == "document" { loc.ch + "." + loc.pg + "." + str(n) }
   else if block-numbering == "chapter" { loc.pg + "." + str(n) }
   else { str(n) }
+}
+
+// The address a reference carries when it is read from another page, exactly
+// as `_caption' in xref.py builds it.  Under document numbering the number is
+// already the whole address; under chapter numbering the page has to be named;
+// a block-local number -- a solution outside any block -- says nothing about
+// where to look, so it always names the page.
+#let _address(loc, scoped, numbered) = {
+  if ref-format == "number-only" { "" }
+  else if scoped and block-numbering == "document" and numbered { "" }
+  else if scoped and block-numbering == "chapter" {
+    if loc.cid != "" { " in " + chapter-name + " " + loc.cid } else { "" }
+  } else if loc.pid != "" { " in " + chapter-name + " " + loc.pid } else { "" }
+}
+
+// Both readings of a reference to this block, as `_caption' in xref.py builds
+// them: `same' for a reference on the same page, `full' with the address for
+// anywhere else.  Derived from counters and the current location only -- never
+// from another piece of state -- because a state whose value is computed from
+// state the first then feeds is a loop the introspection pass cannot settle.
+#let _entry(kind, title, given, numbered, loc) = {
+  let num = if not numbered or not number-blocks { none } else {
+    let n = if given == auto { _block-counter(kind).get().at(0) } else { given }
+    _scoped-number(n, loc)
+  }
+  let head = upper(kind.at(0)) + kind.slice(1)
+  let base = if num != none { head + " " + num } else if title != "" {
+    head + " \"" + title + "\""
+  } else { head }
+  (same: base, full: base + _address(loc, true, num != none),
+   ch: loc.ch, pg: loc.pg)
+}
+
+// Where the counters restart, applied as each page begins.
+//
+// A build compiles one page per target, so restarting per page needs nothing:
+// the counter starts at nothing anyway, and `nw-init-block-counters' supplies
+// a start when the scope runs wider.  A single compilation of the whole book
+// -- which is what the live preview is -- has no such boundary, so without
+// this the preview numbers straight through and prints "Theorem 2" where the
+// built page prints "Theorem 1".
+#let nw-page-start(first-of-chapter) = {
+  if block-numbering == "page" or (block-numbering == "chapter" and first-of-chapter) {
+    for kind in active-theme.blocks.keys() {
+      _block-counter(lower(kind)).update(0)
+    }
+  }
 }
 
 // Called once per compiled target, before any content.
@@ -146,11 +203,17 @@
 #let nw-block-stack = state("nw-block-stack", ())
 
 // Wrap the body of a block, so everything within it counts as inside.
-#let nw-in-block(body) = {
+#let nw-in-block(body, kind: none, title: "", given: auto, numbered: true) = {
   _block-uid.step()
   context {
     let id = _block-uid.get().at(0)
-    nw-block-stack.update(s => s + (id,))
+    // Carries how this block reads, so a solution inside can name it.  Built
+    // from the same ingredients the heading used rather than handed across in
+    // a state, which is what keeps this out of a cycle.
+    let cap = if kind == none { none } else {
+      _entry(kind, title, given, numbered, nw-location.get())
+    }
+    nw-block-stack.update(s => s + ((id: id, caption: cap),))
     body
     // Closes the block for the first pass too, which rebuilds this same
     // stack from the marks and would otherwise never learn where to pop.
@@ -163,17 +226,29 @@
 // within the page when it is in no block at all.
 #let nw-solution-number(name: none, given: auto) = context {
   let stack = nw-block-stack.get()
-  let parent = if stack.len() > 0 { str(stack.last()) } else { "page" }
-  let c = counter("nw-sol-" + parent)
+  let parent = if stack.len() > 0 { stack.last() } else { none }
+  let c = counter("nw-sol-" + if parent != none { str(parent.id) } else { "page" })
   // Steps even for a hand-numbered solution, exactly as a block's counter
   // does: the number takes a slot rather than stepping aside from one, so
   // the next automatic solution does not repeat what was just written.
   c.step()
   context {
     let n = if given == auto { c.get().at(0) } else { given }
-    if name != none {
-      [#std.metadata((label: name, caption: "Solution " + str(n))) <nw-caption>]
+    let loc = nw-location.get()
+    let base = "Solution " + str(n)
+    // "Solution 2" counts within its block, so on its own it picks out
+    // nothing: a page can hold several blocks that each have a second
+    // solution.  Naming the block is what makes it an address, and that
+    // block's own caption already carries as much of the chapter and page
+    // as the numbering scope leaves ambiguous.
+    let entry = if parent != none and parent.caption != none {
+      (same: base + " of " + parent.caption.same,
+       full: base + " of " + parent.caption.full)
+    } else {
+      (same: base, full: base + _address(loc, false, true))
     }
+    let entry = (..entry, ch: loc.ch, pg: loc.pg)
+    if name != none { [#std.metadata((label: name, ..entry)) <nw-caption>] }
     [#n]
   }
 }
@@ -204,15 +279,8 @@
 #let nw-caption(name, kind, title, given, numbered: true) = {
   if name == none { return none }
   context {
-    let num = if not numbered or not number-blocks { none } else {
-      let n = if given == auto { _block-counter(kind).get().at(0) } else { given }
-      _scoped-number(n, nw-location.get())
-    }
-    let head = upper(kind.at(0)) + kind.slice(1)
-    let caption = if num != none { head + " " + num } else if title != "" {
-      head + " \"" + title + "\""
-    } else { head }
-    [#std.metadata((label: name, caption: caption)) <nw-caption>]
+    let entry = _entry(kind, title, given, numbered, nw-location.get())
+    [#std.metadata((label: name, ..entry)) <nw-caption>]
   }
 }
 

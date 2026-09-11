@@ -1,6 +1,6 @@
 #import "../templater.typ": *
 #import "scanner.typ": load-content-info
-#import "xref.typ": xref-rule, nw-init-block-counters, nw-anchor, nw-set-location
+#import "xref.typ": xref-rule, nw-init-block-counters, nw-anchor, nw-set-location, nw-page-start
 
 // `@label' resolves normally when the target is in this compilation and
 // falls back to the injected map when it is not -- which, compiling one page
@@ -96,7 +96,8 @@
       // business, not something the build should try to reproduce.
       [#std.metadata((t: "page", ch: ch-folder, pg: pg-file,
                       cid: chapter-display-id, pid: page-display-id)) <nw-mark>]
-      nw-set-location(ch-folder, pg-file)
+      nw-set-location(ch-folder, pg-file, chapter-display-id, page-display-id)
+      nw-page-start(j == 0)
       // A destination has to be somewhere, so the anchor is real content at
       // the top of the page rather than metadata, which has no position.
       [#nw-anchor("page-" + ch-folder + "-" + pg-file, box(width: 1pt, height: 1pt))]
