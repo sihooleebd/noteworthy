@@ -36,20 +36,9 @@
 // "document" -- and only the first needs no help from the build, since a
 // page is exactly what one compilation can see.  Defaults are supplied here
 // rather than required, so an older constants.json still loads.
-// A build may override these for one run, and the override has to reach the
-// template: the page prints the number while the build computes the text of
-// every reference to it, so the two reading different settings is exactly the
-// disagreement this whole scheme exists to prevent.
-#let _setting(key, fallback) = {
-  let given = sys.inputs.at(key, default: none)
-  if given == none { fallback } else { given }
-}
-#let number-blocks = {
-  let given = sys.inputs.at("number-blocks", default: none)
-  if given == none { constants.at("number-blocks", default: false) } else { given == "true" }
-}
-#let block-numbering = _setting("block-numbering", constants.at("block-numbering", default: "page"))
-#let ref-format = _setting("ref-format", constants.at("ref-format", default: "number"))
+#let number-blocks = constants.at("number-blocks", default: false)
+#let block-numbering = constants.at("block-numbering", default: "page")
+#let ref-format = constants.at("ref-format", default: "number")
 #let block-design = constants.at("block-design", default: "simple")
 #let hierarchy = json("../../config/hierarchy.json")
 

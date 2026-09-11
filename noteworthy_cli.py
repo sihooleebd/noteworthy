@@ -33,15 +33,6 @@ def run_build(args):
     settings = load_settings()
     config = load_config_safe()
 
-    # A flag overrides constants.json for this build only -- nothing is written
-    # back, so `--ref-format' stays a one-off rather than a project setting.
-    if getattr(args, 'block_numbering', None):
-        config['block-numbering'] = args.block_numbering
-    if getattr(args, 'ref_format', None):
-        config['ref-format'] = args.ref_format
-    if getattr(args, 'no_number_blocks', False):
-        config['number-blocks'] = False
-    
     # Override settings with CLI args
     debug = args.debug or settings.get('debug', False)
     setup_logging(debug)
@@ -211,16 +202,6 @@ def main():
     parser.add_argument('-t', '--threads', type=int, help='Number of threads to use')
     parser.add_argument('--flags', nargs='+', help='Additional Typst CLI flags')
 
-    # Reference and block numbering.  Given, these win for this build only;
-    # left out, constants.json decides, so a one-off `--ref-format' does not
-    # quietly become the project's setting.
-    parser.add_argument('--block-numbering', choices=['page', 'chapter', 'document'],
-                        help='Restart block numbering every page, chapter, or never (default: from constants.json, "page")')
-    parser.add_argument('--ref-format', choices=['number', 'title-number', 'number-only'],
-                        help='How a cross-reference reads, e.g. "Theorem 1 in Chapter 08.01" (default: from constants.json)')
-    parser.add_argument('--no-number-blocks', action='store_true',
-                        help='Do not number theorems, notes, proofs and the like')
-    
     # Update flags
     parser.add_argument('-u', '--update', action='store_true', help='Update noteworthy')
     parser.add_argument('-n', '--nightly', action='store_true', help='Use nightly branch')
