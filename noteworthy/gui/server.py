@@ -14,6 +14,7 @@ import subprocess
 import shutil
 import os
 import re
+import time
 from ..utils import scan_content
 import tempfile
 
@@ -244,7 +245,11 @@ async def doc_endpoint(websocket: WebSocket):
                 await document_hub.send_chat(
                     user.id,
                     msg.get("text") or msg.get("message", ""),
-                    msg.get("timestamp", 0)
+                    # Stamp it here when the client did not.  A missing field
+                    # defaulted to 0, which is the epoch -- rendered in a UTC+9
+                    # locale that is a perfectly plausible-looking 09:00:00 on
+                    # every line the Emacs client sent.
+                    msg.get("timestamp") or int(time.time() * 1000)
                 )
             elif msg_type == "cursor":
                 # Real-time cursor position broadcast.
