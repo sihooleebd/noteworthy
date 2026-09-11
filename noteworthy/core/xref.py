@@ -86,7 +86,7 @@ def _scoped_number(number, scope: str, ch: str, pg: str, scoped: bool) -> str:
 
 def _caption(kind: str, title: str, number, ref_format: str,
              chapter_name: str, ch: str, pg: str, cid: str, pid: str,
-             scope: str, scoped: bool = True) -> dict:
+             scope: str, scoped: bool = True, parent: dict | None = None) -> dict:
     """Both readings of a reference to this block.
 
     `same` is what to show when the reference sits on the same page as its
@@ -107,9 +107,17 @@ def _caption(kind: str, title: str, number, ref_format: str,
         # No number to identify it by, so the title is doing that job.
         head = f'{name} "{title}"'
 
+    if not scoped and parent is not None:
+        # "Solution 2" counts within the block holding it, so on its own it
+        # picks out nothing: a page can hold several blocks that each have a
+        # second solution.  Naming that block is what makes it an address,
+        # and the block's own caption already carries however much of the
+        # chapter and page the reader needs.
+        return {"same": f"{head} of {parent['same']}",
+                "full": f"{head} of {parent['full']}", "ch": ch, "pg": pg}
     if not scoped:
-        # A local number says nothing about where to look, so the address is
-        # the whole of the answer -- exactly as under `page' scope.
+        # In no block at all, so it counts across the page and the page is
+        # the only address there is.
         where = f" in {chapter_name} {pid}" if pid else ""
     elif scope == "document" and num:
         # The number is already the full address.
@@ -142,7 +150,9 @@ def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
     label_map: dict[str, str] = {}
     offsets: dict[str, dict[str, int]] = {}
     counts: dict[str, int] = {}        # kind -> count so far, within the scope
-    local: dict[str, int] = {}         # kind -> count within the current block
+    sol_counts: dict[object, int] = {}  # block id -> solutions in it so far
+    stack: list[dict] = []             # blocks currently open, innermost last
+    uid = 0
     ch = pg = None
     cid = pid = ""
     prev_ch = None
@@ -157,41 +167,54 @@ def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
                 counts = {}
             # A page is compiled on its own, so a block-local counter cannot
             # see the page before it however wide the numbering scope is.
-            local = {}
+            sol_counts = {}
+            stack = []
             prev_ch = ch
             # What this page's counters must start from.  Recorded before the
             # page's own blocks are counted, which is what makes it a start.
             offsets[f"{ch}/{pg}"] = dict(counts)
+            continue
+        if m.get("t") == "block-end":
+            if stack:
+                stack.pop()
             continue
         if m.get("t") != "block":
             continue
         kind = str(m.get("kind", "block"))
         style = str(m.get("style", "scoped"))
         given = str(m.get("num", "") or "")
-        # The counter advances even for a hand-numbered block, exactly as the
-        # template does it, so the next automatic one does not repeat.
+        # The innermost block still open is the one this sits inside, which
+        # is the only reading of "inside" that survives blocks nesting.
+        parent = stack[-1] if stack else None
         if style == "scoped":
+            # Advances even for a hand-numbered block, exactly as the template
+            # does it, so the next automatic one does not repeat.
             counts[kind] = counts.get(kind, 0) + 1
-            # A solution is numbered within the block it sits in, so opening a
-            # new block is what starts that count over.
-            local = {}
             count = counts[kind]
         elif style == "local":
-            local[kind] = local.get(kind, 0) + 1
-            count = local[kind]
+            # Counted within that block, or across the page when in none.
+            key = parent["uid"] if parent else "page"
+            sol_counts[key] = sol_counts.get(key, 0) + 1
+            count = sol_counts[key]
         else:
             count = None
+        # A solution prints its count whether or not block numbering is on:
+        # that number is part of how a solution reads, not part of the
+        # document-wide scheme the setting governs.
+        numbered = count is not None and (number_blocks or style == "local")
+        number = (given or count) if numbered else None
+        entry = _caption(kind, str(m.get("title", "") or ""),
+                         number, ref_format, chapter_name,
+                         ch or "", pg or "", cid, pid, scope,
+                         style == "scoped", parent)
+        # Every block stays open until its closing mark whether or not
+        # anything refers to it: a solution inside an unlabelled theorem
+        # still counts within that theorem.
+        uid += 1
+        stack.append({"uid": uid, "same": entry["same"], "full": entry["full"]})
         label = str(m.get("label", "") or "")
         if label:
-            # A solution prints its count whether or not block numbering is
-            # on: that number is part of how a solution reads, not part of
-            # the document-wide scheme the setting governs.
-            numbered = count is not None and (number_blocks or style == "local")
-            number = (given or count) if numbered else None
-            label_map[label] = _caption(kind, str(m.get("title", "") or ""),
-                                        number, ref_format, chapter_name,
-                                        ch or "", pg or "", cid, pid, scope,
-                                        style == "scoped")
+            label_map[label] = entry
 
     if scope == "page":
         # Every page starts from nothing, so there is nothing to inject.
