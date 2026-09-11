@@ -16,7 +16,7 @@
   "pad-page-id": true,
   "heading-numbering": "1.1",
   "block-design": "modern",
-  "number-blocks": true,
+  "number-blocks": false,
   "block-numbering": "page",
   "ref-format": "number"
 }

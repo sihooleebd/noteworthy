@@ -52,6 +52,18 @@
 #let nw-ref(name, body) = link("nw-ref:" + name, body)
 
 // -----------------------------------------------------
+// Where we are
+// -----------------------------------------------------
+//
+// A page cannot work out which page it is: it is included, and the include
+// says nothing about where from.  parser.typ sets this before each one, and
+// both the numbering and the reference rule read it -- the rule to tell
+// whether a reference is being read on the page its target sits on.
+
+#let nw-location = state("nw-location", (ch: "", pg: ""))
+#let nw-set-location(ch, pg) = nw-location.update((ch: ch, pg: pg))
+
+// -----------------------------------------------------
 // The reference rule
 // -----------------------------------------------------
 
@@ -63,7 +75,15 @@
   } else {
     let key = str(it.target)
     if key in label-map {
-      nw-ref(key, label-map.at(key))
+      let entry = label-map.at(key)
+      context {
+        let here-now = nw-location.get()
+        // On the page the block is on, saying which page it is on adds
+        // nothing -- "Theorem 1" reads better than "Theorem 1 in Chapter
+        // 08.01" three lines below the theorem itself.
+        let same-page = entry.ch == here-now.ch and entry.pg == here-now.pg
+        nw-ref(key, if same-page { entry.same } else { entry.full })
+      }
     } else {
       // Neither here nor in the map.  Show it rather than failing the build:
       // a typo should be findable in the PDF, not fatal three pages earlier.
@@ -78,19 +98,15 @@
 
 #let _block-counter(kind) = counter("nw-block-" + kind)
 
-// Which page is being rendered.  Blocks cannot work it out themselves -- a
-// page is included, it does not know where from -- and the number has to say,
-// or every page's "Theorem 1" refers to a different theorem.
-#let nw-location = state("nw-location", (ch: "", pg: ""))
-#let nw-set-location(ch, pg) = nw-location.update((ch: ch, pg: pg))
-
-// A number is only useful to a reader if it identifies one block in the whole
-// book.  Under `page' numbering that takes chapter and page as well, under
-// `chapter' the chapter, and under `document' the count already does.
-#let _qualified(n, loc) = {
-  if block-numbering == "document" { str(n) }
-  else if block-numbering == "chapter" { loc.ch + "." + str(n) }
-  else { loc.ch + "." + loc.pg + "." + str(n) }
+// The number a block prints carries exactly what its own scope does not make
+// obvious.  Restarting per page, the count alone is unambiguous on that page,
+// so "Theorem 1" is right and "Theorem 8.1.1" is noise.  Restarting per
+// chapter, the page has to say which page; never restarting, the chapter too.
+// A reference adds the rest of the address, since it is read from elsewhere.
+#let _scoped-number(n, loc) = {
+  if block-numbering == "document" { loc.ch + "." + loc.pg + "." + str(n) }
+  else if block-numbering == "chapter" { loc.pg + "." + str(n) }
+  else { str(n) }
 }
 
 // Called once per compiled target, before any content.
@@ -104,7 +120,7 @@
 #let nw-block-number(kind) = {
   if not number-blocks { return none }
   _block-counter(kind).step()
-  context _qualified(_block-counter(kind).get().at(0), nw-location.get())
+  context _scoped-number(_block-counter(kind).get().at(0), nw-location.get())
 }
 
 // What a reference to this block should read: "Theorem 8.3".

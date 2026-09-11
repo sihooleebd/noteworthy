@@ -87,7 +87,11 @@
       // Which page the blocks that follow belong to.  A whole-document query
       // returns everything in order but says nothing about source files, and
       // attributing a block to its page is the whole job of the first pass.
-      [#std.metadata((t: "page", ch: ch-folder, pg: pg-file)) <nw-mark>]
+      // The formatted ids travel with the marker: a reference says "in
+      // Chapter 08.01", and the padding that produces is the template's
+      // business, not something the build should try to reproduce.
+      [#std.metadata((t: "page", ch: ch-folder, pg: pg-file,
+                      cid: chapter-display-id, pid: page-display-id)) <nw-mark>]
       nw-set-location(ch-folder, pg-file)
       // A destination has to be somewhere, so the anchor is real content at
       // the top of the page rather than metadata, which has no position.

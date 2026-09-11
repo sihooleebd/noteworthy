@@ -216,8 +216,8 @@ def main():
     # quietly become the project's setting.
     parser.add_argument('--block-numbering', choices=['page', 'chapter', 'document'],
                         help='Restart block numbering every page, chapter, or never (default: from constants.json, "page")')
-    parser.add_argument('--ref-format', choices=['number', 'title-number', 'title-number-page'],
-                        help='How a cross-reference reads, e.g. "Theorem 3" (default: from constants.json)')
+    parser.add_argument('--ref-format', choices=['number', 'title-number', 'number-only'],
+                        help='How a cross-reference reads, e.g. "Theorem 1 in Chapter 08.01" (default: from constants.json)')
     parser.add_argument('--no-number-blocks', action='store_true',
                         help='Do not number theorems, notes, proofs and the like')
     

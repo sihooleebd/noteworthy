@@ -54,7 +54,7 @@ class ConfigEditor(ListEditor):
             "block-numbering": ("Block Numbering Restarts", "choice",
                                 ["page", "chapter", "document"]),
             "ref-format": ("Reference Reads", "choice",
-                           ["number", "title-number", "title-number-page"]),
+                           ["number", "title-number", "number-only"]),
         }
 
         self.fields = []

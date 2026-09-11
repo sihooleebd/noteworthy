@@ -64,42 +64,66 @@ def _query_marks(typst_path: str, extra_flags: list[str]) -> list[dict]:
         return []
 
 
-def _qualified(number, scope: str, ch: str, pg: str) -> str:
-    """The number as the page prints it.
+def _scoped_number(number, scope: str, ch: str, pg: str) -> str:
+    """The number as the block itself prints it.
 
-    A bare count only identifies a block if it is unique in the book, which it
-    is not under `page' or `chapter' numbering -- every page has a Theorem 1.
-    Qualifying it is what makes "see Theorem 8.1.3" mean one thing, and it has
-    to agree with what the block itself shows, so this mirrors `_qualified' in
-    xref.typ.
+    Mirrors `_scoped-number' in xref.typ, and must: a page showing "Theorem 1"
+    while a reference to it says "Theorem 8.1.1" is worse than either being
+    wrong on its own.
     """
     if number is None:
         return ""
     if scope == "document":
-        return str(number)
+        return f"{ch}.{pg}.{number}"
     if scope == "chapter":
-        return f"{ch}.{number}"
-    return f"{ch}.{pg}.{number}"
+        return f"{pg}.{number}"
+    return str(number)
 
 
 def _caption(kind: str, title: str, number, ref_format: str,
-             chapter_name: str, ch: str, pg: str, scope: str = "page") -> str:
-    """What a reference to this block should read."""
+             chapter_name: str, ch: str, pg: str, cid: str, pid: str,
+             scope: str) -> dict:
+    """Both readings of a reference to this block.
+
+    `same` is what to show when the reference sits on the same page as its
+    target -- there, naming the page again is noise.  `full` adds the address
+    for everywhere else.  Which one applies depends on where the reference is
+    read, so the choice belongs to the template, not here; this only supplies
+    the two strings and the location to compare against.
+    """
     name = kind[:1].upper() + kind[1:]
-    num = _qualified(number, scope, ch, pg)
-    if ref_format == "title-number" and title:
-        return f'{name} "{title}" {num}'.strip()
-    if ref_format == "title-number-page" and title:
-        return f'{name} "{title}" on {chapter_name} {ch}.{pg}'.strip()
-    return f"{name} {num}".strip()
+    num = _scoped_number(number, scope, ch, pg)
+
+    head = name
+    if num:
+        head = f"{name} {num}"
+        if ref_format == "title-number" and title:
+            head = f'{name} "{title}" {num}'
+    elif title:
+        # No number to identify it by, so the title is doing that job.
+        head = f'{name} "{title}"'
+
+    if scope == "document" and num:
+        # The number is already the full address.
+        where = ""
+    elif scope == "chapter":
+        where = f" in {chapter_name} {cid}" if cid else ""
+    else:
+        where = f" in {chapter_name} {pid}" if pid else ""
+    if ref_format == "number-only":
+        where = ""
+
+    return {"same": head, "full": head + where, "ch": ch, "pg": pg}
 
 
 def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
             ref_format: str = "number", chapter_name: str = "Chapter",
-            number_blocks: bool = True) -> tuple[dict, dict]:
+            number_blocks: bool = False) -> tuple[dict, dict]:
     """Return (label_map, offsets_by_target).
 
-    `label_map` is label -> display text, for every labelled block.
+    `label_map` is label -> {same, full, ch, pg}: the two readings of a
+    reference and where its target is, so the template can tell whether the
+    reference is being read on that same page.
     `offsets_by_target` is "ch/pg" -> {kind: starting count}, empty under
     `page` scope because a page is exactly what one compilation can see.
     """
@@ -111,6 +135,7 @@ def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
     offsets: dict[str, dict[str, int]] = {}
     counts: dict[str, int] = {}        # kind -> count so far, within the scope
     ch = pg = None
+    cid = pid = ""
     prev_ch = None
 
     for m in marks:
@@ -118,6 +143,7 @@ def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
             continue
         if m.get("t") == "page":
             ch, pg = str(m.get("ch", "")), str(m.get("pg", ""))
+            cid, pid = str(m.get("cid", "") or ""), str(m.get("pid", "") or "")
             if scope == "page" or (scope == "chapter" and ch != prev_ch):
                 counts = {}
             prev_ch = ch
@@ -134,7 +160,7 @@ def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
             number = counts[kind] if number_blocks else None
             label_map[label] = _caption(kind, str(m.get("title", "") or ""),
                                         number, ref_format, chapter_name,
-                                        ch or "", pg or "", scope)
+                                        ch or "", pg or "", cid, pid, scope)
 
     if scope == "page":
         # Every page starts from nothing, so there is nothing to inject.

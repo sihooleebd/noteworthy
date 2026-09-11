@@ -36,7 +36,7 @@
 // "document" -- and only the first needs no help from the build, since a
 // page is exactly what one compilation can see.  Defaults are supplied here
 // rather than required, so an older constants.json still loads.
-#let number-blocks = constants.at("number-blocks", default: true)
+#let number-blocks = constants.at("number-blocks", default: false)
 #let block-numbering = constants.at("block-numbering", default: "page")
 #let ref-format = constants.at("ref-format", default: "number")
 #let block-design = constants.at("block-design", default: "simple")
