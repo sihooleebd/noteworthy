@@ -100,6 +100,13 @@ class EmacsSession:
         self._update_sub = None
         self._pending_updates: list = []
         self._applying_remote = False
+        # The room's own description of what changed, kept alive on the
+        # session because pycrdt subscriptions are RAII guards.  Used in place
+        # of diffing the document before and after: see `_handle_yjs_frame'.
+        self._ytext = None
+        self._ytext_sub = None
+        self._text_deltas: list = []
+        self._muted_text_deltas = False
         # The file the Yjs tunnel is attached to.  Distinct from
         # `current_file', which follows the buffer Emacs is typing in and can
         # move on while a frame from the previous room is still in flight.
@@ -294,6 +301,9 @@ class EmacsSession:
             # are RAII guards, and a dropped one stops observing silently.
             self._update_sub = self._ydoc.observe(self._on_doc_update)
             self._pending_updates.clear()
+            self._ytext = self._ydoc.get("content", type=Text)
+            self._text_deltas.clear()
+            self._ytext_sub = self._ytext.observe(self._on_text_delta)
             # The server opens with its own SYNC_STEP1; _handle_yjs_frame()
             # answers it with SYNC_STEP2.
             self._yjs_task = asyncio.create_task(self._yjs_receive_loop())
@@ -314,6 +324,17 @@ class EmacsSession:
             return
         LOG.info("Reattaching Yjs tunnel for %s", path)
         await self._attach_yjs(path)
+
+    def _on_text_delta(self, event):
+        """Record what the room changed, in the room's own words.
+
+        Deltas that came from applying Emacs's own edit are muted: they would
+        otherwise be handed straight back to the buffer they came from.
+        """
+        if self._muted_text_deltas:
+            return
+        if event.delta:
+            self._text_deltas.append(list(event.delta))
 
     def _on_doc_update(self, event):
         """Collect updates this session originates, for forwarding to /yjs.
@@ -347,6 +368,12 @@ class EmacsSession:
         self._yjs_path = None
         self._update_sub = None
         self._pending_updates.clear()
+        # Deltas recorded against a document we are about to drop describe
+        # text the next tunnel will not have.
+        self._ytext_sub = None
+        self._ytext = None
+        self._text_deltas.clear()
+        self._muted_text_deltas = False
         self._ydoc = None
 
     # ------------------------------------------------------------------
@@ -448,6 +475,14 @@ class EmacsSession:
                 return
 
             new_text = self._get_ytext()
+            # What the room changed, as the room described it.  NOT a diff of
+            # the document before and after: `old_text' was read before an
+            # `await' and `new_text' after one, and an edit arriving from Emacs
+            # runs on this same loop in between.  The diff then spanned from
+            # the peer's edit to the user's own, and Emacs applied a single
+            # delete covering everything between -- which collapsed the user's
+            # cursor onto the peer's position every time the two typed at once.
+            deltas, self._text_deltas = self._text_deltas, []
 
             if old_text != new_text:
                 if not was_synced:
@@ -466,13 +501,35 @@ class EmacsSession:
                         "version": len(new_text),
                     })
                 else:
-                    delta = _compute_delta(old_text, new_text)
-                    if delta:
+                    # Each delta is stated against the text as it stood when
+                    # it was recorded, so they have to be replayed in order.
+                    state = old_text
+                    messages = []
+                    for delta in deltas:
+                        ops = _delta_to_char_ops(delta, state)
+                        if ops:
+                            messages.append(ops)
+                            state = _apply_char_ops(state, ops)
+                    if state == new_text:
+                        for ops in messages:
+                            await self._send_emacs({
+                                "type": "delta",
+                                "file": frame_file,
+                                "ops": ops,
+                                "userId": "__server__",
+                            })
+                    else:
+                        # Our replay does not reproduce the room's text, so we
+                        # do not understand this change well enough to describe
+                        # it.  Send the text itself rather than ops that would
+                        # land somewhere unintended.
+                        LOG.warning("Delta replay for %s did not match; syncing",
+                                    frame_file)
                         await self._send_emacs({
-                            "type": "delta",
+                            "type": "sync",
                             "file": frame_file,
-                            "ops": delta,
-                            "userId": "__server__",
+                            "content": new_text,
+                            "version": len(new_text),
                         })
 
         except Exception as e:
@@ -581,23 +638,29 @@ class EmacsSession:
 
             char_pos = 0
 
-            with self._ydoc.transaction():
-                for op in ops:
-                    if "retain" in op:
-                        char_pos = min(char_pos + op["retain"], len(mirror))
-                    elif "insert" in op:
-                        txt = op["insert"]
-                        char_pos = min(char_pos, len(mirror))
-                        text.insert(_byte_offset(mirror, char_pos), txt)
-                        mirror = mirror[:char_pos] + txt + mirror[char_pos:]
-                        char_pos += len(txt)
-                    elif "delete" in op:
-                        d = min(op["delete"], len(mirror) - char_pos)
-                        if d > 0:
-                            start = _byte_offset(mirror, char_pos)
-                            end = _byte_offset(mirror, char_pos + d)
-                            del text[start:end]
-                            mirror = mirror[:char_pos] + mirror[char_pos + d:]
+            # Applying Emacs's own edit fires the text observer as well, and
+            # forwarding that back would hand the buffer its own keystroke.
+            self._muted_text_deltas = True
+            try:
+                with self._ydoc.transaction():
+                    for op in ops:
+                        if "retain" in op:
+                            char_pos = min(char_pos + op["retain"], len(mirror))
+                        elif "insert" in op:
+                            txt = op["insert"]
+                            char_pos = min(char_pos, len(mirror))
+                            text.insert(_byte_offset(mirror, char_pos), txt)
+                            mirror = mirror[:char_pos] + txt + mirror[char_pos:]
+                            char_pos += len(txt)
+                        elif "delete" in op:
+                            d = min(op["delete"], len(mirror) - char_pos)
+                            if d > 0:
+                                start = _byte_offset(mirror, char_pos)
+                                end = _byte_offset(mirror, char_pos + d)
+                                del text[start:end]
+                                mirror = mirror[:char_pos] + mirror[char_pos + d:]
+            finally:
+                self._muted_text_deltas = False
 
             # Forward only what this edit produced.  Doc.get_update() would send
             # the entire document on every keystroke.
@@ -799,6 +862,43 @@ def _validate_ops(ops) -> Optional[list]:
         else:
             return None
     return clean
+
+
+def _delta_to_char_ops(delta, old: str) -> list:
+    """Translate one pycrdt delta into ops Emacs can apply.
+
+    pycrdt counts retain/delete in UTF-8 bytes; a buffer counts characters.
+    """
+    raw = old.encode("utf-8")
+    pos = 0
+    ops = []
+    for op in delta:
+        if "retain" in op:
+            n = int(op["retain"])
+            ops.append({"retain": len(raw[pos:pos + n].decode("utf-8", "ignore"))})
+            pos += n
+        elif "delete" in op:
+            n = int(op["delete"])
+            ops.append({"delete": len(raw[pos:pos + n].decode("utf-8", "ignore"))})
+            pos += n
+        elif "insert" in op and isinstance(op["insert"], str):
+            ops.append({"insert": op["insert"]})
+    return ops
+
+
+def _apply_char_ops(text: str, ops) -> str:
+    """What TEXT becomes once OPS are applied, for checking our own work."""
+    out = []
+    i = 0
+    for op in ops:
+        if "retain" in op:
+            out.append(text[i:i + op["retain"]]); i += op["retain"]
+        elif "delete" in op:
+            i += op["delete"]
+        elif "insert" in op:
+            out.append(op["insert"])
+    out.append(text[i:])
+    return "".join(out)
 
 
 def _compute_delta(old: str, new: str) -> list:
