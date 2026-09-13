@@ -113,7 +113,14 @@ class NoteworthyRoom(YRoom):
         whenever it happens; one that already holds text is never touched, so
         this cannot clobber live content.
         """
-        self._text = self.ydoc.get("content", type=Text)
+        # Fetched once and kept.  This runs on every connect to an existing
+        # room, so it was replacing the wrapper the live save subscription was
+        # made on.  Measured on this pycrdt: the observer keeps firing anyway,
+        # so that was not losing saves -- but the wrapper is documented above
+        # as something to keep alive, and relying on it surviving a rebind we
+        # did not have to do is a guarantee worth not depending on.
+        if self._text is None:
+            self._text = self.ydoc.get("content", type=Text)
 
         # Restore the document itself, not merely its text.
         #
