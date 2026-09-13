@@ -30,6 +30,19 @@ def set_packet_logging(enabled: bool):
 CRDT_STATE_DIR = BASE_DIR / ".noteworthy-crdt"
 
 
+class _NullLock:
+    """Stands in for the second lock when both paths are the same one."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+_NULL_LOCK = _NullLock()
+
+
 def _state_path(room_name: str) -> Path:
     """Where this room's CRDT state blob lives, mirroring the content path."""
     return CRDT_STATE_DIR / (room_name + ".bin")
@@ -211,6 +224,28 @@ class NoteworthyRoom(YRoom):
             self._save_delay, lambda: asyncio.ensure_future(self.save())
         )
 
+    async def reload_from_disk(self):
+        """Take the file's current contents into the live document.
+
+        For writes that go around the room -- an upload, a generated file --
+        where the room still holds the old text and would write it back over
+        the new one the moment anybody typed.  Rewrites this document's text
+        rather than building a new one, so connected clients receive it as an
+        edit and converge instead of merging in a second copy.
+        """
+        if self._text is None or not self._file_path.exists():
+            return
+        try:
+            content = self._file_path.read_text(encoding="utf-8")
+        except Exception as e:
+            log.error(f"[YjsRoom] Could not re-read {self.room_name}: {e}")
+            return
+        if content == str(self._text):
+            return
+        del self._text[:]
+        self._text += content
+        log.info(f"[YjsRoom] Took {self.room_name} from disk ({len(content)} chars)")
+
     def rebind(self, new_room_name: str, new_file_path: Path):
         """Point this room at a new on-disk location after a rename/move.
 
@@ -341,6 +376,12 @@ class YjsProvider:
             except OSError as e:
                 log.error(f"[YjsProvider] Could not drop CRDT state for {file_path}: {e}")
 
+    async def reload_room(self, path: str):
+        """Reconcile a live room with a file written behind its back."""
+        room = self.rooms.get(path)
+        if room is not None:
+            await room.reload_from_disk()
+
     async def rename_room(self, old_path: str, new_path: str):
         """Rebind the room at `old_path` to `new_path` after a filesystem rename.
 
@@ -355,25 +396,33 @@ class YjsProvider:
             await self.close_room(old_path)
             return
 
-        lock = self._room_locks.setdefault(old_path, asyncio.Lock())
-        async with lock:
-            room = self.rooms.pop(old_path, None)
-            if room is None:
-                return
-            if self.server is not None:
-                self.server.rooms.pop(old_path, None)
-
-            existing = self.rooms.pop(new_path, None)
-            if existing is not None:
+        # Both locks: this mutates the entry at `new_path' too, and a client
+        # opening that path holds only ITS lock -- so renaming while someone
+        # connects to the destination could leave two rooms for one file, or a
+        # client talking to a room that has just been replaced.  Taken in a
+        # fixed order so two renames cannot deadlock against each other.
+        first, second = sorted((old_path, new_path))
+        lock_a = self._room_locks.setdefault(first, asyncio.Lock())
+        lock_b = self._room_locks.setdefault(second, asyncio.Lock())
+        async with lock_a:
+            async with (lock_b if first != second else _NULL_LOCK):
+                room = self.rooms.pop(old_path, None)
+                if room is None:
+                    return
                 if self.server is not None:
-                    self.server.rooms.pop(new_path, None)
-                await existing.close()
+                    self.server.rooms.pop(old_path, None)
 
-            room.rebind(new_path, new_file_path)
-            self.rooms[new_path] = room
-            if self.server is not None:
-                self.server.rooms[new_path] = room
-            log.info(f"[YjsProvider] Rebound room {old_path} -> {new_path}")
+                existing = self.rooms.pop(new_path, None)
+                if existing is not None:
+                    if self.server is not None:
+                        self.server.rooms.pop(new_path, None)
+                    await existing.close()
+
+                room.rebind(new_path, new_file_path)
+                self.rooms[new_path] = room
+                if self.server is not None:
+                    self.server.rooms[new_path] = room
+                log.info(f"[YjsProvider] Rebound room {old_path} -> {new_path}")
 
     def _rooms_under(self, path: str) -> list:
         """Room keys equal to `path`, or nested under it (directory ops)."""

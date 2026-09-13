@@ -368,7 +368,16 @@ if _MULTIPART_AVAILABLE:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 content = await f.read()
                 dest.write_bytes(content)
-                saved.append(str(dest.relative_to(BASE_DIR)))
+                rel = str(dest.relative_to(BASE_DIR))
+                # A room may be live for this path, still holding the old
+                # text; its next save would put that straight back over what
+                # was just uploaded.  Hand it the new contents.
+                try:
+                    from .yjs_provider import yjs_provider
+                    await yjs_provider.reload_room(rel)
+                except Exception as e:
+                    logging.warning("Could not refresh the room for %s: %s", rel, e)
+                saved.append(rel)
             except Exception as e:
                 errors.append(f"{filename}: {e}")
 

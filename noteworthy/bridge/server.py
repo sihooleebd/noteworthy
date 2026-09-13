@@ -330,7 +330,11 @@ class EmacsSession:
         try:
             # Same limit, same reason: a Yjs update for a large document (or
             # a sync carrying the whole room) is not bounded by 1 MiB either.
-            self._yjs_ws = await websockets.connect(url, max_size=None)
+            # A bounded open: attaching now runs on the task that handles
+            # every Emacs message, so a connect that hangs would stall each
+            # keystroke behind it for the library default of ten seconds.
+            self._yjs_ws = await websockets.connect(url, max_size=None,
+                                                    open_timeout=3)
             self._yjs_path = path
             self._ydoc = Doc()
             # Keep the subscription alive on the session: pycrdt subscriptions
@@ -350,10 +354,18 @@ class EmacsSession:
             # delivers theirs. Without this the mirror stays blank, so no sync
             # reaches Emacs and every delta lands as an independent insertion
             # instead of at the intended offset.
-            await self._yjs_send_sync_step1()
+            if not await self._yjs_send_sync_step1():
+                raise RuntimeError("sync step 1 was not sent")
             LOG.info("Bridge Yjs tunnel connected for %s", path)
         except Exception as e:
             LOG.error("Failed to connect to /yjs: %s", e)
+            # Leave nothing half-built: a non-None _yjs_ws or _ydoc here reads
+            # as an attached tunnel to every later check.
+            await self._detach_yjs()
+            await self._send_emacs({
+                "type": "log", "level": "error",
+                "message": f"Could not open the collaboration tunnel for {path}.",
+            })
 
     async def _reattach_yjs_later(self, path: str, delay: float = 1.0):
         """Rebuild a dropped Yjs tunnel without waiting for a local edit."""
@@ -430,16 +442,24 @@ class EmacsSession:
     # Yjs WebSocket tunnel
     # ------------------------------------------------------------------
 
-    async def _yjs_send_sync_step1(self):
-        """Send Yjs sync step 1 message (request server state)."""
+    async def _yjs_send_sync_step1(self) -> bool:
+        """Ask the room for its state.  False if the request never went out.
+
+        Worth the return value: this is what makes the tunnel sync, and a
+        tunnel that never syncs is not idle -- every edit waits five seconds
+        on `_yjs_synced' and is then dropped.  Failing silently here turned a
+        send error into a buffer that quietly stopped saving anything.
+        """
         if not self._yjs_ws or not self._ydoc:
-            return
+            return False
         try:
             # Use the canonical pycrdt Yjs sync-step1 framing.
             msg = create_sync_message(self._ydoc)
             await self._yjs_ws.send(msg)
+            return True
         except Exception as e:
             LOG.error("Failed to send Yjs sync step 1: %s", e)
+            return False
 
     async def _yjs_receive_loop(self):
         """Receive Yjs binary frames and translate to Emacs delta/sync messages."""
