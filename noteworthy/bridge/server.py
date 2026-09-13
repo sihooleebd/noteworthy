@@ -795,7 +795,15 @@ class EmacsSession:
                     delivered = False
                     await self._detach_yjs()
                     break
-            if not delivered:
+            if delivered:
+                # Tell Emacs this edit is in the room, so it stops adjusting
+                # the server's deltas past it.  Without the acknowledgement
+                # Emacs would rebase every later inbound delta past an edit
+                # the server has long since accounted for -- and acking one
+                # that did NOT land would be worse, so this is guarded on
+                # delivery rather than on the loop finishing.
+                await self._send_emacs({"type": "ack", "file": path})
+            else:
                 # The edit is in our mirror but never reached the room, so the
                 # two have silently diverged and every later delta would be
                 # rebased against a document nobody else has.  Say so, and
