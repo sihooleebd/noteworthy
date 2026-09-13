@@ -108,6 +108,10 @@ class EmacsSession:
         self._mirror: str = ""
         self._pending_char_ops: list = []
         self._muted_text_deltas = False
+        # Ops already sent to Emacs, each with the text length it was composed
+        # against.  An edit Emacs wrote before it applied these is not wrong,
+        # only stale, and these are what it has to be rebased past.
+        self._sent_to_emacs: list = []
         # The file the Yjs tunnel is attached to.  Distinct from
         # `current_file', which follows the buffer Emacs is typing in and can
         # move on while a frame from the previous room is still in flight.
@@ -229,11 +233,17 @@ class EmacsSession:
             await self._handle_join(msg)
 
         elif mtype == "leave":
-            await self._detach_yjs()
-            # Without this, a cursor packet arriving before the next join is
-            # attributed to the file we just left.
-            self.current_file = None
-            await self._doc_send({"type": "leave", "file": msg.get("file", "")})
+            leaving = msg.get("file", "")
+            # Only if it is the file we are actually attached to.  Emacs sends
+            # leave per buffer, and tearing the tunnel down for a buffer that
+            # was never the attached one left the buffer you are typing in
+            # with no tunnel at all.
+            if not leaving or leaving == self._yjs_path:
+                await self._detach_yjs()
+                # Without this, a cursor packet arriving before the next join
+                # is attributed to the file we just left.
+                self.current_file = None
+            await self._doc_send({"type": "leave", "file": leaving})
 
         elif mtype == "delta":
             await self._handle_delta(msg)
@@ -279,6 +289,26 @@ class EmacsSession:
         # Tell /ws/doc about presence
         await self._doc_send({"type": "join", "path": path})
 
+        # Already attached to this very file: answer with what we hold instead
+        # of rebuilding the tunnel.  Emacs rejoins every open buffer on every
+        # reconnect, and each rebuild dropped the mirror, cleared `_yjs_synced'
+        # and forced a fresh full sync -- so an ordinary reconnect replaced
+        # every open buffer and discarded whatever had not been sent yet.
+        # Emacs clears its synced flag on any join, so it still needs the sync.
+        if (self._yjs_path == path and self._ydoc is not None
+                and self._yjs_ws and self._ws_is_open(self._yjs_ws)
+                and self._yjs_synced.is_set()):
+            LOG.info("Rejoin of %s: tunnel already open, syncing from mirror", path)
+            self._pending_char_ops.clear()
+            self._sent_to_emacs.clear()
+            await self._send_emacs({
+                "type": "sync",
+                "file": path,
+                "content": self._mirror,
+                "version": len(self._mirror),
+            })
+            return
+
         # Connect a Yjs tunnel for this file
         await self._attach_yjs(path)
 
@@ -305,6 +335,7 @@ class EmacsSession:
             self._ytext = self._ydoc.get("content", type=Text)
             self._mirror = ""
             self._pending_char_ops.clear()
+            self._sent_to_emacs.clear()
             self._ytext_sub = self._ytext.observe(self._on_text_delta)
             # The server opens with its own SYNC_STEP1; _handle_yjs_frame()
             # answers it with SYNC_STEP2.
@@ -345,7 +376,7 @@ class EmacsSession:
         if not ops:
             return
         if not self._muted_text_deltas:
-            self._pending_char_ops.append(ops)
+            self._pending_char_ops.append({"base": len(self._mirror), "ops": ops})
         self._mirror = _apply_char_ops(self._mirror, ops)
 
     def _on_doc_update(self, event):
@@ -386,6 +417,7 @@ class EmacsSession:
         self._ytext = None
         self._mirror = ""
         self._pending_char_ops.clear()
+        self._sent_to_emacs.clear()
         self._muted_text_deltas = False
         self._ydoc = None
 
@@ -509,6 +541,9 @@ class EmacsSession:
                     # The fill produced observer events too; they describe how
                     # the mirror came to hold this, which is not an edit.
                     self._pending_char_ops.clear()
+                    # Emacs is about to hold exactly this, so nothing earlier
+                    # is still in flight for it.
+                    self._sent_to_emacs.clear()
                     self._mirror = text
                     await self._send_emacs({
                         "type": "sync",
@@ -517,13 +552,17 @@ class EmacsSession:
                         "version": len(text),
                     })
                 else:
-                    for ops in pending:
+                    for entry in pending:
+                        self._sent_to_emacs.append(entry)
                         await self._send_emacs({
                             "type": "delta",
                             "file": frame_file,
-                            "ops": ops,
+                            "ops": entry["ops"],
                             "userId": "__server__",
                         })
+                    # Bounded: anything this old is past any delta still in flight.
+                    if len(self._sent_to_emacs) > 256:
+                        del self._sent_to_emacs[:-256]
 
         except Exception as e:
             LOG.debug("Yjs frame handling error: %s", e)
@@ -539,6 +578,33 @@ class EmacsSession:
     # ------------------------------------------------------------------
     # Emacs delta → Yjs
     # ------------------------------------------------------------------
+
+    def _rebase_ops(self, ops, base, mirror):
+        """OPS rewritten to apply to MIRROR, or None if that cannot be done honestly.
+
+        OPS were composed against a document BASE characters long -- the text
+        Emacs held before it applied whatever we sent it since.  Those are
+        recorded in `_sent_to_emacs', so the edit can be moved past them the
+        way any collaborative editor does it, rather than rejected for being
+        a few characters late.
+        """
+        change = _one_change(ops)
+        if change is None:
+            return None
+        unseen = [e for e in self._sent_to_emacs if e["base"] >= base]
+        if not unseen:
+            # A disagreement we have no record of: this is real divergence,
+            # not a crossing, and guessing at it is how buffers get spliced.
+            return None
+        for entry in unseen:
+            for concurrent in _changes(entry["ops"]):
+                change = _rebase_change(change, concurrent)
+                if change is None:
+                    return None
+        pos, deleted, _ = change
+        if pos < 0 or pos + deleted > len(mirror):
+            return None
+        return _change_to_ops(change)
 
     async def _handle_delta(self, msg: dict):
         """Apply Emacs delta to the Yjs doc via the Yjs tunnel."""
@@ -603,15 +669,28 @@ class EmacsSession:
             # client with a stale buffer appended its copy to the room's.
             base = msg.get("base")
             if isinstance(base, int) and base != len(mirror):
-                LOG.error("Delta for %s was written against %d chars but the "
-                          "doc holds %d; refusing", path, base, len(mirror))
-                await self._send_emacs({
-                    "type": "sync",
-                    "file": path,
-                    "content": mirror,
-                    "version": len(mirror),
-                })
-                return
+                # Emacs wrote this against the document as it stood before the
+                # ops we have since sent it -- the two crossed in flight, which
+                # is what happens every time two people type at once.  Refusing
+                # here made concurrent editing impossible by construction: the
+                # edit bounced, Emacs kept the character anyway, and every
+                # later keystroke carried a base that was wrong too, until a
+                # full sync threw the whole run away.
+                rebased = self._rebase_ops(ops, base, mirror)
+                if rebased is None:
+                    LOG.warning("Delta for %s (base %d, doc %d) cannot be rebased; syncing",
+                                path, base, len(mirror))
+                    self._sent_to_emacs.clear()
+                    await self._send_emacs({
+                        "type": "sync",
+                        "file": path,
+                        "content": mirror,
+                        "version": len(mirror),
+                    })
+                    return
+                LOG.info("Rebased delta for %s past %d chars of concurrent edits",
+                         path, len(mirror) - base)
+                ops = rebased
 
             # If the ops reach past the end of the mirror, this session and the
             # room disagree about the document.  Clamping here is what turned a
@@ -855,6 +934,74 @@ def _validate_ops(ops) -> Optional[list]:
         else:
             return None
     return clean
+
+
+def _changes(ops):
+    """OPS as [(pos, deleted, inserted_len)] in the coordinates of the text it applies to."""
+    out, pos = [], 0
+    for op in ops:
+        if "retain" in op:
+            pos += op["retain"]
+        elif "delete" in op:
+            out.append([pos, op["delete"], 0])
+            pos += op["delete"]
+        elif "insert" in op:
+            n = len(op["insert"])
+            if out and out[-1][0] + out[-1][1] == pos and out[-1][2] == 0:
+                out[-1][2] = n          # a delete immediately followed by an insert
+            else:
+                out.append([pos, 0, n])
+    return [tuple(c) for c in out]
+
+
+def _one_change(ops):
+    """(pos, deleted, inserted) when OPS is a single contiguous edit, else None.
+
+    Emacs composes exactly one of these per keystroke -- `after-change' gives
+    one region -- so anything else is a shape we should not try to rebase.
+    """
+    pos, deleted, inserted, started = 0, 0, "", False
+    for op in ops:
+        if "retain" in op:
+            if started:
+                return None         # a second region: not one contiguous edit
+            pos += op["retain"]
+        elif "delete" in op:
+            deleted += op["delete"]
+            started = True
+        elif "insert" in op:
+            inserted += op["insert"]
+            started = True
+    return (pos, deleted, inserted)
+
+
+def _rebase_change(change, concurrent):
+    """CHANGE expressed after CONCURRENT already happened, or None if they overlap.
+
+    The honest cases are the common ones: a peer editing entirely before this
+    edit shifts it, entirely after it leaves it alone.  Where the two touch the
+    same characters there is no correct rebase, and guessing is how a delta
+    ends up spliced into the middle of a word.
+    """
+    pos, deleted, inserted = change
+    cpos, cdel, cins = concurrent
+    if cpos + cdel <= pos:
+        return (pos + cins - cdel, deleted, inserted)
+    if cpos >= pos + deleted:
+        return change
+    return None
+
+
+def _change_to_ops(change):
+    pos, deleted, inserted = change
+    ops = []
+    if pos:
+        ops.append({"retain": pos})
+    if deleted:
+        ops.append({"delete": deleted})
+    if inserted:
+        ops.append({"insert": inserted})
+    return ops
 
 
 def _delta_to_char_ops(delta, old: str) -> list:
