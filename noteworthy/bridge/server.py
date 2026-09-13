@@ -105,7 +105,8 @@ class EmacsSession:
         # of diffing the document before and after: see `_handle_yjs_frame'.
         self._ytext = None
         self._ytext_sub = None
-        self._text_deltas: list = []
+        self._mirror: str = ""
+        self._pending_char_ops: list = []
         self._muted_text_deltas = False
         # The file the Yjs tunnel is attached to.  Distinct from
         # `current_file', which follows the buffer Emacs is typing in and can
@@ -302,7 +303,8 @@ class EmacsSession:
             self._update_sub = self._ydoc.observe(self._on_doc_update)
             self._pending_updates.clear()
             self._ytext = self._ydoc.get("content", type=Text)
-            self._text_deltas.clear()
+            self._mirror = ""
+            self._pending_char_ops.clear()
             self._ytext_sub = self._ytext.observe(self._on_text_delta)
             # The server opens with its own SYNC_STEP1; _handle_yjs_frame()
             # answers it with SYNC_STEP2.
@@ -326,15 +328,25 @@ class EmacsSession:
         await self._attach_yjs(path)
 
     def _on_text_delta(self, event):
-        """Record what the room changed, in the room's own words.
+        """Record what changed, and keep the mirror in step with it.
 
-        Deltas that came from applying Emacs's own edit are muted: they would
-        otherwise be handed straight back to the buffer they came from.
+        Fires synchronously inside the mutation, whoever made it, so the
+        mirror can never drift from the document -- which is the whole point:
+        nothing here depends on reading the document before and after an
+        `await', and an edit arriving from Emacs mid-frame is simply another
+        event in order rather than a difference that has to be explained.
+
+        Deltas from applying Emacs's own edit still move the mirror, but are
+        not queued: the buffer they came from does not want them back.
         """
-        if self._muted_text_deltas:
+        if not event.delta:
             return
-        if event.delta:
-            self._text_deltas.append(list(event.delta))
+        ops = _delta_to_char_ops(event.delta, self._mirror)
+        if not ops:
+            return
+        if not self._muted_text_deltas:
+            self._pending_char_ops.append(ops)
+        self._mirror = _apply_char_ops(self._mirror, ops)
 
     def _on_doc_update(self, event):
         """Collect updates this session originates, for forwarding to /yjs.
@@ -372,7 +384,8 @@ class EmacsSession:
         # text the next tunnel will not have.
         self._ytext_sub = None
         self._ytext = None
-        self._text_deltas.clear()
+        self._mirror = ""
+        self._pending_char_ops.clear()
         self._muted_text_deltas = False
         self._ydoc = None
 
@@ -431,14 +444,13 @@ class EmacsSession:
         """
         Parse a Yjs binary frame and send a delta or sync to Emacs.
 
-        We use pycrdt to apply the update to our local Y.Doc mirror and
-        then compute the text delta by comparing before/after.
+        The update is applied to our local Y.Doc; what to tell Emacs comes
+        from the text observer, which recorded each change as it happened.
         """
         if not self._ydoc or not self.current_file:
             return
 
         try:
-            old_text = self._get_ytext()
             # Was the mirror already holding the room's state when this frame
             # arrived?  A frame that is still *filling* the mirror is not an
             # edit anybody made, and must not be forwarded as one.
@@ -474,17 +486,16 @@ class EmacsSession:
                 LOG.debug("Ignoring unknown Yjs message type: %s", message_type)
                 return
 
-            new_text = self._get_ytext()
-            # What the room changed, as the room described it.  NOT a diff of
-            # the document before and after: `old_text' was read before an
-            # `await' and `new_text' after one, and an edit arriving from Emacs
-            # runs on this same loop in between.  The diff then spanned from
-            # the peer's edit to the user's own, and Emacs applied a single
-            # delete covering everything between -- which collapsed the user's
-            # cursor onto the peer's position every time the two typed at once.
-            deltas, self._text_deltas = self._text_deltas, []
+            # Nothing here reads the document before and after.  Those two
+            # reads straddle an `await', and an edit arriving from Emacs runs
+            # on this same loop in between, so their difference described the
+            # peer's change and the user's own as one edit -- which is how a
+            # cursor ended up on a peer's the moment both typed at once.  The
+            # observer has already recorded each change separately, in order,
+            # against the text it was made to.
+            pending, self._pending_char_ops = self._pending_char_ops, []
 
-            if old_text != new_text:
+            if pending or not was_synced:
                 if not was_synced:
                     # Still filling the mirror after an attach: "" -> partial ->
                     # full.  Diffing those steps and shipping them to Emacs sent
@@ -494,42 +505,24 @@ class EmacsSession:
                     # mid-fill.  Reconnecting is exactly when that happens, so
                     # every reconnect corrupted every open buffer.  State the
                     # room's text instead of narrating how we came to hold it.
+                    text = self._get_ytext()
+                    # The fill produced observer events too; they describe how
+                    # the mirror came to hold this, which is not an edit.
+                    self._pending_char_ops.clear()
+                    self._mirror = text
                     await self._send_emacs({
                         "type": "sync",
                         "file": frame_file,
-                        "content": new_text,
-                        "version": len(new_text),
+                        "content": text,
+                        "version": len(text),
                     })
                 else:
-                    # Each delta is stated against the text as it stood when
-                    # it was recorded, so they have to be replayed in order.
-                    state = old_text
-                    messages = []
-                    for delta in deltas:
-                        ops = _delta_to_char_ops(delta, state)
-                        if ops:
-                            messages.append(ops)
-                            state = _apply_char_ops(state, ops)
-                    if state == new_text:
-                        for ops in messages:
-                            await self._send_emacs({
-                                "type": "delta",
-                                "file": frame_file,
-                                "ops": ops,
-                                "userId": "__server__",
-                            })
-                    else:
-                        # Our replay does not reproduce the room's text, so we
-                        # do not understand this change well enough to describe
-                        # it.  Send the text itself rather than ops that would
-                        # land somewhere unintended.
-                        LOG.warning("Delta replay for %s did not match; syncing",
-                                    frame_file)
+                    for ops in pending:
                         await self._send_emacs({
-                            "type": "sync",
+                            "type": "delta",
                             "file": frame_file,
-                            "content": new_text,
-                            "version": len(new_text),
+                            "ops": ops,
+                            "userId": "__server__",
                         })
 
         except Exception as e:
@@ -899,40 +892,6 @@ def _apply_char_ops(text: str, ops) -> str:
             out.append(op["insert"])
     out.append(text[i:])
     return "".join(out)
-
-
-def _compute_delta(old: str, new: str) -> list:
-    """
-    Compute a minimal delta (retain/insert/delete) between old and new text.
-    Uses a simple longest common prefix/suffix approach.
-    """
-    if old == new:
-        return []
-
-    # Find common prefix
-    prefix = 0
-    max_prefix = min(len(old), len(new))
-    while prefix < max_prefix and old[prefix] == new[prefix]:
-        prefix += 1
-
-    # Find common suffix (avoiding overlap with prefix)
-    suffix = 0
-    max_suffix = min(len(old) - prefix, len(new) - prefix)
-    while suffix < max_suffix and old[-(suffix + 1)] == new[-(suffix + 1)]:
-        suffix += 1
-
-    deleted = len(old) - prefix - suffix
-    inserted = new[prefix:len(new) - suffix if suffix else len(new)]
-
-    ops = []
-    if prefix > 0:
-        ops.append({"retain": prefix})
-    if deleted > 0:
-        ops.append({"delete": deleted})
-    if inserted:
-        ops.append({"insert": inserted})
-
-    return ops
 
 
 # ----------------------------------------------------------------- #
