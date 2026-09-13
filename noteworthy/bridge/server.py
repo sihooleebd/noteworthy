@@ -108,10 +108,13 @@ class EmacsSession:
         self._mirror: str = ""
         self._pending_char_ops: list = []
         self._muted_text_deltas = False
-        # Ops already sent to Emacs, each with the text length it was composed
-        # against.  An edit Emacs wrote before it applied these is not wrong,
-        # only stale, and these are what it has to be rebased past.
+        # Ops already sent to Emacs, each tagged with the revision it produced.
+        # An edit Emacs wrote before it applied these is not wrong, only stale,
+        # and these are what it has to be rebased past.  Emacs echoes the
+        # revision it had applied, so which ones it missed is known exactly
+        # rather than inferred from a character count.
         self._sent_to_emacs: list = []
+        self._rev = 0
         # The file the Yjs tunnel is attached to.  Distinct from
         # `current_file', which follows the buffer Emacs is typing in and can
         # move on while a frame from the previous room is still in flight.
@@ -301,11 +304,13 @@ class EmacsSession:
             LOG.info("Rejoin of %s: tunnel already open, syncing from mirror", path)
             self._pending_char_ops.clear()
             self._sent_to_emacs.clear()
+            self._rev += 1
             await self._send_emacs({
                 "type": "sync",
                 "file": path,
                 "content": self._mirror,
                 "version": len(self._mirror),
+                "rev": self._rev,
             })
             return
 
@@ -538,6 +543,13 @@ class EmacsSession:
                     # every reconnect corrupted every open buffer.  State the
                     # room's text instead of narrating how we came to hold it.
                     text = self._get_ytext()
+                    if text is None:
+                        # Sending "" here would erase the buffer.  Leave the
+                        # tunnel unsynced so the next frame tries again.
+                        LOG.error("Skipping sync for %s: room text unreadable",
+                                  frame_file)
+                        self._yjs_synced.clear()
+                        return
                     # The fill produced observer events too; they describe how
                     # the mirror came to hold this, which is not an edit.
                     self._pending_char_ops.clear()
@@ -545,19 +557,24 @@ class EmacsSession:
                     # is still in flight for it.
                     self._sent_to_emacs.clear()
                     self._mirror = text
+                    self._rev += 1
                     await self._send_emacs({
                         "type": "sync",
                         "file": frame_file,
                         "content": text,
                         "version": len(text),
+                        "rev": self._rev,
                     })
                 else:
                     for entry in pending:
+                        self._rev += 1
+                        entry["rev"] = self._rev
                         self._sent_to_emacs.append(entry)
                         await self._send_emacs({
                             "type": "delta",
                             "file": frame_file,
                             "ops": entry["ops"],
+                            "rev": self._rev,
                             "userId": "__server__",
                         })
                     # Bounded: anything this old is past any delta still in flight.
@@ -567,19 +584,27 @@ class EmacsSession:
         except Exception as e:
             LOG.debug("Yjs frame handling error: %s", e)
 
-    def _get_ytext(self) -> str:
+    def _get_ytext(self):
+        """The room's text, or None if it cannot be read.
+
+        None rather than "": this feeds the full syncs, and an empty string
+        returned from a failed read is indistinguishable from an empty
+        document -- so a transient error here used to erase whatever the user
+        had open and stash it.
+        """
         if not self._ydoc:
-            return ""
+            return None
         try:
             return str(self._ydoc.get("content", type=Text))
-        except Exception:
-            return ""
+        except Exception as e:
+            LOG.error("Could not read the room's text: %s", e)
+            return None
 
     # ------------------------------------------------------------------
     # Emacs delta → Yjs
     # ------------------------------------------------------------------
 
-    def _rebase_ops(self, ops, base, mirror):
+    def _rebase_ops(self, ops, base, mirror, base_rev=None):
         """OPS rewritten to apply to MIRROR, or None if that cannot be done honestly.
 
         OPS were composed against a document BASE characters long -- the text
@@ -591,7 +616,15 @@ class EmacsSession:
         change = _one_change(ops)
         if change is None:
             return None
-        unseen = [e for e in self._sent_to_emacs if e["base"] >= base]
+        if isinstance(base_rev, int):
+            # Emacs told us exactly which revision it had applied, so what it
+            # missed is known rather than guessed.
+            unseen = [e for e in self._sent_to_emacs
+                      if e.get("rev", 0) > base_rev]
+        else:
+            # An older client with no revision: fall back to the character
+            # count it was composed against.
+            unseen = [e for e in self._sent_to_emacs if e["base"] >= base]
         if not unseen:
             # A disagreement we have no record of: this is real divergence,
             # not a crossing, and guessing at it is how buffers get spliced.
@@ -659,7 +692,10 @@ class EmacsSession:
             # convert each position, or every edit after a non-ASCII character
             # lands at the wrong offset -- silently dropped, misplaced, or (for
             # a delete) wiping the document for everyone in the room.
-            mirror = str(text)
+            mirror = self._get_ytext()
+            if mirror is None:
+                LOG.error("Dropping delta for %s: room text unreadable", path)
+                return
 
             # Emacs says how long its buffer was before the edit.  Positions
             # in a delta only mean what they say if both sides held the same
@@ -676,16 +712,19 @@ class EmacsSession:
                 # edit bounced, Emacs kept the character anyway, and every
                 # later keystroke carried a base that was wrong too, until a
                 # full sync threw the whole run away.
-                rebased = self._rebase_ops(ops, base, mirror)
+                rebased = self._rebase_ops(ops, base, mirror,
+                                           msg.get("baseRev"))
                 if rebased is None:
                     LOG.warning("Delta for %s (base %d, doc %d) cannot be rebased; syncing",
                                 path, base, len(mirror))
                     self._sent_to_emacs.clear()
+                    self._rev += 1
                     await self._send_emacs({
                         "type": "sync",
                         "file": path,
                         "content": mirror,
                         "version": len(mirror),
+                        "rev": self._rev,
                     })
                     return
                 LOG.info("Rebased delta for %s past %d chars of concurrent edits",
@@ -734,18 +773,41 @@ class EmacsSession:
             finally:
                 self._muted_text_deltas = False
 
+            # Emacs has demonstrably applied everything up to the revision it
+            # named, so nothing older can still be in flight for it.
+            ack = msg.get("baseRev")
+            if isinstance(ack, int):
+                self._sent_to_emacs = [e for e in self._sent_to_emacs
+                                       if e.get("rev", 0) > ack]
+
             # Forward only what this edit produced.  Doc.get_update() would send
             # the entire document on every keystroke.
             updates, self._pending_updates = self._pending_updates, []
+            delivered = True
             for update in updates:
                 if not (update and self._yjs_ws and self._ws_is_open(self._yjs_ws)):
+                    delivered = False
                     continue
                 try:
                     await self._yjs_ws.send(create_update_message(update))
                 except Exception as e:
                     LOG.error("Failed to forward delta to Yjs: %s", e)
+                    delivered = False
                     await self._detach_yjs()
                     break
+            if not delivered:
+                # The edit is in our mirror but never reached the room, so the
+                # two have silently diverged and every later delta would be
+                # rebased against a document nobody else has.  Say so, and
+                # rebuild the tunnel rather than carrying on.
+                LOG.error("Edit for %s was applied locally but not delivered; "
+                          "rebuilding the tunnel", path)
+                await self._send_emacs({
+                    "type": "log", "level": "error",
+                    "message": ("An edit did not reach the room; reconnecting. "
+                                "If text goes missing, it is in the stash."),
+                })
+                await self._attach_yjs(path)
 
         except Exception as e:
             # pycrdt does not roll back a transaction when an exception escapes
@@ -1058,15 +1120,41 @@ async def emacs_endpoint(websocket: WebSocket):
     session = EmacsSession(websocket, user_name)
     await session.start()
 
+    # Read and handle on separate tasks.  Handling is serial by design --
+    # deltas must be applied in the order they were typed -- but doing it
+    # inline in the read loop meant slow work inside one message stalled every
+    # message behind it: `_handle_delta' can wait up to five seconds for the
+    # tunnel to sync, and every keystroke typed during that wait sat unread in
+    # the socket.  The queue keeps the order and lets the socket drain.
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def worker():
+        while True:
+            item = await queue.get()
+            if item is None:
+                return
+            try:
+                await session.handle_emacs_message(item)
+            except Exception as e:
+                LOG.error("Error handling Emacs message: %s", e)
+
+    worker_task = asyncio.create_task(worker())
     try:
         while True:
             data = await websocket.receive_text()
-            await session.handle_emacs_message(data)
+            queue.put_nowait(data)
     except WebSocketDisconnect:
         LOG.info("Emacs client disconnected: %s", user_name)
     except Exception as e:
         LOG.error("Emacs session error: %s", e)
     finally:
+        queue.put_nowait(None)
+        try:
+            await asyncio.wait_for(worker_task, timeout=5.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            worker_task.cancel()
+        except Exception:
+            worker_task.cancel()
         await session.stop()
 
 
