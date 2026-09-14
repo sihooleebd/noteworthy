@@ -31,11 +31,6 @@
 // label -> what a reference to it should read, e.g. "Theorem 8.3"
 #let label-map = _input-json("label-map")
 
-// kind -> where this target's counter starts, so numbering can run past the
-// end of a page without the page being able to see its neighbours.  Empty
-// for `page' scope, which is why that one needs no first pass.
-#let block-offsets = _input-json("block-offsets")
-
 // -----------------------------------------------------
 // Link markers
 // -----------------------------------------------------
@@ -161,26 +156,17 @@
    ch: loc.ch, pg: loc.pg)
 }
 
-// Where the counters restart, applied as each page begins.
+// Counters restart on every page, whatever the numbering scope.
 //
-// A build compiles one page per target, so restarting per page needs nothing:
-// the counter starts at nothing anyway, and `nw-init-block-counters' supplies
-// a start when the scope runs wider.  A single compilation of the whole book
-// -- which is what the live preview is -- has no such boundary, so without
-// this the preview numbers straight through and prints "Theorem 2" where the
-// built page prints "Theorem 1".
+// The scope chooses how much of the address the number carries, not where
+// counting restarts: "8.2.1" already says chapter 8, page 2, and continuing
+// the count across pages on top of that produced "Definition 8.2.3" for the
+// first definition on the page.  A build compiles one page per target so it
+// gets this for free; a single compilation of the whole book -- which is what
+// the live preview is -- has no page boundary of its own and needs telling.
 #let nw-page-start(first-of-chapter) = {
-  if block-numbering == "page" or (block-numbering == "chapter" and first-of-chapter) {
-    for kind in active-theme.blocks.keys() {
-      _block-counter(lower(kind)).update(0)
-    }
-  }
-}
-
-// Called once per compiled target, before any content.
-#let nw-init-block-counters() = {
-  for (kind, start) in block-offsets.pairs() {
-    _block-counter(kind).update(int(start))
+  for kind in active-theme.blocks.keys() {
+    _block-counter(lower(kind)).update(0)
   }
 }
 

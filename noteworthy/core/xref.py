@@ -134,28 +134,24 @@ def _caption(kind: str, title: str, number, ref_format: str,
 
 def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
             ref_format: str = "number", chapter_name: str = "Chapter",
-            number_blocks: bool = False) -> tuple[dict, dict]:
-    """Return (label_map, offsets_by_target).
+            number_blocks: bool = False) -> dict:
+    """Return label -> {same, full, ch, pg}.
 
-    `label_map` is label -> {same, full, ch, pg}: the two readings of a
-    reference and where its target is, so the template can tell whether the
-    reference is being read on that same page.
-    `offsets_by_target` is "ch/pg" -> {kind: starting count}, empty under
-    `page` scope because a page is exactly what one compilation can see.
+    The two readings of a reference and where its target is, so the template
+    can tell whether the reference is being read on the same page as the block
+    it names.
     """
     marks = _query_marks(typst_path, extra_flags)
     if not marks:
-        return {}, {}
+        return {}
 
     label_map: dict[str, str] = {}
-    offsets: dict[str, dict[str, int]] = {}
-    counts: dict[str, int] = {}        # kind -> count so far, within the scope
+    counts: dict[str, int] = {}        # kind -> count so far, on this page
     sol_counts: dict[object, int] = {}  # block id -> solutions in it so far
     stack: list[dict] = []             # blocks currently open, innermost last
     uid = 0
     ch = pg = None
     cid = pid = ""
-    prev_ch = None
 
     for m in marks:
         if not isinstance(m, dict):
@@ -163,16 +159,15 @@ def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
         if m.get("t") == "page":
             ch, pg = str(m.get("ch", "")), str(m.get("pg", ""))
             cid, pid = str(m.get("cid", "") or ""), str(m.get("pid", "") or "")
-            if scope == "page" or (scope == "chapter" and ch != prev_ch):
-                counts = {}
+            # Every page, whatever the scope: the scope says how much address
+            # the number shows, not where counting restarts.  Continuing the
+            # count across pages made the first definition on page 8.2 read
+            # "Definition 8.2.3".
+            counts = {}
             # A page is compiled on its own, so a block-local counter cannot
             # see the page before it however wide the numbering scope is.
             sol_counts = {}
             stack = []
-            prev_ch = ch
-            # What this page's counters must start from.  Recorded before the
-            # page's own blocks are counted, which is what makes it a start.
-            offsets[f"{ch}/{pg}"] = dict(counts)
             continue
         if m.get("t") == "block-end":
             if stack:
@@ -216,10 +211,7 @@ def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
         if label:
             label_map[label] = entry
 
-    if scope == "page":
-        # Every page starts from nothing, so there is nothing to inject.
-        offsets = {}
-    return label_map, offsets
+    return label_map
 
 
 # ------------------------------------------------------------ post-merge pass

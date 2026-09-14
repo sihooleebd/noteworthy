@@ -1,16 +1,11 @@
 #import "../templater.typ": *
 #import "scanner.typ": load-content-info
-#import "xref.typ": xref-rule, nw-init-block-counters, nw-anchor, nw-set-location, nw-page-start
+#import "xref.typ": xref-rule, nw-anchor, nw-set-location, nw-page-start
 
 // `@label' resolves normally when the target is in this compilation and
 // falls back to the injected map when it is not -- which, compiling one page
 // at a time, is every reference to another page.
 #show ref: xref-rule
-
-// Counter starts for this page, when the numbering scope runs past it.  A
-// page compiled on its own begins at nothing otherwise, so `chapter' and
-// `document' numbering would silently restart on every page.
-#nw-init-block-counters()
 
 #let target = sys.inputs.at("target", default: none)
 #let page-offset = sys.inputs.at("page-offset", default: none)

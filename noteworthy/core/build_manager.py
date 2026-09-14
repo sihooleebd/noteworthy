@@ -83,7 +83,7 @@ class BuildManager:
         # These must be read the same way the template reads them -- from
         # constants.json -- or the page prints one numbering scheme while every
         # reference to it is computed in another.
-        label_map, block_offsets = _xref.collect(
+        label_map = _xref.collect(
             TYPST_PATH, folder_flags,
             scope=config.get('block-numbering', 'page'),
             ref_format=config.get('ref-format', 'number'),
@@ -119,7 +119,7 @@ class BuildManager:
             if not to_run and iteration > 1:
                 break
                 
-            self._execute_parallel(to_run, task_map, projected_offsets, folder_flags, max_workers, callbacks, block_offsets, ch_folders, pg_folders)
+            self._execute_parallel(to_run, task_map, projected_offsets, folder_flags, max_workers, callbacks)
             
             if iteration > 3:
                 callbacks.get('on_log', lambda m, o: None)("Max retries reached. Pagination might be unstable.", False)
@@ -201,30 +201,7 @@ class BuildManager:
         )
         return to_run
     
-    @staticmethod
-    def _offsets_for(key, block_offsets, ch_folders, pg_folders):
-        """Counter starts for the task named by KEY.
-
-        Tasks are keyed by position (`ci/ai`) while the offsets are keyed by
-        folder name (`8/1`), because that is what the document markers report.
-        Only pages have blocks; covers and front matter have none.
-        """
-        if not ch_folders or "/" not in str(key):
-            return None
-        try:
-            ci, ai = (int(part) for part in str(key).split("/", 1))
-        except ValueError:
-            return None
-        if ci >= len(ch_folders):
-            return None
-        ch_name = ch_folders[ci]
-        # Keyed by folder NAME: `str(ci)' only agrees while chapters run
-        # 0,1,2,... and silently misses once they do not.
-        pages = (pg_folders or {}).get(ch_name, [])
-        pg_name = pages[ai] if ai < len(pages) else str(ai + 1)
-        return block_offsets.get(f"{ch_name}/{pg_name}")
-
-    def _execute_parallel(self, to_run, task_map, projected_offsets, folder_flags, max_workers, callbacks, block_offsets=None, ch_folders=None, pg_folders=None):
+    def _execute_parallel(self, to_run, task_map, projected_offsets, folder_flags, max_workers, callbacks):
         """Execute compilation tasks in parallel."""
         from .build import compile_target, get_pdf_page_count
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -233,20 +210,12 @@ class BuildManager:
                 t_data = task_map[key]
                 offset = projected_offsets[key]
                 
-                # Counter starts are per page, so they cannot ride along in
-                # the flags every target shares.
-                task_flags = folder_flags
-                if block_offsets:
-                    start = self._offsets_for(key, block_offsets, ch_folders, pg_folders)
-                    if start:
-                        task_flags = folder_flags + ['--input', f'block-offsets={json.dumps(start)}']
-
                 f = executor.submit(
                     compile_target, 
                     t_data[2],
                     t_data[3],
                     page_offset=offset,
-                    extra_flags=task_flags,
+                    extra_flags=folder_flags,
                     log_callback=lambda m: None 
                 )
                 future_to_key[f] = key
