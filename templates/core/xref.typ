@@ -50,6 +50,24 @@
 
 #let nw-ref(name, body) = link("nw-ref:" + name, body)
 
+// The colour the scheme gives a block, so a reference to one reads in the
+// same colour its heading does.  Blocks are keyed by name in the scheme and
+// by `lower(title)' everywhere else -- the same thing for every block that
+// ships, but looked up both ways so a renamed title does not silently lose
+// its colour.
+#let _kind-color(kind) = {
+  if kind == none { return none }
+  let blocks = active-theme.at("blocks", default: (:))
+  if kind in blocks { return blocks.at(kind).at("stroke", default: none) }
+  let hit = none
+  for (name, cfg) in blocks {
+    if hit == none and lower(cfg.at("title", default: "")) == kind {
+      hit = cfg.at("stroke", default: none)
+    }
+  }
+  hit
+}
+
 // -----------------------------------------------------
 // Where we are
 // -----------------------------------------------------
@@ -83,7 +101,9 @@
     // "Theorem 1" reads better than "Theorem 1 in Chapter 08.01" three lines
     // below the theorem itself.
     let same-page = entry.ch == here-now.ch and entry.pg == here-now.pg
-    nw-ref(key, if same-page { entry.same } else { entry.full })
+    let body = if same-page { entry.same } else { entry.full }
+    let col = _kind-color(entry.at("kind", default: none))
+    nw-ref(key, if col == none { body } else { text(fill: col, body) })
   }
   let mine = query(<nw-caption>).filter(m => m.value.label == key)
   if mine.len() > 0 {
@@ -152,8 +172,10 @@
   let base = if num != none { head + " " + num } else if title != "" {
     head + " \"" + title + "\""
   } else { head }
+  // The kind rides along so a reference can be drawn in the colour the
+  // scheme gives that block, the same one its own heading uses.
   (same: base, full: base + _address(loc, true, num != none),
-   ch: loc.ch, pg: loc.pg)
+   ch: loc.ch, pg: loc.pg, kind: kind)
 }
 
 // Counters restart on every page, whatever the numbering scope.
@@ -233,7 +255,7 @@
     } else {
       (same: base, full: base + _address(loc, false, true))
     }
-    let entry = (..entry, ch: loc.ch, pg: loc.pg)
+    let entry = (..entry, ch: loc.ch, pg: loc.pg, kind: "solution")
     if name != none { [#std.metadata((label: name, ..entry)) <nw-caption>] }
     [#n]
   }

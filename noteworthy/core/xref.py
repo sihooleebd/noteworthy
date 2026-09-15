@@ -114,7 +114,8 @@ def _caption(kind: str, title: str, number, ref_format: str,
         # and the block's own caption already carries however much of the
         # chapter and page the reader needs.
         return {"same": f"{head} of {parent['same']}",
-                "full": f"{head} of {parent['full']}", "ch": ch, "pg": pg}
+                "full": f"{head} of {parent['full']}", "ch": ch, "pg": pg,
+                "kind": kind}
     if not scoped:
         # In no block at all, so it counts across the page and the page is
         # the only address there is.
@@ -129,7 +130,10 @@ def _caption(kind: str, title: str, number, ref_format: str,
     if ref_format == "number-only":
         where = ""
 
-    return {"same": head, "full": head + where, "ch": ch, "pg": pg}
+    # The kind rides along so a reference can be drawn in the colour the
+    # scheme gives that block, the same one its own heading uses.
+    return {"same": head, "full": head + where, "ch": ch, "pg": pg,
+            "kind": kind}
 
 
 def collect(typst_path: str, extra_flags: list[str], *, scope: str = "page",
