@@ -85,9 +85,16 @@ typst compile templates/core/parser.typ out-{n}.png --root . --ppi 110 \
   --input target=0/1        # index into chapter-folders / page-folders, not names
 ```
 
-A single-page compile has no cross-page label map, so `@label` pointing at
-another page renders as a red `?label`. That is expected; it resolves in a full
-build.
+### A red `?label` in a partial render is correct
+
+A compile of one page or one chapter has no cross-page label map, so any
+`@label` whose target lives on another page renders as a red `?label`.
+
+**This is intended and is not something to fix.** Do not rewrite the
+reference, add the label locally, or report it as broken: it resolves in a
+full build, where the first pass has collected every label in the book. Render
+the whole book (`render_document` with no target) if you need to see it
+resolved.
 
 ## Blocks
 

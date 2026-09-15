@@ -55,3 +55,4 @@ templates/core/imports.typ
 config/modules.json
 
 # templates/module/ is the noteworthy-modules repo, wired in as a submodule
+.mcp.json

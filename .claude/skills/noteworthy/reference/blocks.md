@@ -41,6 +41,8 @@ it in the merged PDF. Read on the page the target sits on, it drops the address
 (`Theorem 1`, not `Theorem 1 in Chapter 08.01`).
 
 A single-page compile has no cross-page label map, so `@label` pointing
-elsewhere renders as a red `?label`. Expected; it resolves in a full build.
+elsewhere renders as a red `?label`. **Intended, not a fault** -- the label map
+is built by a first pass over the whole book, which a partial render does not
+run. Leave it alone; it resolves in a full build.
 
 `#nw-anchor(name, body)` attaches a real Typst label so tinymist can index it.
