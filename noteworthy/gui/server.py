@@ -1242,6 +1242,33 @@ async def check_diagnostics(data: dict = Body(...)):
 # STATUS API
 # ============================================================
 
+@app.post("/api/rooms/reload")
+async def reload_rooms(data: dict = Body(default={})):
+    """Take the file on disk into any live room for it.
+
+    A room holds the document, and the file is its export -- so writing the
+    file behind a live room's back does not update it, and the room's next
+    save puts the old text straight back over what was written.  Deploying a
+    template into a running project is exactly that, and it is why an edited
+    `parser.typ' could come back stale and fail to compile.
+
+    Pass {"paths": [...]}, or nothing to reconcile every live room.
+    """
+    from .yjs_provider import yjs_provider
+
+    paths = data.get("paths")
+    if not paths:
+        paths = list(yjs_provider.rooms.keys())
+    done, missing = [], []
+    for path in paths:
+        if path in yjs_provider.rooms:
+            await yjs_provider.reload_room(path)
+            done.append(path)
+        else:
+            missing.append(path)
+    return {"success": True, "reloaded": done, "no_live_room": missing}
+
+
 @app.get("/api/debug/yjs")
 async def debug_yjs_state():
     """Debug endpoint to inspect Yjs rooms state."""
