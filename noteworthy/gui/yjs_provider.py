@@ -67,6 +67,96 @@ def _resolve_room_path(room_name: str) -> Path | None:
     return target
 
 
+def find_edit_hits(content: str, old: str, replace_all: bool = False) -> list[int]:
+    """Where OLD occurs in CONTENT, refusing what an edit cannot mean.
+
+    Shared so an edit lands the same way whether it goes through a room or
+    straight to a file: not found is an error, and more than one match is an
+    error unless the caller said it meant all of them.
+    """
+    if not old:
+        raise ValueError("old_string is empty")
+    hits = []
+    start = 0
+    while True:
+        i = content.find(old, start)
+        if i < 0:
+            break
+        hits.append(i)
+        start = i + len(old)
+    if not hits:
+        raise ValueError("old_string not found")
+    if len(hits) > 1 and not replace_all:
+        raise ValueError(f"old_string appears {len(hits)} times; "
+                         "pass replace_all or give more context")
+    return hits if replace_all else hits[:1]
+
+
+def apply_diff(text, new_content: str) -> int:
+    """Bring TEXT to NEW_CONTENT with the smallest edits that will do it.
+
+    Emptying the Text and re-adding is a replacement of the whole document,
+    and every editor holding it sees exactly that: the buffer swapped out
+    from under the cursor, the scroll position lost, and -- where the editor
+    had anything of its own not yet in the room -- its text put aside in a
+    file and a line printed about it.  Deploying a template did that to
+    whoever was reading at the time.
+
+    So the difference is worked out first and only that is applied.  A file
+    whose middle changed costs a delta the size of the change, one that did
+    not change costs nothing, and either way nobody is interrupted.
+    """
+    import difflib
+
+    old = str(text)
+    if old == new_content:
+        return 0
+
+    # Beyond this size the diff costs more than it saves; a document that big
+    # is not one somebody is reading over your shoulder either.
+    if len(old) + len(new_content) > 400_000:
+        del text[:]
+        text += new_content
+        return 1
+
+    ops = [op for op in difflib.SequenceMatcher(None, old, new_content,
+                                                autojunk=False).get_opcodes()
+           if op[0] != "equal"]
+    # Back to front: an earlier edit moves every later offset along.
+    for tag, i1, i2, j1, j2 in reversed(ops):
+        b1 = len(old[:i1].encode("utf-8"))
+        b2 = len(old[:i2].encode("utf-8"))
+        if tag in ("replace", "delete") and b2 > b1:
+            del text[b1:b2]
+        if tag in ("replace", "insert"):
+            text.insert(b1, new_content[j1:j2])
+    return len(ops)
+
+
+def apply_text_edit(text, old: str, new: str, replace_all: bool = False) -> int:
+    """Replace OLD with NEW inside a pycrdt Text, returning how many times.
+
+    pycrdt counts in UTF-8 bytes while Python counts characters, so every
+    offset is converted: one non-ASCII character anywhere above the edit and
+    a character offset lands in the wrong place -- mid-character, even, which
+    corrupts the document rather than merely misplacing the edit.
+
+    Edits are applied back to front, since an earlier one moves every later
+    offset along.
+    """
+    content = str(text)
+    hits = find_edit_hits(content, old, replace_all=replace_all)
+
+    for i in reversed(hits):
+        b0 = len(content[:i].encode("utf-8"))
+        b1 = len(content[:i + len(old)].encode("utf-8"))
+        if b1 > b0:
+            del text[b0:b1]
+        if new:
+            text.insert(b0, new)
+    return len(hits)
+
+
 class NoteworthyRoom(YRoom):
     """
     Custom room that syncs with disk.
@@ -249,9 +339,23 @@ class NoteworthyRoom(YRoom):
             return
         if content == str(self._text):
             return
-        del self._text[:]
-        self._text += content
-        log.info(f"[YjsRoom] Took {self.room_name} from disk ({len(content)} chars)")
+        with self.ydoc.transaction():
+            hunks = apply_diff(self._text, content)
+        log.info(f"[YjsRoom] Took {self.room_name} from disk "
+                 f"({len(content)} chars, {hunks} hunk(s))")
+
+    async def apply_edit(self, old: str, new: str, replace_all: bool = False) -> int:
+        """Replace OLD with NEW in the live document, returning how many times.
+
+        Through the document rather than the file, because the file is the
+        document's export: writing it behind the room's back gets the old
+        text put straight back over the new one at the room's next save, and
+        anybody connected never sees the edit at all.  Going through the Text
+        means the edit reaches every open editor the way a keystroke does.
+        """
+        text = self.ydoc.get("content", type=Text)
+        with self.ydoc.transaction():
+            return apply_text_edit(text, old, new, replace_all=replace_all)
 
     def rebind(self, new_room_name: str, new_file_path: Path):
         """Point this room at a new on-disk location after a rename/move.
@@ -382,6 +486,12 @@ class YjsProvider:
                 _state_path(file_path).unlink(missing_ok=True)
             except OSError as e:
                 log.error(f"[YjsProvider] Could not drop CRDT state for {file_path}: {e}")
+
+    async def edit_room(self, path: str, old: str, new: str,
+                        replace_all: bool = False) -> int:
+        """Apply a text edit to PATH through its room, opening it if needed."""
+        room = await self.get_room(path)
+        return await room.apply_edit(old, new, replace_all=replace_all)
 
     async def reload_room(self, path: str):
         """Reconcile a live room with a file written behind its back."""

@@ -2,9 +2,9 @@
 Noteworthy GUI Server - FastAPI backend
 Works directly on project files via noteworthy.config paths
 """
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body, File, Form, UploadFile
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body, File, Form, UploadFile, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from contextlib import asynccontextmanager
 from pathlib import Path
 import json
@@ -1267,6 +1267,50 @@ async def reload_rooms(data: dict = Body(default={})):
         else:
             missing.append(path)
     return {"success": True, "reloaded": done, "no_live_room": missing}
+
+
+@app.post("/mcp")
+async def mcp_endpoint(request: Request):
+    """MCP over Streamable HTTP.
+
+    Here rather than as a separate process because the rooms are here: a tool
+    that edits a document has to reach the live one, and an agent anywhere
+    else reaches it over the same port the editor already uses.
+
+      claude mcp add --transport http noteworthy http://<host>:8010/mcp
+    """
+    from ..mcp import handle_rpc
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse(
+            {"jsonrpc": "2.0", "id": None,
+             "error": {"code": -32700, "message": "parse error"}},
+            status_code=400,
+        )
+
+    # A batch is a list; a single call is not.  Notifications answer nothing,
+    # which over HTTP is 202 with an empty body rather than a null result.
+    batch = isinstance(payload, list)
+    messages = payload if batch else [payload]
+    answers = []
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        reply = await handle_rpc(msg)
+        if reply is not None:
+            answers.append(reply)
+
+    if not answers:
+        return Response(status_code=202)
+    return JSONResponse(answers if batch else answers[0])
+
+
+@app.get("/mcp")
+async def mcp_no_stream():
+    """No server-initiated stream: every answer rides on its own POST."""
+    return Response(status_code=405, headers={"Allow": "POST"})
 
 
 @app.get("/api/debug/yjs")
