@@ -2,6 +2,8 @@
 import curses
 import json
 import logging
+
+logger = logging.getLogger(__name__)
 import shutil
 import time
 from pathlib import Path
@@ -300,7 +302,15 @@ class BuildWizard(BaseEditor):
     def run_build_process(self):
         # Adapted from components/build.py
         if self.build_opts['debug']:
-            logging.basicConfig(filename='build_debug.log', level=logging.DEBUG, format='%(asctime)s - %(message)s')
+            # Into the build directory, not the project root: a log file that
+            # grows under a root tinymist watches costs the language server
+            # a copy per append.  Attached to this module's logger rather
+            # than the root one, which is not ours to configure.
+            BUILD_DIR.mkdir(parents=True, exist_ok=True)
+            handler = logging.FileHandler(BUILD_DIR / 'build_debug.log')
+            handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+            logger.addHandler(handler)
+            logger.setLevel(logging.DEBUG)
         
         config = load_config_safe()
         self.scr.nodelay(True) # Non-blocking for UI updates during build if possible

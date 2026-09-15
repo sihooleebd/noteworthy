@@ -15,9 +15,15 @@ from ..components.common import LineEditor
 from ...utils import register_key
 from ..keybinds import KeyBind
 
-# Setup debug logging
-logging.basicConfig(filename='module_debug.log', level=logging.DEBUG, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+# A logger of our own.  This used to call `logging.basicConfig' here, at
+# import time, which configures the *root* logger for whatever process
+# imports this file -- the GUI server among them, by way of the settings
+# editor.  Everything it logged then went to `module_debug.log' in the
+# current directory at DEBUG level, including one line per Yjs awareness
+# message.  That file reached 68 MB inside a project root, which tinymist
+# watches: it re-read the file on every append and held on to the copies,
+# and the language server grew to 19 GB before it was killed.
+logger = logging.getLogger(__name__)
 
 MODULES_DIR = Path.cwd() / "templates/module"
 
@@ -310,7 +316,7 @@ class ModuleConfigEditor(ListEditor):
                  self.has_missing = True
         
         self.modified = True
-        logging.debug(f"Action Space: modified=True, has_missing={self.has_missing}")
+        logger.debug(f"Action Space: modified=True, has_missing={self.has_missing}")
         self._build_items()
 
     def action_enter(self, ctx):
@@ -420,21 +426,21 @@ class ModuleConfigEditor(ListEditor):
 
     def handle_input(self, k):
         if k == 27: # Esc
-            logging.debug("ESC pressed (manual catch)")
+            logger.debug("ESC pressed (manual catch)")
             return True, self.do_exit()
         
-        logging.debug(f"Key pressed: {k}")
+        logger.debug(f"Key pressed: {k}")
         return super().handle_input(k)
 
     def do_exit(self, ctx=None):
         """Override exit to ensure updates are applied."""
-        logging.debug(f"do_exit called. modified={self.modified}, has_updates={self.has_updates}, has_missing={self.has_missing}")
+        logger.debug(f"do_exit called. modified={self.modified}, has_updates={self.has_updates}, has_missing={self.has_missing}")
         if self.modified or self.has_updates or self.has_missing:
             self.save()
         return 'EXIT'
 
     def save(self):
-        logging.debug(f"save called. modified={self.modified}, has_updates={self.has_updates}, has_missing={self.has_missing}")
+        logger.debug(f"save called. modified={self.modified}, has_updates={self.has_updates}, has_missing={self.has_missing}")
         if self.modified or self.has_updates or self.has_missing:
             try:
                 def progress_cb(msg):
@@ -468,21 +474,21 @@ class ModuleConfigEditor(ListEditor):
                     # Check if missing
                     if not mod_path.exists():
                         needs_install = True
-                        logging.debug(f"Module {name} missing at {mod_path}")
+                        logger.debug(f"Module {name} missing at {mod_path}")
                     # Check if update available (SHA mismatch or missing SHA)
                     elif name in self.outdated_modules:
                         needs_install = True
-                        logging.debug(f"Module {name} outdated")
+                        logger.debug(f"Module {name} outdated")
                     
                     if needs_install:
                         to_install.append(name)
 
-                logging.debug(f"to_install list: {to_install}")
+                logger.debug(f"to_install list: {to_install}")
 
                 if to_install:
                     # Install and update SHAs
                     installed = install_modules(to_install, progress_cb, self.config)
-                    logging.debug(f"Install result: {installed}")
+                    logger.debug(f"Install result: {installed}")
                     for name, sha in installed.items():
                         if name in self.modules:
                              self.modules[name]["sha"] = sha
