@@ -10,14 +10,13 @@ Visualize 3D geometry and vectors.
   Creates a 3D coordinate system with perspective.
   ```typst
   space-canvas(
-    width: 8cm,
+    length: 1cm,   // size of one scene unit
     ..objects
   )
   ```
 ]
 
 #canvas.space-canvas(
-  width: 10cm,
   shape.point(2, 1, z: 3, label: "P"),
 )
 
@@ -26,7 +25,6 @@ Visualize 3D geometry and vectors.
 Use `point()` with z coordinate for 3D points:
 
 #canvas.space-canvas(
-  width: 10cm,
   shape.point(0, 0, z: 0, label: "O"),
   shape.point(3, 0, z: 0, label: "A"),
   shape.point(0, 3, z: 0, label: "B"),
@@ -45,7 +43,6 @@ Use `vec()` with 3 components for 3D vectors:
 ]
 
 #canvas.space-canvas(
-  width: 10cm,
   graph.vec((2, 1, 2), label: $arrow(v)$),
   graph.vec((1, 3, 1), label: $arrow(w)$),
 )
