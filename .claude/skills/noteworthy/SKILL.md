@@ -40,6 +40,7 @@ Edit through the room instead. When the `noteworthy` MCP server is connected:
 | `read_document` | the live text when a room holds it, the file otherwise |
 | `edit_document` | replace old→new; a delta through the room, so an open editor keeps its cursor, scroll and undo |
 | `append_document` | add at the end, same way |
+| `render_document` | render the book, a chapter or a page and hand back the pages as images (`format: "pdf"` also leaves the PDF on the server) |
 | `check_document` | compile the book and return typst's diagnostics |
 
 `edit_document` refuses an `old_string` that appears zero times, or more than
@@ -72,8 +73,10 @@ curl -X POST http://host:8010/api/rooms/reload -H 'Content-Type: application/jso
 
 ## Rendering a page to look at it
 
-A page is compiled through the parser with the project's inputs. Do this and
-**look at the image** before saying a figure works.
+`render_document` is the short way, and it takes names: `"8/2"`,
+`"content/8/2.typ"`, `"8"` for a chapter, nothing for the book. Without the MCP
+server, compile through the parser yourself -- and either way **look at the
+image** before saying a figure works.
 
 ```bash
 typst compile templates/core/parser.typ out-{n}.png --root . --ppi 110 \
@@ -111,16 +114,18 @@ canvas.space-canvas(x-domain:, y-domain:, z-domain:, size:, elevation:, azimuth:
                     projection: "orthographic" | "perspective", axis-dir: (y: -1))
 ```
 
-**shape** — `point(x, y, z: none)`, `segment`, `line`, `ray`, `circle`, `arc`,
-`polygon`, `triangle`, `rectangle`, `polyline(..points)`, `angle`, `right-angle`,
-`brace(from, to, label:, amplitude:, angle:)`, `text-at(pos, body, anchor:,
-color:)`, plus intersections and constructions.
+| module | what is in it | detail |
+|---|---|---|
+| unqualified | blocks, covers, layout, `@ref` | `reference/blocks.md` |
+| `shape` | points, lines, circles, arcs, polygons, angles, braces, text, constructions, intersections | `reference/geometry.md` |
+| `graph` | functions, parametric and polar curves, surfaces, vectors, tangents, Riemann sums | `reference/plotting.md` |
+| `data` | series, CSV, tables, smooth curves | `reference/plotting.md` |
+| `canvas` | the six canvases and the 3D camera | `reference/plotting.md` |
+| `combi` `trees` `dsa` `timeline` | permutations, trees, arrays/stacks/graphs/grids, timelines | `reference/structures.md` |
 
-**graph** — `graph(f)`, `parametric(t => (x, y))`, `polar-func`, `surface(f,
-u-domain:, v-domain:)`, `vec`, `vec-add`, `vec-project`.
-
-**data** — `data-series`, `csv-series`, `value-table`, `curve-through`.
-**combi**, **trees**, **dsa**, **timeline** — visualizations of their namesakes.
+Read the reference file for the module you are using: the signatures there are
+taken from `templates/module`, which is ahead of the feature document in
+`content/`.
 
 ### The 2D/3D rule
 
