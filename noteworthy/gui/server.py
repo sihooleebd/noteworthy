@@ -1281,7 +1281,8 @@ async def mcp_endpoint(request: Request):
     """
     from ..mcp import authorize, handle_rpc
 
-    ok, why = authorize(request.headers.get("authorization"))
+    ok, why = authorize(request.headers.get("authorization"),
+                        request.query_params.get("token"))
     if not ok:
         # 401 with a challenge, so a client knows to send one rather than
         # guessing at what it did wrong.

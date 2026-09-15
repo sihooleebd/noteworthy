@@ -154,7 +154,7 @@ def _expected_token() -> str | None:
     return (os.environ.get("NOTEWORTHY_MCP_TOKEN") or "").strip() or None
 
 
-def authorize(header: str | None) -> tuple[bool, str]:
+def authorize(header: str | None, query_token: str | None = None) -> tuple[bool, str]:
     """Whether a request may proceed, and why not when it may not.
 
     Fails closed.  With no token configured the endpoint refuses everyone,
@@ -168,9 +168,18 @@ def authorize(header: str | None) -> tuple[bool, str]:
     if not expected:
         return False, ("this server has no NOTEWORTHY_MCP_TOKEN set, so it "
                        "serves nobody")
-    if not header or not header.lower().startswith("bearer "):
+    # A query token as well as a header, for clients that cannot send one.
+    # Claude's mobile and web connectors authenticate by OAuth or not at all,
+    # and a 401 sends them looking for metadata this server does not publish.
+    # A token in the URL is weaker -- it is kept in the connector's config and
+    # shows up in any logging that records URLs -- so it is the fallback, not
+    # the way in.
+    if query_token:
+        given = query_token.strip()
+    elif header and header.lower().startswith("bearer "):
+        given = header.split(" ", 1)[1].strip()
+    else:
         return False, "missing bearer token"
-    given = header.split(" ", 1)[1].strip()
     if not hmac.compare_digest(given, expected):
         return False, "bad token"
     return True, ""
