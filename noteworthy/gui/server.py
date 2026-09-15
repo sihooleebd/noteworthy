@@ -1279,7 +1279,18 @@ async def mcp_endpoint(request: Request):
 
       claude mcp add --transport http noteworthy http://<host>:8010/mcp
     """
-    from ..mcp import handle_rpc
+    from ..mcp import authorize, handle_rpc
+
+    ok, why = authorize(request.headers.get("authorization"))
+    if not ok:
+        # 401 with a challenge, so a client knows to send one rather than
+        # guessing at what it did wrong.
+        return JSONResponse(
+            {"jsonrpc": "2.0", "id": None,
+             "error": {"code": -32001, "message": f"unauthorized: {why}"}},
+            status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     try:
         payload = await request.json()

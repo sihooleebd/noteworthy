@@ -135,6 +135,47 @@ TOOLS = [
 ]
 
 
+def _expected_token() -> str | None:
+    """The token every request must carry, from the environment or a file.
+
+    `NOTEWORTHY_MCP_TOKEN_FILE' so the secret can live in a file the process
+    can read and nothing else can -- /run/agenix/... , mode 400 -- rather than
+    in a unit file or a store path that is world-readable by construction.
+    """
+    import os
+
+    path = os.environ.get("NOTEWORTHY_MCP_TOKEN_FILE")
+    if path:
+        try:
+            return Path(path).read_text(encoding="utf-8").strip() or None
+        except OSError as e:
+            log.error("[MCP] token file %s unreadable: %s", path, e)
+            return None
+    return (os.environ.get("NOTEWORTHY_MCP_TOKEN") or "").strip() or None
+
+
+def authorize(header: str | None) -> tuple[bool, str]:
+    """Whether a request may proceed, and why not when it may not.
+
+    Fails closed.  With no token configured the endpoint refuses everyone,
+    rather than serving whoever can reach it: the tools here read and rewrite
+    the book, and `tailscale funnel' arrives over loopback like anything else,
+    so there is no address this could trust its way out of.
+    """
+    import hmac
+
+    expected = _expected_token()
+    if not expected:
+        return False, ("this server has no NOTEWORTHY_MCP_TOKEN set, so it "
+                       "serves nobody")
+    if not header or not header.lower().startswith("bearer "):
+        return False, "missing bearer token"
+    given = header.split(" ", 1)[1].strip()
+    if not hmac.compare_digest(given, expected):
+        return False, "bad token"
+    return True, ""
+
+
 def _base_dir() -> Path:
     from ..gui.server import BASE_DIR
     return Path(BASE_DIR)
