@@ -1139,6 +1139,11 @@ def save_module_config(name: str, data: dict = Body(...)):
     config_path.write_text(json.dumps(data, indent=4))
     return {"success": True}
 
+# Long enough for a book that is merely large, short enough that a runaway
+# page is a failed check rather than a wedged machine.
+CHECK_TIMEOUT_SECONDS = 180
+
+
 @app.post("/api/check")
 async def check_diagnostics(data: dict = Body(...)):
     """Run typst compile to get diagnostics."""
@@ -1184,17 +1189,36 @@ async def check_diagnostics(data: dict = Body(...)):
                 # index only matched while chapters ran 0,1,2,... .
                 page_folders[ch_dir.name] = pg_files
         
-        # Run typst compile with folder info
-        result = subprocess.run(
-            [
-                typst_bin, "compile", str(RENDERER_FILE), tmp_path, 
-                "--root", str(BASE_DIR),
-                "--input", f"chapter-folders={json.dumps(chapter_folders)}",
-                "--input", f"page-folders={json.dumps(page_folders)}"
-            ],
-            capture_output=True,
-            text=True
-        )
+        # Run typst compile with folder info.
+        #
+        # Bounded, because this compiles the whole book and a single page can
+        # make that unbounded: `smp = 1007' in one figure -- a sample count
+        # feeding every surface and curve on the page -- took 23 minutes and
+        # 21.9 GB of a 31 GB machine before anyone noticed, with nothing to
+        # stop it but the OOM killer.  Cetz costs roughly the square of the
+        # sample count, so this is a cliff a keystroke can walk off.
+        try:
+            result = subprocess.run(
+                [
+                    typst_bin, "compile", str(RENDERER_FILE), tmp_path,
+                    "--root", str(BASE_DIR),
+                    "--input", f"chapter-folders={json.dumps(chapter_folders)}",
+                    "--input", f"page-folders={json.dumps(page_folders)}"
+                ],
+                capture_output=True,
+                text=True,
+                timeout=CHECK_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            log.error("check: typst exceeded %ss; a page is pathological",
+                      CHECK_TIMEOUT_SECONDS)
+            return {
+                "diagnostics": [],
+                "error": (f"typst did not finish within {CHECK_TIMEOUT_SECONDS}s "
+                          "and was stopped. Some page costs far more than the "
+                          "rest -- a large sample or segment count in a figure "
+                          "is the usual reason."),
+            }
         
         log.debug(f"typst stderr: {result.stderr}")
         log.debug(f"typst returncode: {result.returncode}")
