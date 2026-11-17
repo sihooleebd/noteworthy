@@ -1,6 +1,6 @@
 # Noteworthy as a Syncworthy plugin
 
-`noteworthy -g` runs Syncworthy with `NoteworthyPlugin`; `noteworthy -g --old-gui` starts the previous built-in GUI (`noteworthy/gui/`, removed in a later phase).
+`noteworthy -g` runs Syncworthy with `NoteworthyPlugin`; the old built-in GUI, the solo GUI and the Emacs bridge are gone.
 
 Syncworthy is not published yet. Make it importable next to this checkout, any of:
 

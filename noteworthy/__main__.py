@@ -25,15 +25,12 @@ def main():
     # GUI flags
     parser.add_argument('-g', '--gui', action='store_true', help='Launch web GUI')
     parser.add_argument('-p', '--port', type=int, default=8000, help='[-g] Specify port (default: 8000)')
-    parser.add_argument('-nc', '--no-coop', action='store_true', help='[-g] Solo mode (no collaboration)')
     parser.add_argument('--packet-log', action='store_true', help='[-g] Enable low-level Yjs packet logging')
     parser.add_argument('--bind', default="127.0.0.1", help='[-g] Specify Listening Subnet (default: 127.0.0.1)')
     parser.add_argument('--insecure-open', action='store_true',
                         help='[-g] Serve with no auth tokens on a non-loopback --bind (Syncworthy refuses by default; '
                              'set SYNCWORTHY_EDIT_TOKEN / SYNCWORTHY_VIEW_TOKEN instead)')
     parser.add_argument('--headless', action='store_true', help='Do not launch browser after startup')
-    parser.add_argument('--old-gui', action='store_true',
-                        help='[-g] Start the old built-in GUI instead of Syncworthy with the noteworthy plugin')
 
     # Update flags
     parser.add_argument('-u', '--update', action='store_true', help='Update noteworthy')
@@ -127,36 +124,21 @@ def main():
 
     # Launch GUI if requested
     if args.gui:
+        # Syncworthy, with Noteworthy as its plugin
         try:
-            if args.no_coop:
-                # Solo mode: no collaboration, direct file editing
-                from .gui_solo.app import run_gui
-                run_gui(port=args.port)
-            elif args.old_gui:
-                # The old built-in collaborative GUI (removed in a later phase)
-                from .gui.app import run_gui
-                run_gui(host=args.bind, port=args.port, packet_log=args.packet_log, open_browser=(not args.headless))
-            else:
-                # Syncworthy, with Noteworthy as its plugin
-                try:
-                    from syncworthy import run_server
-                except ImportError as e:
-                    print("Error: the GUI is now served by Syncworthy, which is not importable.")
-                    print("Install it next to this checkout (see docs: Syncworthy), e.g.")
-                    print("    pip install -e ../syncworthy        (or: export PYTHONPATH=../syncworthy:$PYTHONPATH)")
-                    print("or start the previous GUI with:  noteworthy -g --old-gui")
-                    print(f"Details: {e}")
-                    sys.exit(1)
-                from .config import BASE_DIR
-                from .syncworthy_plugin import NoteworthyPlugin
-                run_server(BASE_DIR, host=args.bind, port=args.port, packet_log=args.packet_log,
-                           open_browser=(not args.headless), plugins=[NoteworthyPlugin()],
-                           insecure_open=args.insecure_open)
+            from syncworthy import run_server
         except ImportError as e:
-            print("Error: GUI requires additional dependencies.")
-            print("Install with: pip install fastapi uvicorn")
+            print("Error: the GUI is served by Syncworthy, which is not importable.")
+            print("Provide it (see docs/architecture/gui-stack.md), e.g.")
+            print("    pip install 'syncworthy @ git+https://github.com/R0K0R/syncworthy'")
+            print("    export PYTHONPATH=/path/to/syncworthy:$PYTHONPATH     (a checkout)")
             print(f"Details: {e}")
             sys.exit(1)
+        from .config import BASE_DIR
+        from .syncworthy_plugin import NoteworthyPlugin
+        run_server(BASE_DIR, host=args.bind, port=args.port, packet_log=args.packet_log,
+                   open_browser=(not args.headless), plugins=[NoteworthyPlugin()],
+                   insecure_open=args.insecure_open)
     else:
         # Launch TUI
         logging.basicConfig(level=logging.CRITICAL)
