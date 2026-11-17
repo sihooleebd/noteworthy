@@ -18,7 +18,24 @@
     },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "syncworthy": "syncworthy"
+      }
+    },
+    "syncworthy": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1794895965,
+        "narHash": "sha256-Y0b4J71MKUZeffzGyKPWJs1epqI2h9bGza8cxc1URtM=",
+        "owner": "R0K0R",
+        "repo": "syncworthy",
+        "rev": "09a8c37affcdf9ebc977b9e1eccdaeed1f9df14f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "repo": "syncworthy",
+        "type": "github"
       }
     }
   },

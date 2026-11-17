@@ -18,7 +18,7 @@ Before installing Noteworthy, ensure you have:
 
 | Dependency   | Purpose                                                     |
 | ------------ | ----------------------------------------------------------- |
-| **tinymist** | Live preview in Studio. Solo mode has no other preview path |
+| **tinymist** | Live preview in Studio (full-document preview) |
 
 ```bash
 cargo install --locked tinymist-cli

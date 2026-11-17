@@ -31,21 +31,15 @@ noteworthy/
 │   ├── editors/
 │   └── wizards/
 │
-├── gui/              # Web GUI (collaborative)
-│   ├── app.py
-│   ├── server.py
-│   ├── document_hub.py   # Presence, chat, preview relay
-│   ├── yjs_provider.py   # Binary CRDT transport (/yjs)
-│   ├── preview.py
-│   └── static/
-│
-├── gui_solo/         # Web GUI (solo mode, -nc)
-│   ├── app.py
-│   ├── server.py
-│   └── static/
-│
-└── bridge/           # Emacs <-> Yjs translation bridge
-    └── server.py
+└── syncworthy_plugin/  # Web GUI: the Noteworthy plugin for Syncworthy
+    ├── __init__.py       # NoteworthyPlugin
+    ├── previewer.py, preview.py   # SVG / tinymist preview
+    ├── diagnostics.py    # /api/check
+    ├── build.py          # Build PDF action
+    ├── routes.py, settings_routes.py
+    ├── mcp_tools.py      # render_document, check_document
+    ├── branding.py, startup.py, typst_grammar.py
+    └── static/
 ```
 
 ---
@@ -70,8 +64,9 @@ def main():
     if args.update:
         # Run update flow
     elif args.gui:
-        from .gui.app import run_gui
-        run_gui(port=args.port)
+        from syncworthy import run_server
+        from .syncworthy_plugin import NoteworthyPlugin
+        run_server(BASE_DIR, port=args.port, plugins=[NoteworthyPlugin()])
     else:
         # Launch TUI
         curses.wrapper(lambda scr: run_app(scr, args))
@@ -243,55 +238,35 @@ Setup wizards:
 
 ## Studio Module
 
-The web interface uses FastAPI + WebSockets.
+The web interface is [Syncworthy](https://github.com/R0K0R/syncworthy) (FastAPI,
+Yjs rooms, presence hub, MCP, file watcher, auth) with `syncworthy_plugin/` as
+its Noteworthy plugin. Syncworthy is not part of this package; see
+[Studio Stack](gui-stack.md) for how to provide it.
 
-### gui/app.py
+### syncworthy_plugin/__init__.py
 
-Studio launcher:
+`NoteworthyPlugin` declares the project layout (`roots`, `state_dir`), and
+supplies the previewer, diagnostics, the Build action, settings pages, MCP tools,
+the Typst grammar, branding and the frontend bundle.
 
-```python
-def run_gui(host="127.0.0.1", port=8000):
-    import uvicorn
-    from .server import app
-    uvicorn.run(app, host=host, port=port)
-```
+### syncworthy_plugin/previewer.py, preview.py
 
-### gui/server.py
+Live preview management: `typst watch` SVG per page, the Tinymist full preview,
+and update notifications through Syncworthy's hub.
 
-FastAPI application with:
+### syncworthy_plugin/diagnostics.py, build.py
 
-- REST API endpoints
-- WebSocket connections
-- File operations
-- Build API
+`/api/check` (Typst diagnostics) and the PDF build, with progress events.
 
-See [Studio Stack](gui-stack.md) for details.
+### syncworthy_plugin/routes.py, settings_routes.py
 
-### gui/document_hub.py
+The Noteworthy REST endpoints: metadata, constants, hierarchy, preface,
+snippets, indexignore, schemes, modules, build, download, Tinymist control.
 
-Real-time document synchronization:
+### syncworthy_plugin/mcp_tools.py
 
-- User session management
-- Cursor tracking
-- Content synchronization
-- Chat messaging
-
-### gui/yjs_provider.py
-
-Yjs CRDT integration:
-
-- Yjs room management
-- CRDT state persistence
-- WebSocket broadcasting
-
-### gui/preview.py
-
-Live preview management:
-
-- File watching
-- Typst compilation
-- PDF generation
-- WebSocket broadcast
+`render_document` and `check_document`. The other MCP tools (`list_documents`,
+`read_document`, `edit_document`, `append_document`) are Syncworthy's.
 
 ---
 
@@ -301,7 +276,7 @@ Live preview management:
 graph LR
     CLI["CLI Args"] --> Main["__main__.py"]
     Main --> TUI["tui/app.py"]
-    Main --> GUI["gui/server.py"]
+    Main --> GUI["syncworthy_plugin/ (via Syncworthy)"]
     
     TUI --> Core["core/build.py"]
     GUI --> Core

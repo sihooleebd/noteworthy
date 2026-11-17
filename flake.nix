@@ -3,8 +3,19 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+  # The web GUI (`noteworthy -g`) is Syncworthy with noteworthy as its plugin.
+  # Only used when no checkout is found (see the dev shell's shellHook).
+  inputs.syncworthy = {
+    url = "github:R0K0R/syncworthy";
+    flake = false;
+  };
+
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+      syncworthy,
+    }:
     let
       systems = [
         "x86_64-linux"
@@ -19,10 +30,10 @@
         pkgs:
         let
           # External binaries the build pipeline shells out to
-          # (noteworthy/core/deps.py, core/build.py, gui/preview.py).
+          # (noteworthy/core/deps.py, core/build.py, syncworthy_plugin/preview.py).
           typstTools = [
             pkgs.typst # document compiler
-            pkgs.tinymist # live preview + LSP (noteworthy/gui/preview.py spawns it)
+            pkgs.tinymist # live preview + LSP (syncworthy_plugin/ spawns it)
             pkgs."poppler-utils" # pdfinfo, pdfunite
             pkgs.ghostscript # gs — pdfunite fallback + pdfmark metadata
           ];
@@ -71,6 +82,15 @@
             shellHook = ''
               root=$(${pkgs.git}/bin/git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")
               export PYTHONPATH="$root''${PYTHONPATH:+:$PYTHONPATH}"
+              # `noteworthy -g` is Syncworthy with this package as a plugin.  Use a
+              # checkout when there is one -- $SYNCWORTHY_SRC, else ../syncworthy,
+              # for hacking on both -- and otherwise the flake input
+              # (github:R0K0R/syncworthy, pinned in flake.lock).
+              sw="''${SYNCWORTHY_SRC:-$root/../syncworthy}"
+              if [ ! -d "$sw/syncworthy" ]; then
+                sw="${syncworthy}"
+              fi
+              export PYTHONPATH="$sw:$PYTHONPATH"
               export PYTHONDONTWRITEBYTECODE=1
 
               # Skip the banner when direnv sources this on every `cd`.
