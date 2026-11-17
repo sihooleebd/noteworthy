@@ -6,3 +6,6 @@ websockets>=11.0
 # Real-time collaboration (CRDT)
 pycrdt>=0.8.0
 pycrdt-websocket>=0.12.0
+
+# The web GUI is Syncworthy with Noteworthy as a plugin (needs Python 3.11+)
+syncworthy @ git+https://github.com/R0K0R/syncworthy

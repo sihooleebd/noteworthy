@@ -16,12 +16,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The web GUI (`noteworthy -g`) is Syncworthy with this package as a plugin.
-# Not on PyPI yet: until it is, install a checkout next to this one
-# (`pip install -e ../syncworthy`, or `uv sync --extra gui`, which reads
-# [tool.uv.sources] below), or put it on PYTHONPATH.
+# The web GUI (`noteworthy -g`) is Syncworthy with this package as a plugin
+# (https://github.com/R0K0R/syncworthy, not on PyPI).  `pip install
+# 'noteworthy[gui]'` / `uv sync --extra gui` fetch it from GitHub.  With a local
+# checkout instead, `pip install -e ../syncworthy` or put it on PYTHONPATH
+# (the nix dev shell does, see flake.nix and SYNCWORTHY_SRC).
 gui = [
-    "syncworthy",
+    "syncworthy @ git+https://github.com/R0K0R/syncworthy",
 ]
 dev = [
     "pytest>=8.0",
@@ -34,12 +35,12 @@ noteworthy = "noteworthy.__main__:main"
 [project.entry-points."syncworthy.plugins"]
 noteworthy = "noteworthy.syncworthy_plugin:NoteworthyPlugin"
 
-[tool.uv.sources]
-syncworthy = { path = "../syncworthy", editable = true }
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true   # the syncworthy git URL above
 
 [tool.hatch.build.targets.wheel]
 packages = ["noteworthy"]
