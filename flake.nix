@@ -71,6 +71,13 @@
             shellHook = ''
               root=$(${pkgs.git}/bin/git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")
               export PYTHONPATH="$root''${PYTHONPATH:+:$PYTHONPATH}"
+              # `noteworthy -g` is Syncworthy with this package as a plugin.  Until
+              # Syncworthy is published, use the checkout next to this one (or set
+              # SYNCWORTHY_SRC to another).
+              sw="''${SYNCWORTHY_SRC:-$root/../syncworthy}"
+              if [ -d "$sw/syncworthy" ]; then
+                export PYTHONPATH="$sw:$PYTHONPATH"
+              fi
               export PYTHONDONTWRITEBYTECODE=1
 
               # Skip the banner when direnv sources this on every `cd`.
