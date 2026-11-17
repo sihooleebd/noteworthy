@@ -111,7 +111,7 @@ noteworthy/
 ├── noteworthy/          # Python package
 │   ├── core/            # Build engine
 │   ├── tui/             # Terminal UI
-│   └── gui/             # Web GUI
+│   └── syncworthy_plugin/  # Web GUI plugin (Syncworthy provides the rest)
 ├── templates/           # Typst templates
 ├── docs/                # Documentation
 ├── tests/               # Test files

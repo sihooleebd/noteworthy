@@ -17,9 +17,7 @@ myproject/
 │   ├── utils.py           # Utility functions
 │   ├── core/              # Build engine
 │   ├── tui/               # Terminal UI
-│   ├── gui/               # Web GUI (collaborative)
-│   ├── gui_solo/          # Web GUI (solo mode, -nc)
-│   └── bridge/            # Emacs sync bridge
+│   └── syncworthy_plugin/ # Web GUI: the Noteworthy plugin for Syncworthy
 │
 ├── templates/             # Typst templates
 │   ├── core/              # Core rendering (parser, setup)
@@ -169,11 +167,14 @@ noteworthy/
 │   ├── menus.py      # Menu screens
 │   └── wizards/      # Setup wizards
 │
-└── gui/
-    ├── app.py        # GUI launcher
-    ├── server.py     # FastAPI backend
-    ├── document_hub.py  # Real-time sync
-    └── static/       # Web frontend
+└── syncworthy_plugin/   # `noteworthy -g` is Syncworthy + this plugin
+    ├── __init__.py       # NoteworthyPlugin
+    ├── previewer.py      # SVG / tinymist preview
+    ├── diagnostics.py    # /api/check
+    ├── build.py          # Build PDF action
+    ├── routes.py, settings_routes.py
+    ├── mcp_tools.py      # render_document, check_document
+    └── static/           # Plugin frontend bundle
 ```
 
 ---

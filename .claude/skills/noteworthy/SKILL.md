@@ -23,7 +23,8 @@ Blocks, covers and layouts come in unqualified; everything else is a namespace:
 
 ## The room is the document; the file is its export
 
-A Noteworthy server holds each open file as a Yjs CRDT **room**. While a room is
+A Noteworthy server (`noteworthy -g`: [Syncworthy](https://github.com/R0K0R/syncworthy) with the
+`noteworthy` plugin, see below) holds each open file as a Yjs CRDT **room**. While a room is
 live it is authoritative, and it rewrites the file within a debounce of every
 edit.
 
@@ -32,7 +33,9 @@ room's next save puts the old text back over what was written, and nobody
 connected ever sees the change. This is the single most expensive mistake to make
 here — it looks like it worked, and reverts a few seconds later.
 
-Edit through the room instead. When the `noteworthy` MCP server is connected:
+Edit through the room instead. When the `noteworthy` MCP server is connected
+(`POST /mcp` on the server; Syncworthy provides the first four tools, the
+Noteworthy plugin adds the last two):
 
 | tool | for |
 |---|---|
@@ -50,6 +53,26 @@ file nobody has open.
 Without the MCP server, editing files directly is only safe when no server is
 running against that project.
 
+## The server, and who may reach it
+
+- **GUI** = Syncworthy + the `noteworthy` plugin (`noteworthy/syncworthy_plugin/`).
+  `noteworthy -g [-p PORT] [--bind ADDR] [--headless]`; `--bind` defaults to
+  `127.0.0.1`. The old built-in GUI, the solo mode (`-nc`) and the Python Emacs
+  bridge are gone. Syncworthy must be importable: `nix develop` provides it
+  (`$SYNCWORTHY_SRC`, else `../syncworthy`, else the flake input); otherwise
+  `pip install 'noteworthy[gui]'`.
+- **Emacs** = `noteworthy-workspace` (`noteworthy-workspace-connect SERVER [TOKEN]`)
+  through `syncworthy_bridge`, speaking the emacs-collab protocol
+  (github.com/R0K0R/emacs-collab.el, `PROTOCOL.md`). `/ws/emacs` no longer exists.
+- **Auth.** Tokens have role `edit` or `view`, set with `SYNCWORTHY_EDIT_TOKEN` /
+  `SYNCWORTHY_VIEW_TOKEN` (or `[auth]` in `syncworthy.toml`, secrets via env var or
+  file only). A browser opens `/?token=...` once; scripts send
+  `Authorization: Bearer ...`. A non-loopback `--bind` with no tokens is refused
+  unless `--insecure-open` is passed; never pass that on an untrusted network.
+- **MCP** (`/mcp`) has its own bearer token, `NOTEWORTHY_MCP_TOKEN` (or
+  `SYNCWORTHY_MCP_TOKEN`); with none set it fails closed. A `view` token cannot
+  write, so `POST /api/rooms/reload` and the editing tools need an `edit` one.
+
 ## Deploying templates and modules
 
 `templates/` is not a document, so it is deployed rather than edited through a
@@ -66,8 +89,10 @@ cd ../..        && git commit -am "Bump modules: ..." && git push
 rsync -a --delay-updates --exclude='.git' templates/module/ host:project/templates/module/
 
 # reconcile ONLY the paths deployed.  An empty body means *every* live room,
-# which reloads documents nobody asked you to touch.
+# which reloads documents nobody asked you to touch.  (Drop the Authorization
+# header if the server has no tokens.)
 curl -X POST http://host:8010/api/rooms/reload -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"paths": ["templates/module/canvas/space.typ"]}'
 ```
 

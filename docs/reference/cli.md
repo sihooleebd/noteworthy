@@ -34,10 +34,10 @@ noteworthy [OPTIONS]
 |           | `--print-inputs` | Print Typst input flags             |
 | `-g`      | `--gui`          | Launch Noteworthy Studio            |
 | `-p PORT` | `--port PORT`    | `[-g]` Specify port (default: 8000) |
-| `-nc`     | `--no-coop`      | `[-g]` Solo mode (no collaboration) |
 |           | `--bind ADDR`    | `[-g]` Listening address (default: `127.0.0.1`) |
 |           | `--headless`     | `[-g]` Do not open a browser on startup |
 |           | `--packet-log`   | `[-g]` Log low-level Yjs packets (debugging) |
+|           | `--insecure-open`| `[-g]` Serve with no auth tokens on a non-loopback `--bind` (refused otherwise; set `SYNCWORTHY_EDIT_TOKEN` instead) |
 | `-u`      | `--update`       | Update from GitHub                  |
 | `-n`      | `--nightly`      | `[-u]` Use nightly branch           |
 | `-f`      | `--force`        | `[-u]` Force clean install          |
@@ -51,14 +51,11 @@ noteworthy
 # Launch Noteworthy Studio
 noteworthy -g
 
-# Launch Studio in Solo Mode (No collaboration)
-noteworthy -g -nc
-
 # Studio on custom port
 noteworthy -g -p 3000
 
-# Studio reachable from other machines (LAN, Tailscale, tunnels)
-noteworthy -g --bind 0.0.0.0
+# Studio reachable from other machines (LAN, Tailscale, tunnels): needs tokens
+SYNCWORTHY_EDIT_TOKEN=... noteworthy -g --bind 0.0.0.0
 
 # Update to latest
 noteworthy -u

@@ -16,7 +16,7 @@ graph TB
         Main["__main__.py"]
         Core["core/"]
         TUICode["tui/"]
-        GUICode["gui/"]
+        GUICode["syncworthy_plugin/"]
     end
 
     subgraph Typst["Typst Layer (templates/)"]
@@ -72,7 +72,7 @@ The `noteworthy/` package handles:
 | `utils.py`    | Shared utilities                  |
 | `core/`       | Build engine                      |
 | `tui/`        | Terminal interface                |
-| `gui/`        | Web interface                     |
+| `syncworthy_plugin/` | Web interface plugin (on Syncworthy) |
 
 ### Key Modules
 
@@ -82,9 +82,10 @@ The `noteworthy/` package handles:
 | `core/build_manager.py` | Parallel build orchestration |
 | `core/deps.py`          | Dependency checking          |
 | `core/pm.py`            | Package manager for modules  |
-| `gui/server.py`         | FastAPI backend              |
-| `gui/document_hub.py`   | Presence, chat, preview relay |
-| `gui/yjs_provider.py`   | Yjs CRDT content transport    |
+| `syncworthy_plugin/__init__.py` | The Noteworthy plugin for Syncworthy (the server, rooms and hub are Syncworthy's) |
+| `syncworthy_plugin/previewer.py` | Live preview (SVG, tinymist) |
+| `syncworthy_plugin/build.py` | PDF build action |
+| `syncworthy_plugin/mcp_tools.py` | `render_document`, `check_document` |
 
 ---
 

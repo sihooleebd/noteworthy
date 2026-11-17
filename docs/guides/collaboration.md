@@ -19,35 +19,16 @@ Noteworthy Studio supports real-time collaboration, allowing multiple users to e
 
 ---
 
-## Solo Mode
+## Working alone
 
-For users who prefer working alone or offline, Noteworthy offers a dedicated **Solo Mode**.
+Studio is Syncworthy with a Noteworthy plugin (see the
+[Studio stack](../architecture/gui-stack.md)). There is no separate solo mode
+any more: the old `-nc` flag and the `gui_solo` GUI are gone. Alone on the
+default loopback bind, with no tokens, you are the only user; chat and the user
+list simply stay empty.
 
-### Why use Solo Mode?
-- **Privacy**: No external connections, no chat, no online user visibility.
-- **Simplicity**: Direct file editing without synchronization overhead.
-- **Fast Live Preview**: [Tinymist](https://github.com/Myriad-Dreamin/tinymist) is the sole preview path, with no SVG watcher running alongside it.
-
-### Usage
-Launch with the `-nc` flag:
-
-```bash
-noteworthy -g -nc
-```
-
-In Solo Mode, the "Solo" badge appears in the header, and collaboration features (Chat, Online Users) are disabled.
-
-### Fast Preview
-
-Solo mode disables the per-page SVG preview watcher and renders exclusively
-through Tinymist:
-- **Instant updates**: Sub-100ms render times
-- **Embedded**: Preview runs directly in the browser via an iframe
-
-> [!NOTE]
-> Tinymist is not solo-only. Collaborative mode exposes the same
-> `/api/tinymist/*` endpoints for full-document preview; the difference is that
-> it also runs the incremental SVG preview, which solo mode turns off.
+Tinymist preview is available either way: the `/api/tinymist/*` endpoints serve
+the full-document preview next to the incremental SVG preview.
 
 ---
 
@@ -68,6 +49,12 @@ Share `http://<your-ip>:8000` with collaborators.
 > `--bind` is required here. Studio defaults to `127.0.0.1`, which accepts
 > connections only from the machine it runs on, so plain `noteworthy -g` is
 > unreachable from anywhere else on the network.
+
+> [!IMPORTANT]
+> On a non-loopback bind Syncworthy **refuses to start without auth tokens**.
+> Set `SYNCWORTHY_EDIT_TOKEN` (and optionally `SYNCWORTHY_VIEW_TOKEN` for
+> read-only guests) before starting, or pass `--insecure-open` to serve with no
+> authentication at all. See [Access control](#access-control).
 
 ### Remote via ngrok
 
@@ -157,33 +144,66 @@ no last-write-wins mode:
 
 ---
 
-## Editing from Emacs
+## Access control
 
-Emacs clients ([noteworthy-collab.el](https://github.com/R0K0R/noteworthy-collab.el))
-do not speak the binary Yjs protocol. They connect to the bridge, which
-translates a JSON delta protocol to and from the CRDT layer:
+Syncworthy authenticates with project tokens, each with a role:
 
-```text
-Emacs --JSON /ws/emacs--> bridge (8001) --binary /yjs--> Studio (8000)
-                                        \--JSON /ws/doc-->
-```
-
-Start the Studio server as usual, then run the bridge alongside it:
+| Role   | Can                                                                   |
+| ------ | --------------------------------------------------------------------- |
+| `edit` | everything                                                            |
+| `view` | read documents, see presence, chat; its edits are dropped, writes are refused |
 
 ```bash
-noteworthy -g                                              # Studio on :8000
-uvicorn noteworthy.bridge.server:app --port 8001           # bridge on :8001
+export SYNCWORTHY_EDIT_TOKEN=...      # also ..._FILE to read it from a file
+export SYNCWORTHY_VIEW_TOKEN=...
+noteworthy -g --bind 0.0.0.0
 ```
 
-Point Emacs at the bridge, not the Studio port:
+More tokens (named, from an environment variable or a file; never inline) go in
+a `syncworthy.toml` in the project:
+
+```toml
+[auth]
+tokens = [
+  { name = "me",    token_env  = "SYNCWORTHY_TOKEN_ME", role = "edit" },
+  { name = "class", token_file = "/run/secrets/class",  role = "view" },
+]
+```
+
+A collaborator opens `http://<host>:8000/?token=<token>` once; the server then
+sets an HttpOnly cookie. Scripts send `Authorization: Bearer <token>`.
+The `/mcp` endpoint keeps its own bearer token (`NOTEWORTHY_MCP_TOKEN`).
+
+`--insecure-open` serves with no tokens on a non-loopback address. Use it only
+on a network you trust (a Tailscale tailnet, say).
+
+---
+
+## Editing from Emacs
+
+Emacs joins a Studio session through
+[**noteworthy-workspace**](https://github.com/R0K0R/noteworthy-workspace), the
+Noteworthy front end of
+[emacs-collab.el](https://github.com/R0K0R/emacs-collab.el), with
+[`syncworthy_bridge`](https://github.com/R0K0R/syncworthy_bridge) as the bridge
+program (it must be on `PATH`, or set `noteworthy-workspace-bridge-command`).
 
 ```elisp
-(setq noteworthy-collab-server-url "ws://localhost:8001/ws/emacs")
+(require 'noteworthy-workspace)
+M-x noteworthy-workspace-connect RET http://host:8000 RET <token>
 ```
 
-Emacs peers appear in the web UI like any other collaborator — shared cursors,
-selections and chat all cross the bridge. See the
-[Emacs Protocol reference](../reference/emacs-protocol.md) for the wire format.
+The bridge mirrors the project into a local directory you choose; buffers there
+sync live through the server's `/yjs` rooms, and Emacs users appear in the web UI
+with cursors, selections and chat like anyone else. For a server that wants a
+token, put a line in auth-source (`machine <host> port <port> login token password
+<secret>`). A view-only token mirrors files and shows peers but cannot edit.
+
+The old setup (`uvicorn noteworthy.bridge.server:app`, the `/ws/emacs`
+endpoint and `noteworthy-collab.el`) is retired and no longer in this
+repository. The wire protocol is emacs-collab's
+[PROTOCOL.md](https://github.com/R0K0R/emacs-collab.el/blob/master/PROTOCOL.md);
+see the [Emacs protocol page](../reference/emacs-protocol.md).
 
 ---
 
@@ -219,20 +239,18 @@ Each browser tab is a separate session. Avoid editing the same file in multiple 
 
 ## Security Notes
 
+Studio has token authentication (see [Access control](#access-control)). The
+default bind is loopback with no tokens, which is only reachable from your own
+machine.
+
 > [!WARNING]
-> Noteworthy Studio does not have authentication. Anyone with the URL can:
+> With `--insecure-open` on a non-loopback address, anyone who can reach the URL can:
 > - View all files
 > - Edit any content
 > - See chat messages
 
 For sensitive projects:
-- Use ngrok's authentication features
+- Use tokens, and give guests a `view` token
+- Prefer a VPN or Tailscale over a public tunnel (it also gives you HTTPS)
+- If you use ngrok, use its authentication features as well
 - Limit sharing to trusted collaborators
-- Consider a VPN for remote access
-
----
-
-## Next Steps
-
-- [Building Guide →](building.md)
-- [Studio Architecture →](../architecture/gui-stack.md)

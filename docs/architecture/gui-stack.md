@@ -1,97 +1,72 @@
 # Noteworthy Studio Stack
 
-Architecture of Noteworthy Studio.
+Architecture of Noteworthy Studio, the web GUI started by `noteworthy -g`.
 
 ## Overview
 
-Noteworthy Studio is built with:
+Studio is **[Syncworthy](https://github.com/R0K0R/syncworthy) with Noteworthy as
+a plugin**. Syncworthy is a real-time collaborative editor for any project
+(Monaco + Yjs, one CRDT room per file, presence, cursors, chat, an MCP endpoint,
+a file watcher, token auth). Everything specific to Typst books lives in
+`noteworthy/syncworthy_plugin/`. The old built-in GUI (`noteworthy/gui/`), the
+solo GUI (`gui_solo/`, `-nc`) and the Emacs bridge (`noteworthy/bridge/`) were
+removed.
 
-| Layer         | Technology              |
-| ------------- | ----------------------- |
-| **Backend**   | FastAPI + Python                                  |
-| **Real-time** | Two WebSockets: JSON presence + binary Yjs CRDT   |
-| **Frontend**  | HTML + CSS + JavaScript (ES modules)              |
-| **Editor**    | Monaco Editor + Yjs (`y-monaco` binding)          |
-| **Preview**   | Incremental SVG / Tinymist / PDF.js               |
+| Layer         | Technology                                          | Where |
+| ------------- | --------------------------------------------------- | ----- |
+| **Backend**   | FastAPI + Python                                    | Syncworthy |
+| **Real-time** | Two WebSockets: JSON presence + binary Yjs CRDT     | Syncworthy |
+| **Frontend**  | HTML + CSS + JavaScript (ES modules)                | Syncworthy, plus the plugin bundle |
+| **Editor**    | Monaco Editor + Yjs (`y-monaco` binding)            | Syncworthy |
+| **Preview**   | Incremental SVG (`typst watch`) / Tinymist / PDF.js | the plugin |
+| **Build, diagnostics, settings pages, Typst grammar** | | the plugin |
 
+## Getting Syncworthy
 
+Syncworthy is not on PyPI. `noteworthy -g` needs it importable, and says how if
+it is not. Any one of:
 
----
+- **`nix develop`**: the dev shell puts a checkout on `PYTHONPATH`: `$SYNCWORTHY_SRC`,
+  else `../syncworthy`, else the `syncworthy` flake input
+  (`github:R0K0R/syncworthy`, pinned in `flake.lock`).
+- **pip / uv**: `pip install 'noteworthy[gui]'` or `uv sync --extra gui` fetch it
+  from `git+https://github.com/R0K0R/syncworthy` (declared in `pyproject.toml`).
+- **A checkout**: `pip install -e /path/to/syncworthy`, or
+  `export PYTHONPATH=/path/to/syncworthy:$PYTHONPATH`.
 
-## Architecture Variants
+Syncworthy needs Python 3.11 or newer.
 
-Noteworthy Studio runs in two distinct modes:
+## How the plugin plugs in
 
-### 1. Collaborative Mode (Default)
-Full feature set with real-time sync.
-- **Content**: `Yjs` CRDT over the binary `/yjs` socket, one room per file
-- **Presence**: `DocumentHub` over the JSON `/ws/doc` socket (users, chat, cursors, preview)
-- **Split**: The two sockets are strictly separated — `/ws/doc` never carries
-  document content, and `/yjs` never carries chat or presence
+`noteworthy -g` calls `syncworthy.run_server(BASE_DIR, ..., plugins=[NoteworthyPlugin()])`.
+The plugin is also registered under the entry-point group `syncworthy.plugins`
+(`noteworthy = "noteworthy.syncworthy_plugin:NoteworthyPlugin"` in
+`pyproject.toml`), so `syncworthy serve <project>` with `plugins = ["noteworthy"]`
+in the project's `syncworthy.toml` works once both are installed. The plugin
+interface is documented in Syncworthy's
+[`docs/PLUGINS.md`](https://github.com/R0K0R/syncworthy/blob/master/docs/PLUGINS.md).
 
-### 2. Solo Mode (`-nc`)
-Simplified stack for local-only editing with fast live preview.
+A Noteworthy project is the checkout the `noteworthy` package lives in
+(`noteworthy.config` resolves every path from there), so that is the directory
+Syncworthy serves.
 
-| Component        | Technology                                |
-| ---------------- | ----------------------------------------- |
-| **Backend**      | FastAPI (simplified routes)               |
-| **State**        | Direct file system read/write             |
-| **Sync**         | HTTP `POST /api/file` (500ms debounce)    |
-| **Preview**      | Tinymist HTML preview (fast, auto-reload) |
-| **WebSocket**    | One-way (Server → Client) for diagnostics |
-| **Chat/Cursors** | Disabled (No collaboration features)      |
+| Plugin hook (`NoteworthyPlugin`) | Noteworthy's use |
+| --- | --- |
+| `state_dir` | `.noteworthy-crdt/`, so existing projects keep their CRDT state |
+| `roots`, `tree_ignore`, `ignore` | the tree shows `assets`, `config`, `content`, `templates`, no dotfiles |
+| `previewer` | per-page SVG preview (`typst watch`) and the Tinymist full-document preview |
+| `diagnostics` | `POST /api/check`, Typst diagnostics as editor markers |
+| `actions()` | the **Build PDF** page (`POST /api/build`, progress events) |
+| `settings_pages()` | Metadata, Theme & Display, Structure, Color Themes, Snippets, Preface, Ignored, Modules, Info |
+| `mcp_tools()` | `render_document`, `check_document` |
+| `languages()` | a Typst Monarch grammar for Monaco |
+| `branding()` | welcome text, themes, `.typ` defaults |
+| `routers()` | the settings, build, download and Tinymist endpoints below |
+| `static_dir` | the frontend bundle, served at `/plugins/noteworthy/` |
 
-**Key Differences from Collaborative Mode:**
-
-```mermaid
-graph LR
-    subgraph Collaborative["Collaborative Mode"]
-        A1[Monaco Editor] <-->|Yjs CRDT| B1[yjs_provider]
-        B1 <-->|WebSocket| C1[Other Users]
-        B1 --> D1[SVG Preview]
-    end
-    
-    subgraph Solo["Solo Mode"]
-        A2[Monaco Editor] -->|HTTP POST| B2[File System]
-        B2 --> C2[Tinymist]
-        C2 --> D2[HTML Preview]
-    end
-```
-
-**Solo Mode Components:**
-
-| File                         | Purpose                        |
-| ---------------------------- | ------------------------------ |
-| `gui_solo/server.py`         | Simplified FastAPI server      |
-| `gui_solo/static/js/app.js`  | Frontend without collaboration |
-| `gui_solo/static/index.html` | UI without chat/cursors        |
-
-**Tinymist Preview Integration:**
-
-Solo mode uses [Tinymist](https://github.com/Myriad-Dreamin/tinymist) for live preview:
-
-1. Server spawns Tinymist process on file open
-2. Tinymist serves HTML preview on random port  
-3. Frontend embeds preview via iframe
-4. Tinymist auto-reloads on file changes (via file watcher)
-
-```mermaid
-sequenceDiagram
-    participant Editor as Monaco Editor
-    participant Server as FastAPI
-    participant FS as File System
-    participant TM as Tinymist
-    participant Preview as Preview iframe
-
-    Editor->>Server: POST /api/file (debounced)
-    Server->>FS: Write file
-    FS-->>TM: File change detected
-    TM->>TM: Recompile
-    TM-->>Preview: Auto-reload HTML
-```
-
-> [!TIP]
-> Solo mode is ideal for single-user editing where fast preview is prioritized over collaboration features.
+Source layout: `__init__.py` (the plugin), `previewer.py` and `preview.py`,
+`diagnostics.py`, `build.py`, `routes.py`, `settings_routes.py`, `mcp_tools.py`,
+`branding.py`, `startup.py`, `typst_grammar.py`, `static/`.
 
 ## Architecture Diagram
 
@@ -100,20 +75,28 @@ graph TB
     subgraph Browser["Browser"]
         Monaco["Monaco Editor"]
         PDFViewer["PDF Viewer"]
-        UI["UI Components"]
+        UI["UI + plugin bundle"]
     end
 
     subgraph WebSocket["WebSockets"]
-        YjsSock["/yjs — CRDT content (binary)"]
-        DocSock["/ws/doc — presence, cursors, chat (JSON)"]
+        YjsSock["/yjs/<path>: CRDT content (binary)"]
+        DocSock["/ws/doc: presence, cursors, chat, preview (JSON)"]
     end
 
-    subgraph Server["FastAPI Server"]
+    subgraph Syncworthy["Syncworthy (FastAPI)"]
         Routes["REST API"]
-        WSHandler["WS Handler"]
-        Hub["Document Hub"]
-        Provider["yjs_provider"]
-        Preview["Preview Manager"]
+        Hub["Hub"]
+        Rooms["Rooms (Yjs)"]
+        Watcher["File watcher"]
+        Auth["Auth"]
+        MCP["/mcp"]
+    end
+
+    subgraph Plugin["noteworthy plugin"]
+        Preview["Previewer"]
+        Diag["Diagnostics"]
+        Build["Build"]
+        Settings["Settings routes"]
     end
 
     subgraph FileSystem["File System"]
@@ -124,36 +107,47 @@ graph TB
 
     Monaco <--> YjsSock
     Monaco <--> DocSock
-    PDFViewer <--> Preview
+    YjsSock <--> Rooms
+    DocSock <--> Hub
     UI <--> Routes
-
-    YjsSock <--> Provider["yjs_provider"]
-    DocSock <--> WSHandler
-
-    WSHandler <--> Hub
     Routes <--> FileSystem
+    Rooms --> FileSystem
+    Watcher --> Rooms
     Hub --> Preview
-    Preview --> Output
+    Routes --> Diag
+    Routes --> Build
+    Routes --> Settings
+    Build --> Output
 ```
 
 ---
 
-## Backend Components
+## Endpoints
 
-### server.py
+**Syncworthy (generic):**
 
-The main FastAPI application.
+| Endpoint                 | Method   | Purpose                                      |
+| ------------------------ | -------- | -------------------------------------------- |
+| `/api/file`              | GET/POST | Read/write a file (create with POST)         |
+| `/api/tree`              | GET      | File tree                                    |
+| `/api/rename`            | POST     | Rename file or folder                        |
+| `/api/delete`            | POST     | Delete file or folder                        |
+| `/api/upload`            | POST     | Upload file                                  |
+| `/api/rooms/reload`      | POST     | Reconcile live rooms with the files on disk  |
+| `/api/app`               | GET      | Branding, plugin capabilities, auth role     |
+| `/api/status`            | GET      | Server + plugin status                       |
+| `/api/debug/yjs`         | GET      | Yjs room introspection                       |
+| `/api/check`             | POST     | Diagnostics (served by the plugin's checker) |
+| `/api/actions/{id}`      | POST     | Run a plugin action (Build)                  |
+| `/api/settings/{id}`     | GET/POST | Schema-driven plugin settings pages          |
+| `/mcp`                   | POST     | MCP, see below                               |
+| `/auth/logout`           | -        | Clears the session cookie                    |
 
-**REST Endpoints:**
+**Added by the Noteworthy plugin** (`routes.py`, `settings_routes.py`):
 
 | Endpoint                       | Method   | Purpose                       |
 | ------------------------------ | -------- | ----------------------------- |
-| `/api/file`                    | GET/POST | Read/write files              |
-| `/api/tree`                    | GET      | File tree                     |
 | `/api/structure`               | GET      | Chapter/page structure        |
-| `/api/rename`                  | POST     | Rename file or folder         |
-| `/api/delete`                  | POST     | Delete file or folder         |
-| `/api/upload`                  | POST     | Upload file                   |
 | `/api/metadata`                | GET/POST | Document metadata             |
 | `/api/constants`               | GET/POST | Theme and display options     |
 | `/api/hierarchy`               | GET/POST | Chapter structure             |
@@ -161,260 +155,92 @@ The main FastAPI application.
 | `/api/snippets`                | GET/POST | Custom snippets               |
 | `/api/indexignore`             | GET/POST | Build exclusions              |
 | `/api/schemes`                 | GET      | Available themes              |
-| `/api/schemes/active`          | GET/POST | Current theme                 |
-| `/api/schemes/{name}`          | GET      | Single theme definition       |
+| `/api/schemes/active`          | POST     | Set the current theme         |
+| `/api/schemes/{name}`          | GET/POST | Single theme definition       |
 | `/api/modules`                 | GET      | Module list                   |
 | `/api/modules/{name}/config`   | GET/POST | Per-module settings           |
 | `/api/build`                   | POST     | Trigger build                 |
-| `/api/check`                   | GET      | Typst diagnostics             |
-| `/api/watch`                   | POST     | Start preview watch           |
 | `/api/download/output.pdf`     | GET      | Download built PDF            |
-| `/api/status`                  | GET      | Server + tinymist status      |
+| `/api/watch`                   | POST     | Start preview watch           |
 | `/api/tinymist/start`          | POST     | Start full-document preview   |
 | `/api/tinymist/stop`           | POST     | Stop full-document preview    |
 | `/api/tinymist/status`         | GET      | Tinymist preview status       |
-| `/api/debug/yjs`               | GET      | Yjs room introspection        |
 
-**WebSocket Endpoints:**
+**WebSockets:**
 
 | Endpoint      | Payload | Purpose                                     |
 | ------------- | ------- | ------------------------------------------- |
 | `/ws/doc`     | JSON    | Presence, cursors, chat, preview, build log |
 | `/yjs/<room>` | Binary  | CRDT content sync, one room per file path   |
 
-> [!NOTE]
-> `/ws`, `/ws/collab` and `/ws/sync` still exist but are stubs that close
-> immediately on connect. They are retained only so old clients fail cleanly.
+The two sockets are strictly separated: `/ws/doc` never carries document
+content, and `/yjs` never carries chat or presence. Concurrent edits converge
+through the CRDT, so there is no save lock, no canonical server text and no
+acknowledgement step. Room naming is described in the
+[emacs-collab protocol](https://github.com/R0K0R/emacs-collab.el/blob/master/PROTOCOL.md)
+and `syncworthy_bridge`'s README.
 
-### document_hub.py
+## Rooms, the file watcher and MCP
 
-Presence hub for chat, preview relay and per-file user tracking. It holds **no
-document content** — that lives entirely in the Yjs layer, so there is no
-server-canonical text, no version counter and no drift/resync machinery.
+- A live room is authoritative and rewrites its file shortly after every edit.
+- Syncworthy's **file watcher** merges an external edit to a file with a live
+  room into the room (a minimal-diff reload), so editors see an edit rather
+  than a swapped buffer. Its own saves are recognised and not fed back.
+- **MCP** is `POST /mcp` (Streamable HTTP). Syncworthy provides
+  `list_documents`, `read_document`, `edit_document` and `append_document`,
+  which go through the rooms; the plugin adds `render_document` and
+  `check_document`. Auth is a bearer token from `$NOTEWORTHY_MCP_TOKEN` (the
+  plugin's variable), else `$SYNCWORTHY_MCP_TOKEN` (or `..._FILE`). With no
+  token the endpoint fails closed.
 
-**Responsibilities:**
-- User session management (identity, rotating palette colors, stable tokens)
-- Tracking which file each user currently has open
-- Starting and stopping preview watchers as users move between files
-- Relaying preview output and compiler logs
-- Broadcasting chat
-
-**Key Classes:**
-
-```python
-@dataclass
-class User:
-    id: str
-    name: str = "Anonymous"
-    color: str = "#FF6B6B"
-    websocket: WebSocket = None
-    current_file: Optional[str] = None
-    token: Optional[str] = None   # stable client token (from localStorage)
-
-class DocumentHub:
-    async def connect(websocket, name, user_id, token) -> User
-    async def disconnect(user_id, websocket=None)
-    async def join_file(user_id, path)          # switches preview watcher
-    async def send_chat(user_id, text, timestamp)
-    async def update_identity(user_id, name)
-    async def on_preview_update(updates, source_path)
-    async def on_preview_log(level, message, source_path=None)
-    def get_users() -> List[dict]
-    def get_users_on_file(path) -> List[dict]
+```bash
+claude mcp add --transport http noteworthy http://<host>:8000/mcp \
+  --header "Authorization: Bearer $NOTEWORTHY_MCP_TOKEN"
 ```
 
-### yjs_provider.py
+## Frontend
 
-Binary CRDT transport backing `/yjs`, built on `pycrdt-websocket`. Each open
-file gets a room keyed by its URL-encoded project-relative path. This is the
-only component that touches document text on the wire; see the
-[Emacs Protocol](../reference/emacs-protocol.md) for the room naming rules.
+Syncworthy's `static/js/app.js` and its modules (collaboration, file tree, chat,
+languages) form the shell; one Monaco is vendored under Syncworthy's
+`static/vendor/`. The plugin's bundle (`syncworthy_plugin/static/`:
+`config.js`, `build.js`, `preview.js`, `noteworthy.js`) registers itself through
+`Syncworthy.registerPlugin` and mixes its methods into the app.
 
-### preview.py
+| Plugin file     | Purpose                                                  |
+| --------------- | -------------------------------------------------------- |
+| `config.js`     | Metadata, constants, structure, schemes, module settings |
+| `build.js`      | Build grid, progress, PDF download                       |
+| `preview.js`    | SVG and Tinymist preview panes                           |
+| `noteworthy.js` | Registration and glue                                    |
 
-Live preview management.
-
-**Responsibilities:**
-- File watching
-- Typst compilation
-- PDF generation
-- Update notifications
-
-```python
-class PreviewManager:
-    # Incremental per-page SVG preview
-    def start_watch(self, file_path: str)
-    def stop_watch(self, file_path: str)
-    def get_status(self, file_path: str = None)
-    def get_image(self, file_path: str, page_num: int)
-    def add_callback(self, cb)
-    def add_log_callback(self, cb)
-    def cleanup_old_watchers(self, keep_paths: list = None, max_watchers: int = 3)
-
-    # Full-document preview via tinymist (available in both modes)
-    def start_full_preview(self, file_path: str = None)
-    def stop_full_preview(self)
-    def get_full_preview_url(self)
-    def get_full_preview_control_url(self)
-```
-
----
-
-## Frontend Components
-
-### index.html
-
-Main application shell.
-
-### app.js
-
-Application shell: Monaco setup, the Yjs provider/binding lifecycle, and
-composition of the modules below. Collaborative mode splits its logic into ES
-modules under `static/js/modules/`:
-
-| File           | Purpose                                              |
-| -------------- | ---------------------------------------------------- |
-| `collab.js`    | Doc socket, presence avatars, remote cursors, follow |
-| `file_tree.js` | File navigation, rename/move/delete                  |
-| `preview.js`   | SVG and tinymist preview panes                       |
-| `build.js`     | Build grid, progress, PDF download                   |
-| `config.js`    | Metadata, constants, hierarchy, module settings      |
-| `chat.js`      | Messaging                                            |
-| `utils.js`     | Shared helpers                                       |
-
-> [!NOTE]
-> Solo mode keeps everything in a single unmodularized
-> `gui_solo/static/js/app.js`. Shared logic is duplicated between the two, so
-> frontend fixes generally need applying in both places.
-
-### styles.css
-
-UI styling with:
-- CSS custom properties for theming
-- Responsive layout
-- Dark/light mode
-
----
-
-## WebSocket Protocol
-
-### Message Types
-
-**Client → Server:**
-
-| Type       | Payload                                                            | Purpose        |
-| ---------- | ------------------------------------------------------------------ | -------------- |
-| `join`     | `{path}`                                                           | Open file      |
-| `identity` | `{name}`                                                           | Set username   |
-| `chat`     | `{text, timestamp}`                                                | Send message   |
-| `cursor`   | `{file, line, col, selStartLine, selStartCol, selEndLine, selEndCol}` | Cursor moved |
-
-> [!WARNING]
-> `edit`, `operation`, `content`, `delta`, `ack` and `resync` are **silently
-> discarded** on this socket. They belong to the removed OT protocol; content
-> now travels only over `/yjs`.
-
-**Server → Client:**
-
-| Type             | Payload                              | Purpose                    |
-| ---------------- | ------------------------------------ | -------------------------- |
-| `welcome`        | `{userId, color, users}`             | Connection confirmed       |
-| `user_joined`    | `{user}`                             | New user                   |
-| `user_left`      | `{userId}`                           | User disconnected          |
-| `user_updated`   | `{user}`                             | Name or open file changed  |
-| `cursor`         | `{userId, file, line, col, sel*, name, color, token}` | Cursor/Selection |
-| `chat`           | `{userId, name, text}`               | Chat message               |
-| `preview`        | `{updates: [{page, svg}]}`           | Preview pages rendered     |
-| `preview_log`    | `{level, message, source_path}`      | Compiler diagnostics       |
-| `build_progress` | `{phase, message}`                   | Build lifecycle events     |
-
----
-
-## Data Flow
-
-### File Edit (Yjs CRDT)
-
-```mermaid
-sequenceDiagram
-    participant User A
-    participant Yjs as /yjs room
-    participant User B
-    participant Doc as /ws/doc
-
-    User A->>User A: Monaco edit -> Y.Doc update
-    User A->>Yjs: CRDT update (binary)
-    Yjs->>User B: CRDT update (binary)
-    User B->>User B: MonacoBinding applies delta
-
-    par Preview (separate socket)
-        Yjs->>Yjs: Room content persisted to disk
-        Doc->>User A: preview {updates}
-        Doc->>User B: preview {updates}
-    end
-```
-
-> [!NOTE]
-> No acknowledgement or version negotiation takes place. Concurrent edits
-> converge through the CRDT itself, so neither client waits on the server to
-> accept an edit.
-
-### Join File
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Server
-    participant Hub
-
-    Client->>Server: join {path}
-    Server->>Hub: join_file(userId, path)
-    Hub->>Hub: Stop previous preview watch
-    Hub->>Hub: Start preview watch for path
-    Hub-->>Client: preview {updates} (cached pages, if any)
-    Hub->>Server: Broadcast user_updated
-```
-
-> [!NOTE]
-> Joining does **not** deliver file content. The client opens the matching
-> `/yjs` room in parallel and receives the text from the CRDT sync step.
-
----
-
-## Security Considerations
-
-> [!CAUTION]
-> Noteworthy Studio has **no authentication**. Anyone with URL access can:
-> - Read all files
-> - Edit any content
-> - See other users' work
-
-**Mitigations:**
-- The default `--bind 127.0.0.1` already restricts access to the local machine;
-  only widen it deliberately
-- Prefer a VPN or Tailscale over a public tunnel — this also gives you HTTPS,
-  which browsers require before they will finalize PDF downloads
-- If you must use a public tunnel, put authentication in front of it
-
----
-
-## Performance
-
-### Debouncing
-
-- **Collaborative mode**: content updates are not debounced — Yjs emits compact
-  incremental updates per keystroke, which is cheaper than resending documents.
-- **Solo mode**: `POST /api/file` is debounced at 500ms, since each save writes
-  the whole file.
-- **Config panels**: metadata, constants, hierarchy, snippets and preface saves
-  are debounced at 1000ms in both modes.
-
-### Preview Compilation
+## Preview
 
 - The SVG watcher recompiles on file change and pushes only changed pages.
-- `PreviewManager` keeps at most 3 concurrent watchers
-  (`cleanup_old_watchers`), retiring the least recently used.
-- Tinymist full preview runs as a separate process on a dynamically chosen
-  port (from 23625 upward).
+- At most 3 concurrent watchers; the least recently used is retired.
+- The Tinymist full preview runs as a separate process on a dynamically chosen
+  port (from 23625 upward) and is embedded through an iframe.
+
+---
+
+## Security
+
+Syncworthy has token authentication. See its
+[README](https://github.com/R0K0R/syncworthy#auth).
+
+- Tokens have a role: `edit`, or `view` (reads, sees presence, chats; its Yjs
+  updates are dropped and write requests refused). They come from
+  `syncworthy.toml` (`[auth] tokens = [{ name, token_env | token_file, role }]`)
+  or from `SYNCWORTHY_EDIT_TOKEN` / `SYNCWORTHY_VIEW_TOKEN` (and `..._FILE`);
+  secrets never go in the toml.
+- A browser opens `http://host:port/?token=...` once and receives an HttpOnly
+  cookie; scripts send `Authorization: Bearer ...`. Enforced on `/yjs`,
+  `/ws/doc`, `/api/*` and the static files. `/mcp` keeps its own token.
+- With no tokens the server is open. That is allowed only on a loopback bind
+  (the default `--bind 127.0.0.1`). On any other address it refuses to start
+  unless tokens are set or `--insecure-open` is passed.
+- WebSockets from another origin are refused.
+- Prefer a VPN or Tailscale over a public tunnel; this also gives you HTTPS,
+  which browsers require before they will finalize PDF downloads.
 
 ---
 
@@ -423,3 +249,4 @@ sequenceDiagram
 - [Architecture Overview](overview.md)
 - [Collaboration Guide](../guides/collaboration.md)
 - [Building Guide](../guides/building.md)
+- [Emacs protocol (retired) and the replacement](../reference/emacs-protocol.md)

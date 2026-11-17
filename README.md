@@ -48,8 +48,7 @@ python3 noteworthy.py
 | :-------------- | :---------------------------------------------------------------- |
 | **15+ Themes**  | Pre-built color schemes, easy customization                       |
 | **Modules**     | Math, plotting, geometry, data structures                         |
-| **Web Studio**  | Google Docs-style editing, Monaco editor, Yjs CRDT collaboration  |
-| **Solo Mode**   | Single-user mode, previewing exclusively through tinymist         |
+| **Web Studio**  | [Syncworthy](https://github.com/R0K0R/syncworthy) + Noteworthy plugin: Monaco, Yjs CRDT collaboration, MCP, tokens |
 | **Fast Builds** | Parallel compilation, incremental updates                         |
 | **PDF Output**  | Merged PDFs with bookmarks and metadata                           |
 
@@ -60,9 +59,11 @@ python3 noteworthy.py
 | Command                               | Description                                                          |
 | :------------------------------------ | :------------------------------------------------------------------- |
 | `python3 noteworthy.py`               | Launch Terminal UI                                                   |
-| `python3 noteworthy.py -g (-p) (-nc)` | Launch Web GUI<br>`-p xxxx` for specific port<br>`-nc` for solo mode<br>`--bind 0.0.0.0` to accept non-local connections |
+| `python3 noteworthy.py -g (-p)`       | Launch Web GUI (needs [Syncworthy](https://github.com/R0K0R/syncworthy), see below)<br>`-p xxxx` for specific port<br>`--bind 0.0.0.0` to accept non-local connections (needs `SYNCWORTHY_EDIT_TOKEN`, or `--insecure-open`) |
 | `python3 noteworthy.py -u (-n) (-f)`  | Update from GitHub<br>`-n` for nightly<br>`-f` for force             |
 | `python3 noteworthy_cli.py`           | Non-interactive CLI build                                            |
+
+The web GUI is [Syncworthy](https://github.com/R0K0R/syncworthy) with Noteworthy as a plugin. In `nix develop` it is provided for you (`../syncworthy` if present, else the pinned flake input); elsewhere install it with `pip install 'noteworthy[gui]'` (or `uv sync --extra gui`), or put a checkout on `PYTHONPATH`. See [the Studio stack](docs/architecture/gui-stack.md).
 
 **[Full CLI Reference](https://noteworthy.benjaminlee.kr/docs.html#reference/cli)**
 

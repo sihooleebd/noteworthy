@@ -44,20 +44,21 @@ Understanding the codebase:
 | ---------------------- | ------------------------------------------------------------ |
 | **`noteworthy/core/`** | Robustness & isolation — minimal deps, defensive programming |
 | **`noteworthy/tui/`**  | UX first — intuitive navigation, clear feedback              |
-| **`noteworthy/gui/`**  | Modern web — FastAPI, WebSockets, real-time sync             |
+| **`noteworthy/syncworthy_plugin/`** | Web GUI — the Noteworthy plugin for Syncworthy (FastAPI, Yjs) |
 | **`templates/`**       | Separation of concerns — structure vs. style                 |
 
 📖 **[Architecture Overview →](docs/architecture/overview.md)**
 
 ---
 
-## GUI Parity
+## The web GUI
 
-The collaborative GUI and solo GUI intentionally mirror each other in a lot of places.
+`noteworthy -g` is [Syncworthy](https://github.com/R0K0R/syncworthy) with
+`noteworthy/syncworthy_plugin/` as a plugin.
 
-- If you change shared editor or preview UI in **`noteworthy/gui/`**, check whether the same change is needed in **`noteworthy/gui_solo/`**.
-- For frontend behavior, layout, and controls, default to updating both modes together unless the feature is explicitly collaboration-only.
-- When submitting a PR that touches one GUI mode but not the other, call out the reason in the PR description.
+- Changes to the generic editor (Monaco, rooms, presence, chat, the file tree, auth, MCP's generic tools) belong in the Syncworthy repository, not here.
+- Changes specific to Typst books (preview, diagnostics, build, settings pages, `render_document`/`check_document`) belong in `noteworthy/syncworthy_plugin/`.
+- To work on both, keep a Syncworthy checkout next to this one (`../syncworthy`, or point `SYNCWORTHY_SRC` at it); the nix dev shell puts it on `PYTHONPATH`, and falls back to the pinned `github:R0K0R/syncworthy` input otherwise.
 
 ---
 
