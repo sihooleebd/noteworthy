@@ -28,6 +28,9 @@ def main():
     parser.add_argument('-nc', '--no-coop', action='store_true', help='[-g] Solo mode (no collaboration)')
     parser.add_argument('--packet-log', action='store_true', help='[-g] Enable low-level Yjs packet logging')
     parser.add_argument('--bind', default="127.0.0.1", help='[-g] Specify Listening Subnet (default: 127.0.0.1)')
+    parser.add_argument('--insecure-open', action='store_true',
+                        help='[-g] Serve with no auth tokens on a non-loopback --bind (Syncworthy refuses by default; '
+                             'set SYNCWORTHY_EDIT_TOKEN / SYNCWORTHY_VIEW_TOKEN instead)')
     parser.add_argument('--headless', action='store_true', help='Do not launch browser after startup')
     parser.add_argument('--old-gui', action='store_true',
                         help='[-g] Start the old built-in GUI instead of Syncworthy with the noteworthy plugin')
@@ -147,7 +150,8 @@ def main():
                 from .config import BASE_DIR
                 from .syncworthy_plugin import NoteworthyPlugin
                 run_server(BASE_DIR, host=args.bind, port=args.port, packet_log=args.packet_log,
-                           open_browser=(not args.headless), plugins=[NoteworthyPlugin()])
+                           open_browser=(not args.headless), plugins=[NoteworthyPlugin()],
+                           insecure_open=args.insecure_open)
         except ImportError as e:
             print("Error: GUI requires additional dependencies.")
             print("Install with: pip install fastapi uvicorn")

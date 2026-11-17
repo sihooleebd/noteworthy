@@ -27,6 +27,7 @@ from . import mcp_tools, startup
 from .diagnostics import NoteworthyDiagnostics
 from .previewer import NoteworthyPreviewer
 from .routes import build_router
+from .typst_grammar import TYPST_CONFIGURATION, TYPST_MONARCH
 
 log = logging.getLogger("noteworthy.syncworthy_plugin")
 
@@ -43,27 +44,6 @@ SETTINGS_PAGES = [
     ("modules", "Modules"),
     ("info", "Info"),
 ]
-
-# A first cut at a Typst Monarch grammar, carried as data; the frontend does not
-# use it until the language registry exists (Syncworthy phase 2).
-TYPST_MONARCH = {
-    "tokenizer": {
-        "root": [
-            [r"//.*$", "comment"],
-            [r"/\*", "comment", "@comment"],
-            [r"^\s*=+\s.*$", "keyword"],
-            [r"#[a-zA-Z_][\w\-]*", "type.identifier"],
-            [r"\$", "string", "@math"],
-            [r'"([^"\\]|\\.)*"', "string"],
-            [r"`[^`]*`", "string.raw"],
-            [r"\*[^*\n]+\*", "strong"],
-            [r"_[^_\n]+_", "emphasis"],
-        ],
-        "comment": [[r"[^/*]+", "comment"], [r"\*/", "comment", "@pop"], [r"[/*]", "comment"]],
-        "math": [[r"[^$\\]+", "string"], [r"\\.", "string.escape"], [r"\$", "string", "@pop"]],
-    }
-}
-
 
 class NoteworthyPlugin(Plugin):
     name = "noteworthy"
@@ -113,11 +93,9 @@ class NoteworthyPlugin(Plugin):
         return mcp_tools.tools()
 
     def languages(self):
-        return [Language(id="typst", extensions=[".typ"], aliases=["Typst"],
-                         monarch=TYPST_MONARCH,
-                         configuration={"comments": {"lineComment": "//",
-                                                     "blockComment": ["/*", "*/"]},
-                                        "brackets": [["{", "}"], ["[", "]"], ["(", ")"]]})]
+        # The browser registers it with Monaco and maps .typ files to it (languages.js).
+        return [Language(id="typst", extensions=[".typ"], aliases=["Typst", "typ"],
+                         monarch=TYPST_MONARCH, configuration=TYPST_CONFIGURATION)]
 
     def routers(self):
         return [build_router(self)]
